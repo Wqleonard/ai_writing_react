@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>哎呀迷路了...</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background-color: #fff;
+            color: #666;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 1920px;
+            width: 80%;
+            padding: 80px 20px 20px 20px;
+        }
+
+        /* 404 插图样式 */
+        .illustration {
+            width: 240px;
+            height: 240px;
+            margin: 0 auto 20px;
+        }
+
+        .status-text {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+
+        .divider {
+            height: 1px;
+            background-color: #f0f0f0;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .reason-box {
+            text-align: left;
+            display: inline-block;
+            margin-bottom: 40px;
+        }
+
+        .reason-title {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 10px;
+        }
+
+        .reason-list {
+            margin: 0;
+            padding-left: 20px;
+            list-style-type: disc;
+            color: #ccc; /* 列表点颜色 */
+        }
+
+        .reason-list li {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .btn-home {
+            display: inline-block;
+            background-color: #2d8cf0;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-home:hover {
+            background-color: #57a3f3;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 480px) {
+            .illustration {
+                width: 180px;
+                height: 180px;
+            }
+
+            .status-text {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- SVG 插图 -->
+    <div class="illustration">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <!-- 轨道/星环 -->
+            <ellipse cx="100" cy="100" rx="90" ry="40" fill="none" stroke="#e6ebf1" stroke-width="4"
+                     transform="rotate(-15 100 100)"/>
+            <!-- 星球主体 -->
+            <circle cx="100" cy="100" r="60" fill="#b8c6db"/>
+            <!-- 星球上的斑点 -->
+            <circle cx="70" cy="80" r="6" fill="#a4b3cf"/>
+            <circle cx="130" cy="120" r="8" fill="#a4b3cf"/>
+            <circle cx="85" cy="135" r="5" fill="#a4b3cf"/>
+            <circle cx="115" cy="70" r="4" fill="#a4b3cf"/>
+            <!-- 404 文字 -->
+            <text x="50%" y="55%" text-anchor="middle" fill="#fff" font-size="40" font-weight="bold"
+                  style="filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));">404
+            </text>
+            <!-- 被星球遮挡后的星环部分（通过覆盖一个小弧线模拟） -->
+            <path d="M 190 100 A 90 40 0 0 1 10 100" fill="none" stroke="#e6ebf1" stroke-width="4"
+                  transform="rotate(-15 100 100)"/>
+        </svg>
+    </div>
+
+    <div class="status-text">哎呀迷路了...</div>
+
+    <div class="divider"></div>
+
+    <div class="reason-box">
+        <div class="reason-title">可能的原因：</div>
+        <ul class="reason-list">
+            <li>原来的页面不存在了</li>
+            <li>我们的服务器被外星人劫持了</li>
+        </ul>
+    </div>
+</div>
+</body>
+</html>
