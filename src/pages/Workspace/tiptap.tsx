@@ -1,4 +1,4 @@
-import { TiptapEditor } from '@/components/editor/TiptapEditor'
+import { TiptapEditor } from '@/components/editor/TipTapEditor'
 
 export function WorkspaceTiptap() {
   return (

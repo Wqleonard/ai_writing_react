@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useCounterStore } from '@/stores/counter.ts'
-import { Button } from '@/components/ui/button.tsx'
+import { Button } from '@/components/ui/Button'
 
 export function Home() {
   const { count, increment, decrement } = useCounterStore()
