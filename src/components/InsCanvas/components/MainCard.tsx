@@ -69,7 +69,6 @@ export default function MainCard({ data, id }: MainCardProps) {
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
-                console.log("onClick", e);
               e.stopPropagation();
               handleCreate();
             }}
@@ -79,7 +78,6 @@ export default function MainCard({ data, id }: MainCardProps) {
         </div>
       )}
 
-      {children.length > 0 && (
       <Handle
         type="source"
         position={Position.Right}
@@ -90,9 +88,10 @@ export default function MainCard({ data, id }: MainCardProps) {
           height: 12,
           border: "2px solid white",
           boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+          opacity: children.length > 0 ? 1 : 0,
+          pointerEvents: children.length > 0 ? "all" : "none",
         }}
       />
-      )}
       <style>{`
         .main-card {
           width: 250px;

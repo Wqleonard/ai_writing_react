@@ -4,11 +4,16 @@ import type { CustomNodeData } from "@/components/InsCanvas/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
 
+// React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
+// 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
+const startedStreamNodeIds = new Set<string>();
+
 interface EditableFlowCardProps {
   id: string;
   data: CustomNodeData;
   cardLabel: string;
   generateLabel: string;
+  type: string;
   onGenerate: (id: string) => void;
   onAdd: (id: string) => void;
   onDelete: (id: string) => void;
@@ -29,6 +34,7 @@ export default function EditableFlowCard({
   data,
   cardLabel,
   generateLabel,
+  type = '',
   onGenerate,
   onAdd,
   onDelete,
@@ -40,7 +46,15 @@ export default function EditableFlowCard({
   const [editContent, setEditContent] = useState(data.content || "");
   const [streamContent, setStreamContent] = useState("");
   const streamContentRef = useRef("");
-  console.log(data, 'props.data')
+  const editContentRef = useRef(editContent);
+  // 进入编辑后，若接口回写 data.content，且用户未改动（dirty=false），允许同步到输入框
+  const editDirtyRef = useRef(false);
+  useEffect(() => {
+    editContentRef.current = editContent;
+  }, [editContent]);
+
+  // 流式结束时我们会先 setEditContent 再写回节点数据；在父层回写前避免被旧 props 覆盖
+  const pendingCommitRef = useRef<string | null>(null);
   // 以组件内部状态为准，避免 props.data.isStreaming <-> setState <-> updateNodeData 的循环
   const [isStreaming, setIsStreaming] = useState<boolean>(() => Boolean(data.isStreaming));
   const [isExpanded, setIsExpanded] = useState(false);
@@ -51,13 +65,28 @@ export default function EditableFlowCard({
   const streamingStartedRef = useRef(false);
 
   const displayContent = isStreaming && streamContent ? streamContent : editContent;
+  const bodyContent = displayContent || (isStreaming ? "生成中..." : "");
 
+  // 同步外部内容：仅在 data.content 变化时更新本地；避免流式结束时用空串覆盖本地最终内容
   useEffect(() => {
-    if (!isEditing) {
-      setEditContent(data.content || "");
-      if (!isStreaming) setStreamContent("");
+    const prop = data.content || "";
+
+    // 编辑中：如果用户尚未修改（dirty=false），允许把接口回写的数据同步到输入框
+    if (isEditing) {
+      if (!editDirtyRef.current && prop !== editContentRef.current) {
+        setEditContent(prop);
+      }
+      return;
     }
-  }, [data.content, isEditing, isStreaming]);
+
+    if (pendingCommitRef.current) {
+      if (prop !== pendingCommitRef.current) return;
+      pendingCommitRef.current = null;
+    }
+
+    if (!prop && editContentRef.current) return;
+    setEditContent(prop);
+  }, [data.content, isEditing]);
 
   useEffect(() => {
     // 节点切换时，重置本地 streaming 状态
@@ -65,6 +94,7 @@ export default function EditableFlowCard({
     streamingStartedRef.current = false;
     setStreamContent("");
     streamContentRef.current = "";
+    pendingCommitRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -108,13 +138,26 @@ export default function EditableFlowCard({
 
   const handleBlur = () => {
     if (isEditing) {
+      updateNodeData(id, { content: editContent });
       onUpdate(id, editContent);
       setIsEditing(false);
     }
   };
 
+  const commitFinalContent = (finalText: string) => {
+    if (!finalText) return;
+    pendingCommitRef.current = finalText;
+    setEditContent(finalText);
+    streamContentRef.current = finalText;
+    setStreamContent("");
+    setIsStreaming(false);
+    updateNodeData(id, { content: finalText, isStreaming: false });
+    onUpdate(id, finalText);
+  };
+
   const handleEdit = () => {
     setIsEditing(true);
+    editDirtyRef.current = false;
     setEditContent(data.content || "");
   };
 
@@ -126,6 +169,7 @@ export default function EditableFlowCard({
   }, [isEditing]);
 
   const handleCancel = () => {
+    editDirtyRef.current = false;
     setEditContent(data.content || "");
     setIsEditing(false);
   };
@@ -187,10 +231,10 @@ export default function EditableFlowCard({
       const onData = (streamData: PostStreamData) => {
         switch (streamData.event) {
           case "messages/partial": {
-            const msg =
-              (streamData as any)?.data?.[0]?.content?.[0]?.text;
+            // 沿用原逻辑，同时做一个轻量兜底（仍只针对 partial 本身）
+            const d: any = (streamData as any)?.data;
+            const msg = d?.[0]?.content?.[0]?.text ?? '';
             if (msg) {
-                console.log(msg, 'msg', streamData, 'streamData')
               streamContentRef.current = msg;
               setStreamContent(msg);
             }
@@ -198,16 +242,12 @@ export default function EditableFlowCard({
           }
           case "updates": {
             const d: any = (streamData as any)?.data;
-            const finalMsg = d?.generate_short_summary?.short_summary
+            const finalMsg = d?.generate_short_summary?.short_summary;
 
             // 只有拿到最终内容时才结束流式，否则忽略（有些后端会在过程中发 updates 元数据）
-            if (finalMsg && onUpdate) {
-            //   // 先把内容落到本地 editContent，避免 onUpdate/画布更新有延迟导致 UI 瞬间清空
-              streamContentRef.current = finalMsg;
-              setEditContent(finalMsg);
-              setStreamContent('');
-              setIsStreaming(false);
-              onUpdate(id, finalMsg);
+            if (finalMsg) {
+              console.log(finalMsg, 'finalMsg')
+              commitFinalContent(finalMsg);
               return;
             }
             break;
@@ -236,14 +276,8 @@ export default function EditableFlowCard({
       const onComplete = async () => {
         // 如果流式内容存在但未在 updates 中更新，则使用流式内容更新节点
         const finalContent = streamContentRef.current;
-        if (finalContent) {
-          // 同上：先落到本地，避免 UI 闪一下就空
-          setEditContent(finalContent);
-          streamContentRef.current = "";
-          setStreamContent("");
-        }
-        setIsStreaming(false);
-        if (finalContent) onUpdate(id, finalContent);
+        if (finalContent) commitFinalContent(finalContent);
+        else setIsStreaming(false);
         await saveCanvas();
       };
 
@@ -253,27 +287,35 @@ export default function EditableFlowCard({
     }
   };
 
-  // 初次挂载时：如果节点标记为 streaming，则自动拉流
+  // 自动拉流：只允许每个节点启动一次（避免 StrictMode / ReactFlow 重挂载导致重复触发接口）
   useEffect(() => {
     if (!data?.isStreaming) return;
     if (streamingStartedRef.current) return;
+    if (startedStreamNodeIds.has(id)) return;
     streamingStartedRef.current = true;
+    startedStreamNodeIds.add(id);
     void startStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id, data?.isStreaming]);
 
   const handleGenerate = () => {
     // 保持 InsCanvas 的“生成逻辑”（例如：生成下一层节点/边）
     onGenerate(id);
   };
 
-  const handleAdd = () => onAdd(id);
+  const handleAdd = () => {
+    console.log(`${type} add`)
+    onAdd(id)
+  };
 
   const handleDelete = () => onDelete(id);
 
   const handleRefresh = () => {
     setStreamContent("");
     setEditContent("");
+    pendingCommitRef.current = null;
+    startedStreamNodeIds.delete(id);
+    streamingStartedRef.current = false;
     void startStream();
   };
 
@@ -298,7 +340,7 @@ export default function EditableFlowCard({
         )}
       </div>
       <div className="card-body">
-        {(displayContent || isEditing) ? (
+        {(bodyContent || isEditing) ? (
           <div
             ref={wrapperRef}
             className={`card-text-wrapper ${isExpanded ? "expanded" : ""}`}
@@ -306,14 +348,17 @@ export default function EditableFlowCard({
           >
             {!isEditing ? (
               <div ref={textRef} className="card-text-show">
-                {displayContent}
+                {bodyContent}
               </div>
             ) : (
               <textarea
                 ref={textareaRef}
                 className="card-text-input"
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
+                onChange={(e) => {
+                  editDirtyRef.current = true;
+                  setEditContent(e.target.value);
+                }}
                 onBlur={handleBlur}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {

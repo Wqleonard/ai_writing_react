@@ -153,6 +153,9 @@ import {
     const containerRef = useRef<HTMLDivElement>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
+    // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
+    const nodesRef = useRef<CustomNode[]>(initialNodes);
+    const edgesRef = useRef<CustomEdge[]>(initialEdges);
     const [inspirationDrawId, setInspirationDrawId] = useState(initialInspirationDrawId);
     const [ideaContent, setIdeaContent] = useState("");
     const [reqIdeaContent, setReqIdeaContent] = useState("");
@@ -230,13 +233,21 @@ import {
       );
     }, [hasIdea, setNodes]);
   
+    useEffect(() => {
+      nodesRef.current = nodes;
+    }, [nodes]);
+
+    useEffect(() => {
+      edgesRef.current = edges;
+    }, [edges]);
+
     const autoLayout = useCallback(() => {
       if (!hasIdea) return;
       setTimeout(() => {
         try {
           const layouted = dagreLayout(
-            nodes,
-            edges,
+            nodesRef.current,
+            edgesRef.current,
             "LR"
           );
           setNodes(layouted as CustomNode[]);
@@ -244,14 +255,19 @@ import {
           console.error("dagre layout error:", e);
         }
       }, 100);
-    }, [hasIdea, nodes, edges, dagreLayout, setNodes]);
+    }, [hasIdea, dagreLayout, setNodes]);
   
     const updateNodeContent = useCallback(
       (nodeId: string, content: string) => {
         setNodes((nds) =>
           nds.map((n) =>
             n.id === nodeId
-              ? { ...n, data: { ...n.data, content } }
+              ? {
+                  ...n,
+                  // 受控 nodes 模式下，必须在父层把 isStreaming 写回 false，
+                  // 否则子组件里 updateNodeData 的变更会被下一次 render 覆盖，导致 props.data.isStreaming 仍为 true
+                  data: { ...n.data, content, isStreaming: false },
+                }
               : n
           )
         );
@@ -337,6 +353,11 @@ import {
     const addSummaryCard = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
+        console.log('addSummaryCard', {
+          nodes,
+          source,
+          sourceNodeId,
+        })
         if (!source) return;
         const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
@@ -365,17 +386,11 @@ import {
     );
   
     const handleMainCardCreate = useCallback(
-      async (nodeId: string) => {
+      (nodeId: string) => {
         const source = nodes.find((n) => n.id === nodeId);
         if (!source) return;
-        try {
-          const { generateInspirationDrawIdReq } = await import("@/api/works");
-          const res: any = await generateInspirationDrawIdReq(workId, {
-            nodes,
-            edges,
-          });
-          if (res?.id) setInspirationDrawId(String(res.id));
-        } catch {}
+
+        // 先立即创建节点，避免等待接口导致“点了按钮但画布不出节点”
         const baseX = source.position.x + 400;
         const spacing = 120;
         const parentY = source.position.y;
@@ -408,19 +423,47 @@ import {
             targetHandle: "left-handle",
           });
         }
-        const mainCards = nodes.filter((n) => n.type === "mainCard" && n.id !== nodeId);
+
+        const mainCards = nodes.filter(
+          (n) => n.type === "mainCard" && n.id !== nodeId
+        );
         const toRemove = new Set(mainCards.map((n) => n.id));
-        setNodes((nds) => [
-          ...nds.filter((n) => n.type !== "mainCard" || n.id === nodeId),
+        const nextNodes: CustomNode[] = [
+          ...nodes.filter((n) => n.type !== "mainCard" || n.id === nodeId),
           ...newNodes,
-        ]);
-        setEdges((eds) => [
-          ...(eds as CustomEdge[]).filter(
+        ];
+        const nextEdges: CustomEdge[] = [
+          ...(edges as CustomEdge[]).filter(
             (e) => !toRemove.has(e.source) && !toRemove.has(e.target)
           ),
           ...newEdges,
-        ]);
+        ];
+
+        setNodes(nextNodes);
+        setEdges(nextEdges);
         setTimeout(autoLayout, 50);
+
+        // 后台生成 drawId，成功后回写到状态与各节点 data 中
+        void (async () => {
+          try {
+            const { generateInspirationDrawIdReq } = await import("@/api/works");
+            const res: any = await generateInspirationDrawIdReq(workId, {
+              nodes: nextNodes,
+              edges: nextEdges,
+            });
+            if (!res?.id) return;
+            const drawId = String(res.id);
+            setInspirationDrawId(drawId);
+            setNodes((nds) =>
+              nds.map((n) => ({
+                ...n,
+                data: { ...n.data, inspirationDrawId: drawId },
+              }))
+            );
+          } catch {
+            // ignore
+          }
+        })();
       },
       [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout]
     );
@@ -504,6 +547,7 @@ import {
   
     const addOutlineCard = useCallback(
       (sourceNodeId: string) => {
+        console.log('addOutlineCard', sourceNodeId)
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
         const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
