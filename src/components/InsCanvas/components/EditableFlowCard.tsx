@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { RefreshCw, Trash2, Pencil, Plus, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
 import type { CustomNodeData } from "@/components/InsCanvas/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
@@ -22,7 +25,6 @@ interface EditableFlowCardProps {
 }
 
 const handleStyle = {
-  background: "#007bff",
   width: 12,
   height: 12,
   border: "2px solid white",
@@ -181,30 +183,38 @@ export default function EditableFlowCard({
 
   // 处理滚轮事件，阻止冒泡到 ReactFlow（避免触发缩放/平移）
   const handleWheel = (event: React.WheelEvent) => {
-    const target = event.target as HTMLElement | null;
-    const textarea = target?.closest("textarea") as HTMLTextAreaElement | null;
+    // 滚轮进入卡片区域时，优先滚动 textarea（编辑态），否则滚动正文容器
+    // 同时阻止事件传递到画布，避免触发 zoom/pan
+    const scrollEl: HTMLElement | null = isEditing
+      ? (textareaRef.current as any)
+      : (wrapperRef.current as any);
 
-    if (textarea) {
-      const isScrollable = textarea.scrollHeight > textarea.clientHeight;
-      if (isScrollable) {
-        const isAtTop = textarea.scrollTop <= 0;
-        const isAtBottom =
-          textarea.scrollTop + textarea.clientHeight >= textarea.scrollHeight - 1;
-
-        // 在边界位置阻止默认行为，避免滚轮穿透到画布
-        if ((event.deltaY < 0 && isAtTop) || (event.deltaY > 0 && isAtBottom)) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-
-        // 可滚动：允许 textarea 自己滚，但阻止冒泡到画布
-        event.stopPropagation();
-        return;
-      }
+    if (!scrollEl) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
     }
 
-    // 不可滚动：阻止冒泡和默认行为，避免触发画布缩放
+    const isScrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 1;
+    if (!isScrollable) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+
+    const isAtTop = scrollEl.scrollTop <= 0;
+    const isAtBottom =
+      scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 1;
+
+    // 到达边界时也要拦截，避免滚轮“穿透”到画布
+    if ((event.deltaY < 0 && isAtTop) || (event.deltaY > 0 && isAtBottom)) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+
+    // 手动驱动滚动：即便鼠标不在 textarea 上也能滚动 textarea
+    scrollEl.scrollTop += event.deltaY;
     event.stopPropagation();
     event.preventDefault();
   };
@@ -320,40 +330,88 @@ export default function EditableFlowCard({
   };
 
   return (
-    <div className="editable-flow-card vue-flow-card">
-      <div className="card-header">
-        <div className="card-header-left">
-          <div className="header-title">{data.label || cardLabel}</div>
+    <div
+      className={cn(
+        "vue-flow-card nowheel w-[250px] min-h-[200px] rounded-2xl relative overflow-visible",
+        "bg-card shadow-sm border border-border",
+        "group"
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-3 text-sm border-b-0">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-foreground text-sm">
+            {data.label || cardLabel}
+          </span>
         </div>
         {!isStreaming && (
-          <div className="card-actions">
-            <div className="action-btn iconfont" onClick={(e) => { e.stopPropagation(); handleRefresh(); }} title="刷新">
-              &#xe60c;
-            </div>
-            <div className="action-btn iconfont" onClick={(e) => { e.stopPropagation(); handleDelete(); }} title="删除">
-              &#xe60e;
-            </div>
-            <div className="action-btn iconfont" onClick={(e) => { e.stopPropagation(); handleEdit(); }} title="编辑">
-              &#xe60d;
-            </div>
+          <div className="flex items-center gap-2 z-20 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRefresh();
+              }}
+              title="刷新"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className="size-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete();
+              }}
+              title="删除"
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="size-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEdit();
+              }}
+              title="编辑"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="size-3" />
+            </Button>
           </div>
         )}
       </div>
-      <div className="card-body">
+
+      {/* Body */}
+      <div className="px-4 py-3 pb-4 min-h-20">
         {(bodyContent || isEditing) ? (
           <div
             ref={wrapperRef}
-            className={`card-text-wrapper ${isExpanded ? "expanded" : ""}`}
+            className={cn(
+              "w-full max-h-[150px] overflow-y-auto cursor-pointer transition-[max-height]",
+              isExpanded && "max-h-none"
+            )}
             onWheel={handleWheel}
           >
             {!isEditing ? (
-              <div ref={textRef} className="card-text-show">
+              <div
+                ref={textRef}
+                className="text-sm leading-[1.8] text-foreground whitespace-pre-wrap"
+              >
                 {bodyContent}
               </div>
             ) : (
               <textarea
                 ref={textareaRef}
-                className="card-text-input"
+                className={cn(
+                  "w-full min-h-20 p-2 rounded-md text-sm leading-[1.8] resize-y box-border",
+                  "border border-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                  "bg-background text-foreground"
+                )}
                 value={editContent}
                 onChange={(e) => {
                   editDirtyRef.current = true;
@@ -371,152 +429,76 @@ export default function EditableFlowCard({
             )}
           </div>
         ) : (
-          <div className="card-placeholder">
-            <div className="placeholder-line" />
-            <div className="placeholder-line" />
+          <div className="py-2 space-y-2">
+            <div className="h-3.5 bg-muted rounded" />
+            <div className="h-3.5 bg-muted rounded" />
           </div>
         )}
         {!isEditing && showExpandBtn && (
-          <div className="expand-btn" onClick={toggleExpand}>
+          <button
+            type="button"
+            onClick={toggleExpand}
+            className="text-xs text-blue-500 cursor-pointer mt-1 hover:underline"
+          >
             {`< ${isExpanded ? "折叠" : "展开"} >`}
-          </div>
+          </button>
         )}
       </div>
-      {(!children.length) && !isStreaming && (
-        <div className="generate-btn-layout">
-          <div className="generate-btn iconfont" onClick={(e) => { e.stopPropagation(); handleGenerate(); }}>
-            &#xe605;
-          </div>
-          <div className="generate-desc" onClick={(e) => { e.stopPropagation(); handleGenerate(); }}>
+
+      {/* Generate */}
+      {!children.length && !isStreaming && (
+        <div className="absolute right-[-164px] top-1/2 -translate-y-1/2 flex items-center gap-3 pl-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10">
+          <Button
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGenerate();
+            }}
+            className="rounded-full bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90 hover:shadow-md size-7"
+          >
+            <Sparkles className="size-4" />
+          </Button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGenerate();
+            }}
+            className="h-7 px-2 rounded-lg bg-[#ff6b35] text-white text-sm font-medium cursor-pointer hover:shadow-md"
+          >
             {generateLabel}
-          </div>
+          </button>
         </div>
       )}
-      <div className="add-btn iconfont" onClick={(e) => { e.stopPropagation(); handleAdd(); }}>
-        &#xea7f;
-      </div>
-      <Handle type="target" position={Position.Left} id="left-handle" style={{ ...handleStyle, background: "#28a745" }} />
-      <Handle type="source" position={Position.Right} id="right-handle" style={handleStyle} />
-      <style>{`
-        .editable-flow-card {
-          width: 250px;
-          min-height: 200px;
-          background: var(--bg-card, #fff);
-          border-radius: 16px;
-          position: relative;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-          overflow: visible;
-        }
-        .editable-flow-card .card-header {
-          font-size: 14px;
-          padding: 12px 16px 0 16px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: none;
-        }
-        .editable-flow-card .card-header-left { display: flex; gap: 6px; align-items: center; }
-        .editable-flow-card .header-title { font-weight: 600; color: #333; font-size: 14px; }
-        .editable-flow-card .card-actions {
-          display: flex;
-          gap: 8px;
-          z-index: 20;
-          opacity: 0;
-          visibility: hidden;
-        }
-        .editable-flow-card .action-btn {
-          width: 12px;
-          height: 12px;
-          color: #666;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .editable-flow-card .action-btn:hover { color: #333; transform: scale(1.1); }
-        .editable-flow-card .card-body { padding: 12px 16px 16px 16px; min-height: 80px; }
-        .editable-flow-card .card-text-wrapper { max-height: 150px; overflow-y: auto; cursor: pointer; width: 100%; }
-        .editable-flow-card .card-text-wrapper.expanded { max-height: none; }
-        .editable-flow-card .card-text-show { font-size: 14px; line-height: 1.8; color: #333; white-space: pre-wrap; }
-        .editable-flow-card .card-text-input {
-          width: 100%;
-          min-height: 80px;
-          padding: 8px;
-          border: 1px solid #007bff;
-          border-radius: 6px;
-          font-size: 14px;
-          line-height: 1.8;
-          resize: vertical;
-          box-sizing: border-box;
-        }
-        .editable-flow-card .card-placeholder { padding: 8px 0; }
-        .editable-flow-card .placeholder-line { height: 14px; background: #f0f0f0; border-radius: 4px; margin-bottom: 8px; }
-        .editable-flow-card .expand-btn { font-size: 12px; color: #007bff; cursor: pointer; margin-top: 4px; }
-        .editable-flow-card .generate-btn-layout {
-          position: absolute;
-          right: -164px;
-          top: 50%;
-          transform: translateY(-50%);
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding-left: 12px;
-          visibility: hidden;
-          opacity: 0;
-          transition: all 0.3s ease;
-        }
-        .editable-flow-card .generate-btn {
-          width: 28px;
-          height: 28px;
-          padding-left: 3px;
-          border-radius: 28px;
-          line-height: 28px;
-          background: #ff6b35;
-          color: white;
-          font-size: 20px;
-          cursor: pointer;
-          white-space: nowrap;
-          z-index: 10;
-        }
-        .editable-flow-card .generate-btn:hover { box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4); }
-        .editable-flow-card .generate-desc {
-          background: #ff6b35;
-          border-radius: 8px;
-          color: #fff;
-          height: 28px;
-          padding: 0 8px;
-          cursor: pointer;
-        }
-        .editable-flow-card .generate-desc:hover { box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4); }
 
-        .editable-flow-card .add-btn {
-          position: absolute;
-          bottom: -40px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 30px;
-          height: 30px;
-          background: #ff6b35;
-          color: white;
-          border-radius: 50%;
-          font-size: 18px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10;
-          visibility: hidden;
-          opacity: 0;
-        }
-        .editable-flow-card .add-btn:hover { transform: translateX(-50%) scale(1.1); box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4); }
+      {/* Add */}
+      <Button
+        size="icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAdd();
+        }}
+        className={cn(
+          "absolute bottom-[-40px] left-1/2 -translate-x-1/2 z-10",
+          "rounded-full bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90 hover:scale-110 hover:shadow-md",
+          "size-8 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all"
+        )}
+      >
+        <Plus className="size-4" />
+      </Button>
 
-        .editable-flow-card:hover .generate-btn-layout { opacity: 1; visibility: visible; }
-        .editable-flow-card:hover .add-btn { opacity: 1; visibility: visible; }
-        .editable-flow-card:hover .card-actions { opacity: 1; visibility: visible; }
-      `}</style>
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left-handle"
+        style={{ ...handleStyle, background: "#22c55e" }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right-handle"
+        style={{ ...handleStyle, background: "#007bff" }}
+      />
     </div>
   );
 }

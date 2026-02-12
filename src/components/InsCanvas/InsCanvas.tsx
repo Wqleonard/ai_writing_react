@@ -16,6 +16,8 @@ import {
     Background,
   } from "@xyflow/react";
   import "@xyflow/react/dist/style.css";
+  import { Button } from "@/components/ui/Button";
+  import { Textarea } from "@/components/ui/Textarea";
   import MainCardNode from "./components/MainCardNode";
   import SummaryCardNode from "./components/SummaryCardNode";
   import SettingCardNode from "./components/SettingCardNode";
@@ -150,12 +152,17 @@ import {
     onCreateNew,
     onMessage,
   }: InsCanvasProps) {
+    const CARD_MIN_HEIGHT = 200;
+    const CARD_V_GAP = 80;
+    const V_SPACING = CARD_MIN_HEIGHT + CARD_V_GAP; // 保证多节点生成时不会上下重叠
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
     // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
     const nodesRef = useRef<CustomNode[]>(initialNodes);
     const edgesRef = useRef<CustomEdge[]>(initialEdges);
+    const hasIdeaRef = useRef(false);
     const [inspirationDrawId, setInspirationDrawId] = useState(initialInspirationDrawId);
     const [ideaContent, setIdeaContent] = useState("");
     const [reqIdeaContent, setReqIdeaContent] = useState("");
@@ -163,6 +170,8 @@ import {
     const [initWorkDialogShow, setInitWorkDialogShow] = useState(false);
     const [historyDialogShow, setHistoryDialogShow] = useState(false);
     const [currentChain, setCurrentChain] = useState<ParentNode | null>(null);
+    // 是否在画布中
+    const [canvasReady, setCanvasReady] = useState(false)
   
     const tree = useMemo(() => convertToTreeStructure(nodes, edges), [nodes, edges]);
   
@@ -170,6 +179,9 @@ import {
       if (!tree || tree.length === 0) return false;
       return tree.some(findMainCardWithChildren);
     }, [tree]);
+
+    // 是否可以交互(canvas: 比如拖拽 滑动)
+    const canInteract = hasIdea && canvasReady;
   
     const { zoomIn, zoomOut } = useReactFlow();
     const { layout: dagreLayout } = useDagreLayout();
@@ -241,8 +253,13 @@ import {
       edgesRef.current = edges;
     }, [edges]);
 
+    useEffect(() => {
+      hasIdeaRef.current = hasIdea;
+    }, [hasIdea]);
+
     const autoLayout = useCallback(() => {
-      if (!hasIdea) return;
+      // 注意：autoLayout 会延迟触发，不能用闭包里的 hasIdea（可能是旧值）
+      if (!hasIdeaRef.current) return;
       setTimeout(() => {
         try {
           const layouted = dagreLayout(
@@ -255,7 +272,7 @@ import {
           console.error("dagre layout error:", e);
         }
       }, 100);
-    }, [hasIdea, dagreLayout, setNodes]);
+    }, [dagreLayout, setNodes]);
   
     const updateNodeContent = useCallback(
       (nodeId: string, content: string) => {
@@ -311,7 +328,7 @@ import {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
         const baseX = source.position.x + 400;
-        const spacing = 120;
+        const spacing = V_SPACING;
         const parentY = source.position.y;
         const ys = [parentY - spacing, parentY, parentY + spacing];
         const newNodes: CustomNode[] = [];
@@ -347,7 +364,7 @@ import {
         setEdges((eds) => [...eds, ...newEdges]);
         setTimeout(autoLayout, 50);
       },
-      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout]
+      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout, V_SPACING]
     );
   
     const addSummaryCard = useCallback(
@@ -389,10 +406,9 @@ import {
       (nodeId: string) => {
         const source = nodes.find((n) => n.id === nodeId);
         if (!source) return;
-
         // 先立即创建节点，避免等待接口导致“点了按钮但画布不出节点”
         const baseX = source.position.x + 400;
-        const spacing = 120;
+        const spacing = V_SPACING;
         const parentY = source.position.y;
         const ys = [parentY - spacing, parentY, parentY + spacing];
         const newNodes: CustomNode[] = [];
@@ -441,6 +457,7 @@ import {
 
         setNodes(nextNodes);
         setEdges(nextEdges);
+        setCanvasReady(true);
         setTimeout(autoLayout, 50);
 
         // 后台生成 drawId，成功后回写到状态与各节点 data 中
@@ -465,7 +482,7 @@ import {
           }
         })();
       },
-      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout]
+      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout, V_SPACING]
     );
   
     const addSettingCard = useCallback(
@@ -839,38 +856,42 @@ import {
   
     return (
       <InsCanvasContext.Provider value={handlers}>
-        <div ref={containerRef} className="com-ins-canvas">
+        <div
+          ref={containerRef}
+          className="relative flex h-full w-full min-w-[400px] flex-col bg-muted/30"
+        >
           {showInit ? (
-            <div className="ins-canvas-init">
+            <div className="relative flex flex-1 flex-col items-center justify-start overflow-hidden px-4">
               <BubblesContainer isAnimate={isLoading} />
-              <h1 className="main-title">
+              <h1 className="-mt-[90px] z-10 text-center text-[26px] font-semibold text-foreground">
                 {isLoading
                   ? "爆文猫写作正在生成随机选题..."
                   : "与爆文猫写作一起脑洞大开地创作"}
               </h1>
-              <div className="input-container">
-                <textarea
-                  className="idea-textarea"
+              <div className="relative z-10 mt-8 w-[308px] rounded-xl border-2 border-dashed border-orange-200 bg-background p-4 pb-12 shadow-sm">
+                <Textarea
+                  className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
                   value={ideaContent}
                   onChange={(e) => setIdeaContent(e.target.value)}
                   placeholder="输入一个想法,或点随机选题开始创作"
                   rows={4}
                   disabled={isLoading}
                 />
-                <button
-                  className="random-topic-btn-init"
+                <Button
+                  type="button"
+                  className="absolute bottom-3 right-3"
                   disabled={isLoading}
                   onClick={handleGenerateIns}
                 >
                   {ideaContent === "" ? (
-                    <span className="mr-3">随机选题</span>
+                    <span className="mr-3 text-white">随机选题</span>
                   ) : null}
                   <span className="iconfont">&#xe7a1;</span>
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="canvas-container min-h-200">
+            <div className="relative flex-1 min-h-[200px]">
               <ReactFlow
                 id="main-canvas-flow"
                 nodes={nodes}
@@ -878,78 +899,104 @@ import {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
-                defaultEdgeOptions={{ type: "smoothstep" }}
+                defaultEdgeOptions={{
+                  type: "smoothstep",
+                  style: {
+                    stroke: "#1D6BFF",
+                    strokeWidth: 4,
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round",
+                  },
+                }}
                 defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-                zoomOnScroll={hasIdea}
-                zoomOnPinch={hasIdea}
+                zoomOnScroll={canInteract}
+                zoomOnPinch={canInteract}
                 // 避免左键拖动画布吞掉节点内部点击（按钮/输入框等）
                 // 仅允许中键/右键拖动平移画布
-                panOnDrag={hasIdea ? [1, 2] : false}
-                panOnScroll={hasIdea}
-                nodesDraggable={hasIdea}
-                elementsSelectable={hasIdea}
-                nodesConnectable={hasIdea}
-                minZoom={hasIdea ? 0.1 : 1}
-                maxZoom={hasIdea ? 2 : 1}
-                className={`vue-flow-container ${!hasIdea ? "no-idea" : ""}`}
+                panOnDrag={canInteract ? [1, 2] : false}
+                panOnScroll={canInteract}
+                panActivationKeyCode={canInteract ? 'Space' : null}
+                nodesDraggable={canInteract}
+                elementsSelectable={canInteract}
+                nodesConnectable={canInteract}
+                minZoom={canInteract ? 0.1 : 1}
+                maxZoom={canInteract ? 2 : 1}
+                className="h-full w-full bg-muted/30"
               >
                 {hasIdea && <Controls />}
                 <MiniMap />
                 <Background />
               </ReactFlow>
-              <div className="zoom-controls">
-                <button
-                  className="zoom-btn"
+              <div className="pointer-events-auto absolute bottom-5 right-5 z-50 flex items-center gap-2 rounded-md border bg-background/80 p-1 shadow-sm backdrop-blur">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
                   disabled={!hasIdea}
                   onClick={() => hasIdea && zoomOut()}
+                  aria-label="Zoom out"
                 >
                   −
-                </button>
-                <button
-                  className="zoom-btn"
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
                   disabled={!hasIdea}
                   onClick={() => hasIdea && zoomIn()}
+                  aria-label="Zoom in"
                 >
                   +
-                </button>
+                </Button>
               </div>
               {!hasIdea && (
-                <div className="ins-actions-container">
-                  <button
-                    className="refresh-cards-btn"
+                <div className="pointer-events-auto absolute left-1/2 top-1/2 z-50 isolate flex -translate-x-1/2 -translate-y-1/2 translate-y-[150px] flex-col items-center">
+                  <Button
+                    type="button"
+                    className="h-[42px] bg-foreground px-4 text-base text-background hover:bg-foreground/90"
                     disabled={isLoading}
                     onClick={() => refreshCards(reqIdeaContent)}
                   >
                     <span className="refresh-icon">⟳</span>
                     <span className="refresh-text">换一批</span>
-                  </button>
-                  <div className="idea-input-wrapper">
-                    <textarea
-                      className="idea-input"
+                  </Button>
+                  <div className="relative mt-8 w-full max-w-[600px]">
+                    <Textarea
+                      className="resize-none rounded-xl border-2 border-dashed border-orange-400 p-4 text-base shadow-sm md:text-base"
                       value={ideaContent}
                       onChange={(e) => setIdeaContent(e.target.value)}
                       placeholder="输入一个想法，或点随机选题开始创作"
                       rows={4}
                     />
-                    <button
-                      className="random-topic-btn"
+                    <Button
+                      type="button"
+                      className="absolute bottom-3 right-3"
                       disabled={isLoading}
                       onClick={() => refreshCards(ideaContent)}
                     >
                       {!ideaContent ? (
-                        <span className="mr-3">随机选题</span>
+                        <span className="mr-3 text-white">随机选题</span>
                       ) : null}
                       <span className="dropdown-icon iconfont">&#xe7a1;</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
               {hasIdea && (
-                <div className="history-actions">
-                  <button onClick={addNewCanvas} className="link-btn">
+                <div className="pointer-events-auto absolute right-5 top-5 z-50 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={addNewCanvas}
+                    aria-label="New canvas"
+                  >
                     <span className="iconfont">&#xea7f;</span>
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => {
                       if (!inspirationDrawId) {
                         msg("warning", "请先创建画布");
@@ -957,10 +1004,10 @@ import {
                       }
                       setHistoryDialogShow(true);
                     }}
-                    className="link-btn"
+                    aria-label="History"
                   >
                     <span className="iconfont">&#xead4;</span>
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -980,50 +1027,24 @@ import {
           />
         </div>
         <style>{`
-          .com-ins-canvas {
-            width: 100%; height: 100%; min-width: 400px; display: flex; flex-direction: column;
-            background: var(--bg-primary, #f5f6f8);
+          /* 兜底：统一连接线蓝色样式（包括已有 edges） */
+          #main-canvas-flow .react-flow__edge-path {
+            stroke: #1D6BFF;
+            stroke-width: 4px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
           }
-          .ins-canvas-init {
-            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-            position: relative; overflow: hidden;
+          /* 主卡片（card-1 / card-3）倾斜效果：兼容 react-flow__node / vue-flow__node */
+          #main-canvas-flow .react-flow__node[data-id="card-1"] .main-card,
+          #main-canvas-flow .vue-flow__node[data-id="card-1"] .main-card {
+            transform: translateY(65px) rotate(-15deg);
+            transform-origin: bottom left;
           }
-          .ins-canvas-init .main-title {
-            font-size: 26px; font-weight: 600; color: #333; text-align: center; z-index: 1; margin-top: -90px;
+          #main-canvas-flow .react-flow__node[data-id="card-3"] .main-card,
+          #main-canvas-flow .vue-flow__node[data-id="card-3"] .main-card {
+            transform: translateY(65px) rotate(15deg);
+            transform-origin: bottom right;
           }
-          .ins-canvas-init .input-container {
-            margin-top: 32px; position: relative; width: 308px; background: #fff; border: 2px dashed #f0c29a;
-            border-radius: 12px; padding: 16px; padding-bottom: 50px; z-index: 1;
-          }
-          .ins-canvas-init .idea-textarea {
-            width: 100%; border: none; outline: none; resize: none; font-size: 16px; line-height: 1.6;
-            padding: 0; box-sizing: border-box;
-          }
-          .ins-canvas-init .random-topic-btn-init {
-            position: absolute; bottom: 12px; right: 12px; border-radius: 6px; padding: 8px 16px;
-            background: #409eff; color: white; border: none; cursor: pointer; font-size: 14px;
-          }
-          .canvas-container { flex: 1; position: relative; min-height: 200px; }
-          .canvas-container .zoom-controls {
-            position: absolute; bottom: 20px; right: 20px; display: flex; align-items: center; gap: 8px;
-            background: #fff; border: 1px solid #e4e7ed; border-radius: 6px; padding: 4px 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 10;
-          }
-          .zoom-btn { width: 28px; height: 28px; border: 1px solid #dcdfe6; background: #fff; cursor: pointer; }
-          .vue-flow-container { width: 100%; height: 100%; background: var(--bg-primary, #f5f6f8); }
-          .ins-actions-container {
-            display: flex; flex-direction: column; align-items: center; position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%); margin-top: 150px; z-index: 10;
-          }
-          .refresh-cards-btn {
-            padding: 12px; background: #333; color: white; border: none; border-radius: 8px;
-            cursor: pointer; font-size: 16px; height: 42px;
-          }
-          .idea-input-wrapper { position: relative; width: 100%; max-width: 600px; margin-top: 32px; }
-          .idea-input { width: 100%; border: 2px dashed #ff9800; border-radius: 12px; padding: 16px; font-size: 16px; }
-          .random-topic-btn { position: absolute; bottom: 12px; right: 12px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-          .history-actions { position: absolute; right: 20px; top: 20px; display: flex; gap: 8px; }
-          .link-btn { background: none; border: none; cursor: pointer; font-size: 18px; }
         `}</style>
       </InsCanvasContext.Provider>
     );
