@@ -38,6 +38,6 @@ const defaultValue: InsCanvasHandlers = {
 
 export const InsCanvasContext = React.createContext<InsCanvasHandlers>(defaultValue);
 
-export function useInsCanvasHandlers() {
+export const useInsCanvasHandlers = () => {
   return React.useContext(InsCanvasContext);
-}
+};

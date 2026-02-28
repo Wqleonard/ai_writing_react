@@ -1,0 +1,247 @@
+'use client'
+
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Toast, showConfirmDialog } from 'vant'
+import { useNoteStore, selectNoteList, selectNotesLoading, selectNotesFinished } from '@/stores/noteStore'
+import { deleteNote } from '@/api/notes'
+import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
+
+export default function MNotesPage() {
+  const navigate = useNavigate()
+  const noteList = useNoteStore(selectNoteList)
+  const loading = useNoteStore(selectNotesLoading)
+  const finished = useNoteStore(selectNotesFinished)
+  const loadNotes = useNoteStore((state) => state.loadNotes)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [activeId, setActiveId] = useState<number | null>(null)
+  const [currentOffset, setCurrentOffset] = useState(0)
+  const touchStartX = useRef(0)
+  const touchCurrentX = useRef(0)
+
+  // 初始化加载
+  useEffect(() => {
+    loadNotes(true)
+  }, [loadNotes])
+
+  // 触底加载更多
+  const handleScroll = useCallback(() => {
+    if (loading || finished) return
+
+    const container = containerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      loadNotes(false)
+    }
+  }, [loading, finished, loadNotes])
+
+  // 触摸开始
+  const handleTouchStart = useCallback((e: React.TouchEvent, noteId: number) => {
+    touchStartX.current = e.touches[0].clientX
+    setActiveId(noteId)
+  }, [])
+
+  // 触摸移动
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!activeId) return
+    touchCurrentX.current = e.touches[0].clientX
+    const diff = touchCurrentX.current - touchStartX.current
+    // 只允许向左滑动
+    if (diff < 0) {
+      setCurrentOffset(Math.max(diff, -160)) // 最大滑动 160px
+    }
+  }, [activeId])
+
+  // 触摸结束
+  const handleTouchEnd = useCallback(() => {
+    if (!activeId) return
+
+    const threshold = -80 // 滑动阈值
+    if (currentOffset < threshold) {
+      // 保持展开状态
+      setCurrentOffset(currentOffset)
+    } else {
+      // 收起
+      setCurrentOffset(0)
+      setActiveId(null)
+    }
+  }, [activeId, currentOffset])
+
+  // 删除笔记
+  const handleDelete = useCallback(
+    async (noteId: number) => {
+      try {
+        await showConfirmDialog({
+          title: '提示',
+          message: '确定要删除这条笔记吗？',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+        })
+
+        await deleteNote(String(noteId))
+        Toast.show({ message: '删除成功', type: 'success', duration: 2000 })
+
+        // 重新加载列表
+        setCurrentOffset(0)
+        setActiveId(null)
+        loadNotes(true)
+      } catch (e: any) {
+        if (e !== 'cancel') {
+          console.error('删除失败:', e)
+          Toast.show({ message: '删除失败，请稍后重试', type: 'fail', duration: 2000 })
+        }
+      }
+    },
+    [loadNotes]
+  )
+
+  // 点击内容
+  const handleContentClick = useCallback(
+    (note: any) => {
+      // 如果当前项处于展开状态，收起
+      if (activeId === note.id && currentOffset !== 0) {
+        setCurrentOffset(0)
+        setActiveId(null)
+        return
+      }
+
+      // 跳转到详情页
+      navigate('/m/m-workspace-notes-detail', {
+        state: {
+          newNote: false,
+          note: JSON.stringify(note),
+        },
+      })
+    },
+    [activeId, currentOffset, navigate]
+  )
+
+  // 添加笔记
+  const handleAddNote = useCallback(() => {
+    navigate('/m/m-workspace-notes-detail', {
+      state: { newNote: true },
+    })
+  }, [navigate])
+
+  // 格式化内容预览
+  const formatContentPreview = (content: string | null | undefined): string => {
+    if (!content) return '无内容'
+
+    const plainText = content
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      .replace(/_(.+?)_/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/`{3}[\s\S]*?`{3}/g, '')
+      .replace(/`(.+?)`/g, '$1')
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[(.+?)\]\(.*?\)/g, '$1')
+      .replace(/^>\s+/gm, '')
+      .replace(/^[-*+]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      .replace(/^---+$/gm, '')
+      .replace(/\n+/g, ' ')
+      .trim()
+
+    if (!plainText) return '无内容'
+    return plainText.length > 50 ? plainText.slice(0, 50) + '...' : plainText
+  }
+
+  // 格式化时间
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return ''
+    const date = new Date(dateStr)
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col bg-gray-100">
+      {/* 顶部标题栏 */}
+      <div className="flex items-center h-22 px-9 bg-white">
+        <div className="w-15 h-15 mr-4" style={{ transform: 'scaleX(-1)' }}>
+          <img src={BOOM_CAT_ICON} alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="text-[32px] font-semibold text-[#7f7f7f]">爆文猫写作</div>
+      </div>
+
+      {/* 笔记列表 */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto px-9 py-4 hide-scrollbar"
+        onScroll={handleScroll}
+      >
+        <div className="flex flex-col gap-5">
+          {noteList.map((note) => (
+            <div
+              key={note.id}
+              className="relative bg-white rounded-[16px] overflow-hidden touch-pan-y"
+              onTouchStart={(e) => handleTouchStart(e, note.id)}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {/* 主体内容 */}
+              <div
+                className="px-6 py-5 bg-white relative z-10 transition-transform duration-200 ease-out"
+                style={{ transform: `translateX(${activeId === note.id ? currentOffset : 0}px)` }}
+                onClick={() => handleContentClick(note)}
+              >
+                <div className="text-[30px] font-semibold line-clamp-1 text-[#1a1a1a]">
+                  {note.title || '无标题'}
+                </div>
+                <div className="flex items-end gap-2 mt-2">
+                  <div className="text-[20px] text-[#a5a5a5] shrink-0">
+                    {formatTime(note.updatedTime)}
+                  </div>
+                  <div className="text-[22px] text-[#a5a5a5] truncate flex-1">
+                    {formatContentPreview(note.content)}
+                  </div>
+                </div>
+              </div>
+
+              {/* 右侧删除按钮 */}
+              {activeId === note.id && currentOffset < 0 && (
+                <div
+                  className="absolute right-0 top-0 h-full flex items-center justify-center bg-[#ff4444] text-white z-0 active:bg-[#cc0000] cursor-pointer"
+                  style={{ width: '160px' }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(note.id)
+                  }}
+                >
+                  <span className="text-[28px]">删除</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* 加载状态 */}
+        {loading && (
+          <div className="text-center py-4 text-gray-500 text-[24px]">加载中...</div>
+        )}
+        {finished && noteList.length === 0 && (
+          <div className="text-center py-20 text-gray-400 text-[28px]">暂无笔记</div>
+        )}
+      </div>
+
+      {/* 添加按钮 */}
+      <div
+        className="iconfont w-24 h-24 rounded-full fixed bottom-60 right-20 bg-black text-[40px]! leading-24 text-white font-semibold text-center cursor-pointer active:opacity-90"
+        onClick={handleAddNote}
+      >
+        &#xe625;
+      </div>
+    </div>
+  )
+}

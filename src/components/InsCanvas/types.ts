@@ -20,6 +20,7 @@ export type CustomNode = Node<CustomNodeData, string> & {
   // 兼容历史字段：有些地方还会读取 dimensions
   dimensions?: { height: number; width: number };
   position: XYPosition;
+  isCreated?: boolean;
 };
 
 export type CustomEdge = Edge<Record<string, unknown>, string>;

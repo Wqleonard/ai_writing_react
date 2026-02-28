@@ -10,7 +10,7 @@ interface InspirationHistoryDialogProps {
   loadVersions?: (workId: string) => Promise<InspirationVersion[]>;
 }
 
-function getTimeAgo(saveTime: string | undefined): string {
+const getTimeAgo = (saveTime: string | undefined): string => {
   if (!saveTime) return "刚刚";
   const now = new Date();
   const saveDate = new Date(saveTime);
@@ -23,15 +23,15 @@ function getTimeAgo(saveTime: string | undefined): string {
   if (diffHours < 24) return `${diffHours}小时前`;
   if (diffDays < 7) return `${diffDays}天前`;
   return saveDate.toLocaleDateString("zh-CN");
-}
+};
 
-export default function InspirationHistoryDialog({
+const InspirationHistoryDialog = ({
   open,
   onClose,
   workId,
   onRestore,
   loadVersions: loadVersionsProp,
-}: InspirationHistoryDialogProps) {
+}: InspirationHistoryDialogProps) => {
   const [versions, setVersions] = useState<InspirationVersion[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -128,4 +128,6 @@ export default function InspirationHistoryDialog({
       `}</style>
     </div>
   );
-}
+};
+
+export default InspirationHistoryDialog;

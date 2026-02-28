@@ -1,8 +1,8 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5101523 */
-  src: url('iconfont.woff2?t=1768966526102') format('woff2'),
-       url('iconfont.woff?t=1768966526102') format('woff'),
-       url('iconfont.ttf?t=1768966526102') format('truetype');
+  src: url('iconfont.woff2?t=1772268705797') format('woff2'),
+       url('iconfont.woff?t=1772268705797') format('woff'),
+       url('iconfont.ttf?t=1772268705797') format('truetype');
 }
 
 .iconfont {
@@ -11,6 +11,74 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-baocun:before {
+  content: "\e936";
+}
+
+.icon-zhuashou:before {
+  content: "\e86c";
+}
+
+.icon-delete:before {
+  content: "\ea46";
+}
+
+.icon-star-filled:before {
+  content: "\ea40";
+}
+
+.icon-star:before {
+  content: "\ea51";
+}
+
+.icon-thumbs-up-filled:before {
+  content: "\eae3";
+}
+
+.icon-thumbs-down-filled:before {
+  content: "\eae4";
+}
+
+.icon-24gl-bubblesDots4:before {
+  content: "\e940";
+}
+
+.icon-IconQA:before {
+  content: "\e64e";
+}
+
+.icon-kefu:before {
+  content: "\e60e";
+}
+
+.icon-loading1:before {
+  content: "\ea91";
+}
+
+.icon-edit:before {
+  content: "\ea48";
+}
+
+.icon-refresh:before {
+  content: "\e66f";
+}
+
+.icon-loading:before {
+  content: "\e616";
+}
+
+.icon-command:before {
+  content: "\e9c2";
+}
+
+.icon-IconNotice:before {
+  content: "\e64d";
+}
+
+.icon-IconNote:before {
+  content: "\e64c";
 }
 
 .icon-add:before {

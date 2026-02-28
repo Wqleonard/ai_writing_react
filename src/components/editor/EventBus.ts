@@ -1,6 +1,6 @@
 import type { EditorEventBus } from "./types";
 
-export function createEventBus(): EditorEventBus {
+export const createEventBus = (): EditorEventBus => {
   const listeners = new Map<string, Set<(payload: any) => void>>();
 
   return {
@@ -32,4 +32,4 @@ export function createEventBus(): EditorEventBus {
       return off;
     }
   };
-}
+};

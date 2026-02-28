@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { TiptapEditor } from "./TipTapEditor";
+import { TiptapEditor } from "./TiptapEditor";
 import type { EditorRef } from "./types";
 
 const DemoPage = () => {

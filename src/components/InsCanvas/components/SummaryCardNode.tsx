@@ -3,10 +3,12 @@ import { useInsCanvasHandlers } from "@/components/InsCanvas/InsCanvasContext";
 
 export default function SummaryCardNode(props: any) {
   const handlers = useInsCanvasHandlers();
+  console.log(props, 'props')
   return (
     <EditableFlowCard
       {...props}
       data={props.data}
+      type="summaryCard"
       id={props.id}
       cardLabel="故事梗概"
       generateLabel="生成故事设定"

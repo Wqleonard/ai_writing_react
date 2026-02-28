@@ -6,7 +6,7 @@ export interface CreateEditorHostArgs {
   ctxBase: Omit<EditorCtx, "bus" | "addDisposer" | "registerCommands">;
 }
 
-export function createEditorHost(args: CreateEditorHostArgs) {
+export const createEditorHost = (args: CreateEditorHostArgs) => {
   const bus = createEventBus();
   // 存储 disposers
   const disposers: Array<() => void> = [];
@@ -68,4 +68,4 @@ export function createEditorHost(args: CreateEditorHostArgs) {
   });
 
   return { ctx, setup, mount, unmount, getRef };
-}
+};

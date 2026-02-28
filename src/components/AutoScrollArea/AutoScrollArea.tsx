@@ -1,0 +1,224 @@
+import * as React from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ScrollArea } from '@/components/ui/ScrollArea'
+import { cn } from '@/lib/utils'
+
+export interface AutoScrollAreaProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
+  /** 最大高度，同 CSS max-height（数字为 px） */
+  maxHeight?: string | number
+  /** 是否启用自动滚动到底部 */
+  autoScroll?: boolean
+  /** 视为“在底部”的阈值（px） */
+  bottomThreshold?: number
+  children?: React.ReactNode
+}
+
+export interface ScrollInfo {
+  scrollTop: number
+  scrollHeight: number
+  clientHeight: number
+  distanceToBottom: number
+  isAtBottom: boolean
+}
+
+export interface AutoScrollAreaRef {
+  scrollToBottom: () => void
+  scrollToTop: () => void
+  resetScrollState: () => void
+  checkAndAutoScroll: () => void
+  getScrollInfo: () => ScrollInfo
+  /** 容器根元素 */
+  containerRef: HTMLDivElement | null
+}
+
+const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
+  (
+    {
+      maxHeight = 400,
+      autoScroll = true,
+      bottomThreshold = 50,
+      className,
+      children,
+      ...rest
+    },
+    ref
+  ) => {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const contentRef = useRef<HTMLDivElement>(null)
+    const [userScrolledAway, setUserScrolledAway] = useState(false)
+    const lastScrollTopRef = useRef(0)
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const resizeObserverRef = useRef<ResizeObserver | null>(null)
+    const viewportRef = useRef<HTMLElement | null>(null)
+
+    const getViewport = useCallback((): HTMLElement | null => {
+      return containerRef.current?.querySelector(
+        '[data-slot="scroll-area-viewport"]'
+      ) as HTMLElement | null
+    }, [])
+
+    const isNearBottom = useCallback(
+      (threshold = bottomThreshold): boolean => {
+        const viewport = getViewport()
+        if (!viewport) return false
+        const { scrollTop, scrollHeight, clientHeight } = viewport
+        return scrollHeight - scrollTop - clientHeight <= threshold
+      },
+      [getViewport, bottomThreshold]
+    )
+
+    const checkAndAutoScroll = useCallback(() => {
+      if (!autoScroll || userScrolledAway) return
+      const viewport = getViewport()
+      if (!viewport) return
+      viewport.scrollTop = viewport.scrollHeight
+    }, [autoScroll, userScrolledAway, getViewport])
+
+    const scrollToBottom = useCallback(() => {
+      const viewport = getViewport()
+      if (!viewport) return
+      viewport.scrollTop = viewport.scrollHeight
+      setUserScrolledAway(false)
+    }, [getViewport])
+
+    const scrollToTop = useCallback(() => {
+      const viewport = getViewport()
+      if (!viewport) return
+      viewport.scrollTop = 0
+    }, [getViewport])
+
+    const resetScrollState = useCallback(() => {
+      setUserScrolledAway(false)
+      requestAnimationFrame(() => {
+        const viewport = getViewport()
+        if (viewport) viewport.scrollTop = viewport.scrollHeight
+      })
+    }, [getViewport])
+
+    const getScrollInfo = useCallback((): ScrollInfo => {
+      const viewport = getViewport()
+      if (!viewport) {
+        return {
+          scrollTop: 0,
+          scrollHeight: 0,
+          clientHeight: 0,
+          distanceToBottom: 0,
+          isAtBottom: false,
+        }
+      }
+      const { scrollTop, scrollHeight, clientHeight } = viewport
+      const distanceToBottom = scrollHeight - scrollTop - clientHeight
+      return {
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        distanceToBottom,
+        isAtBottom: distanceToBottom < 2,
+      }
+    }, [getViewport])
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        scrollToBottom,
+        scrollToTop,
+        resetScrollState,
+        checkAndAutoScroll,
+        getScrollInfo,
+        get containerRef() {
+          return containerRef.current
+        },
+      }),
+      [
+        scrollToBottom,
+        scrollToTop,
+        resetScrollState,
+        checkAndAutoScroll,
+        getScrollInfo,
+      ]
+    )
+
+    const handleScroll = useCallback(() => {
+      const viewport = getViewport()
+      if (!viewport) return
+      const { scrollTop, scrollHeight, clientHeight } = viewport
+      const distanceToBottom = scrollHeight - scrollTop - clientHeight
+      if (distanceToBottom <= bottomThreshold) {
+        setUserScrolledAway(false)
+      } else if (Math.abs(scrollTop - lastScrollTopRef.current) > 0.5) {
+        setUserScrolledAway(true)
+      }
+      lastScrollTopRef.current = scrollTop
+    }, [getViewport, bottomThreshold])
+
+    const handleWheel = useCallback(() => {
+      setUserScrolledAway(true)
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = setTimeout(() => {
+        if (isNearBottom()) setUserScrolledAway(false)
+        debounceTimerRef.current = null
+      }, 100)
+    }, [isNearBottom])
+
+    useEffect(() => {
+      if (!autoScroll) return
+      resetScrollState()
+    }, [autoScroll]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+      const id = setTimeout(() => {
+        const viewport = getViewport()
+        const contentEl = contentRef.current
+        if (!viewport || !contentEl) return
+        viewportRef.current = viewport
+
+        resizeObserverRef.current = new ResizeObserver(() => {
+          checkAndAutoScroll()
+        })
+        resizeObserverRef.current.observe(contentEl)
+        viewport.addEventListener('scroll', handleScroll, { passive: true })
+        viewport.addEventListener('wheel', handleWheel, { passive: true })
+        lastScrollTopRef.current = viewport.scrollTop
+      }, 0)
+
+      return () => {
+        clearTimeout(id)
+        const v = viewportRef.current
+        if (v) {
+          v.removeEventListener('scroll', handleScroll)
+          v.removeEventListener('wheel', handleWheel)
+          viewportRef.current = null
+        }
+        resizeObserverRef.current?.disconnect()
+        resizeObserverRef.current = null
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current)
+          debounceTimerRef.current = null
+        }
+      }
+    }, [getViewport, handleScroll, handleWheel, checkAndAutoScroll])
+
+    const maxHeightStyle =
+      typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight
+
+    return (
+      <div
+        ref={containerRef}
+        {...rest}
+        className={cn('auto-scroll-area h-fit-content', className)}
+        style={{ ...rest.style, maxHeight: maxHeightStyle }}
+      >
+        <ScrollArea className="h-full w-full">
+          <div ref={contentRef} className="min-h-full">
+            {children}
+          </div>
+        </ScrollArea>
+      </div>
+    )
+  }
+)
+
+AutoScrollArea.displayName = 'AutoScrollArea'
+
+export { AutoScrollArea }

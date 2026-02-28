@@ -1,0 +1,499 @@
+import * as React from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
+import { Dialog, DialogContent, DialogTitle, DialogClose, VisuallyHidden } from '@/components/ui/Dialog'
+import { Iconfont } from '@/components/IconFont'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select'
+import { getUserBalanceReq, getInvitationCodeReq } from '@/api/users'
+import { getOrderHistory, type Order } from '@/api/order'
+import type { OrderTypeFilter } from '@/api/order'
+import { formatLocalTime } from '@/utils/formatLocalTime'
+import { ORDER_CODE_VALUE } from '@/utils/constant'
+import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
+
+import closeIcon from '@/assets/images/quota/close.svg'
+import topUpIcon from '@/assets/images/quota/top_up.svg'
+import exchangeIcon from '@/assets/images/quota/exchange.svg'
+import invitationIcon from '@/assets/images/quota/invitation.svg'
+import separateWhiteIcon from '@/assets/images/quota/separate_white.svg'
+import separateYellowIcon from '@/assets/images/quota/separate_yellow.svg'
+import quotaBackImg from '@/assets/images/quota/quota_back.png'
+import { openDialog } from '@/lib/openDialog'
+import { Button } from '../ui/Button'
+
+export interface QuotaDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+const USAGE_FILTER_OPTIONS = [
+  { id: '0', name: '全部' },
+  { id: '1', name: '获取' },
+  { id: '2', name: '消耗' },
+] as const
+const PAGE_SIZE = 20
+
+const filterToOrderType = (id: string): OrderTypeFilter => {
+  if (id === '1') return 'INCREASE'
+  if (id === '2') return 'DECREASE'
+  return 'ALL'
+}
+
+export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
+  const [view, setView] = useState<'quota' | 'usage'>('quota')
+  const [dailyFreeUsed, setDailyFreeUsed] = useState(0)
+  const [dailyFreeTotal] = useState(1000000 / 1000)
+  const [fixedQuota, setFixedQuota] = useState(0)
+  const [bonusPoints, setBonusPoints] = useState(0)
+  const [inviteeCount, setInviteeCount] = useState(0)
+  const [invitationLink, setInvitationLink] = useState('https://baowenmao.com')
+
+  const [usageFilterType, setUsageFilterType] = useState('0')
+  const [ordersList, setOrdersList] = useState<Order[]>([])
+  const [isLoadingUsage, setIsLoadingUsage] = useState(false)
+  const [isLoadingMoreUsage, setIsLoadingMoreUsage] = useState(false)
+  const [hasMoreUsage, setHasMoreUsage] = useState(true)
+  const usagePageRef = useRef(-1)
+  const usageContentRef = useRef<HTMLDivElement>(null)
+
+  const updateQuota = useCallback(async () => {
+    try {
+      const res: any = await getUserBalanceReq()
+      if (
+        res?.dailyFreeToken != null &&
+        typeof res.dailyFreeToken === 'number' &&
+        !isNaN(res.dailyFreeToken)
+      ) {
+        setDailyFreeUsed(parseFloat((res.dailyFreeToken / 1000).toFixed(0)))
+      }
+      if (res?.token != null && typeof res.token === 'number' && !isNaN(res.token)) {
+        setFixedQuota(parseFloat((res.token / 1000).toFixed(0)))
+      }
+    } catch {
+      // keep default
+    }
+  }, [])
+
+  const updateInvitation = useCallback(async () => {
+    try {
+      const res: any = await getInvitationCodeReq()
+      if (res?.code) {
+        setInvitationLink(`${window.location.origin}?invitationCode=${res.code}`)
+      }
+      if (
+        res?.invitationNumber != null &&
+        typeof res.invitationNumber === 'number' &&
+        !isNaN(res.invitationNumber)
+      ) {
+        setInviteeCount(res.invitationNumber)
+      }
+      if (res?.token != null && typeof res.token === 'number' && !isNaN(res.token)) {
+        setBonusPoints(parseFloat((res.token / 1000).toFixed(0)))
+      }
+    } catch {
+      // keep default
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      updateQuota()
+      updateInvitation()
+    }
+  }, [open, updateQuota, updateInvitation])
+
+  const handleTopUp = useCallback(() => {
+    toast.info('暂未开放')
+  }, [])
+
+  const handleOpenExchange = useCallback(() => {
+    toast.info('兑换功能暂未开放')
+  }, [])
+
+  const loadMoreUsage = useCallback(async () => {
+    if (isLoadingMoreUsage || isLoadingUsage) return
+    if (!hasMoreUsage) return
+    const nextPage = usagePageRef.current + 1
+    if (nextPage === 0) setIsLoadingUsage(true)
+    else setIsLoadingMoreUsage(true)
+    try {
+      const data = await getOrderHistory({
+        page: nextPage,
+        size: PAGE_SIZE,
+        orderType: filterToOrderType(usageFilterType),
+      })
+      if (!data?.content || !Array.isArray(data.content)) {
+        setHasMoreUsage(false)
+        return
+      }
+      const list = data.content
+      if (list.length > 0) {
+        setOrdersList(prev => [...prev, ...list])
+        usagePageRef.current = nextPage
+      }
+      const totalAfter = ordersList.length + list.length
+      const noMore =
+        list.length < PAGE_SIZE ||
+        (data.totalPages != null && nextPage >= data.totalPages - 1) ||
+        (data.totalElements != null && totalAfter >= data.totalElements)
+      if (noMore) setHasMoreUsage(false)
+    } catch {
+      setHasMoreUsage(false)
+    } finally {
+      setIsLoadingUsage(false)
+      setIsLoadingMoreUsage(false)
+    }
+  }, [usageFilterType, isLoadingUsage, isLoadingMoreUsage, hasMoreUsage, ordersList.length])
+
+  const resetAndLoadUsage = useCallback(async () => {
+    setOrdersList([])
+    usagePageRef.current = -1
+    setHasMoreUsage(true)
+    setIsLoadingUsage(true)
+    setIsLoadingMoreUsage(false)
+    try {
+      const data = await getOrderHistory({
+        page: 0,
+        size: PAGE_SIZE,
+        orderType: filterToOrderType(usageFilterType),
+      })
+      if (!data?.content || !Array.isArray(data.content)) {
+        setHasMoreUsage(false)
+        return
+      }
+      setOrdersList(data.content)
+      usagePageRef.current = 0
+      const noMore =
+        data.content.length < PAGE_SIZE ||
+        (data.totalPages != null && 0 >= data.totalPages - 1) ||
+        (data.totalElements != null && data.content.length >= data.totalElements)
+      if (noMore) setHasMoreUsage(false)
+    } catch {
+      setHasMoreUsage(false)
+    } finally {
+      setIsLoadingUsage(false)
+    }
+  }, [usageFilterType])
+
+  const handleUsageScroll = useCallback(() => {
+    const el = usageContentRef.current
+    if (!el) return
+    const { scrollTop, scrollHeight, clientHeight } = el
+    if (scrollHeight - scrollTop - clientHeight < 50) loadMoreUsage()
+  }, [loadMoreUsage])
+
+  const handleOpenUsageDetails = useCallback(() => {
+    setView('usage')
+    setOrdersList([])
+    usagePageRef.current = -1
+    setHasMoreUsage(true)
+    setUsageFilterType('0')
+  }, [])
+
+  const handleUsageReturn = useCallback(() => {
+    setView('quota')
+    setOrdersList([])
+    usagePageRef.current = -1
+  }, [])
+
+  const handleUsageCloseAll = useCallback(() => {
+    setView('quota')
+    onOpenChange(false)
+    setOrdersList([])
+    usagePageRef.current = -1
+  }, [onOpenChange])
+
+  const handleDialogOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next) setView('quota')
+      onOpenChange(next)
+    },
+    [onOpenChange]
+  )
+
+  const getDetailText = useCallback((order: Order): string => {
+    if (order.function && ORDER_CODE_VALUE[order.function]) return ORDER_CODE_VALUE[order.function]
+    return order.function || order.orderType || '—'
+  }, [])
+
+  const formatPoints = useCallback((order: Order): string => {
+    return parseFloat(Number(order.totalCost) / 1000 + '').toFixed(2)
+  }, [])
+
+  const getPointsClass = useCallback((order: Order): string => {
+    const val = Math.abs(order.totalCost ?? 0)
+    if (val === 0) return ''
+    if (order.orderType === 'DECREASE') return 'text-[#f56c6c]'
+    return 'text-[#67c23a]'
+  }, [])
+
+  useEffect(() => {
+    if (view === 'usage') {
+      resetAndLoadUsage()
+    }
+  }, [view, usageFilterType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(invitationLink)
+      toast.success('邀请链接已复制到剪贴板')
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = invitationLink
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+        toast.success('邀请链接已复制到剪贴板')
+      } catch {
+        toast.error('复制失败，请手动复制')
+      }
+      document.body.removeChild(textarea)
+    }
+  }, [invitationLink])
+
+  const preventClose = useCallback((e: Event) => {
+    e.preventDefault()
+  }, [])
+
+  return (
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent
+        showCloseButton
+        className="w-[722px] p-0"
+        onInteractOutside={preventClose}
+        onEscapeKeyDown={preventClose}
+      >
+        <VisuallyHidden>
+          <DialogTitle>{view === 'usage' ? '使用情况' : '额度'}</DialogTitle>
+        </VisuallyHidden>
+        {view === 'usage' ? (
+          <>
+            <div className="px-8 pt-8 pb-0">
+              <div className="h-17 flex items-center justify-between w-full">
+                <div className="flex items-center justify-between">
+                  <div
+                    role="button"
+                    className="flex h-10 w-10 items-center justify-center mr-1.5 p-0 border-none bg-transparent cursor-pointer text-[34px] text-[#8c8c8c] hover:text-[#ff9500]"
+                    onClick={handleUsageReturn}
+                    onKeyDown={e => e.key === 'Enter' && handleUsageReturn()}
+                    aria-label="返回"
+                  >
+                    <Iconfont unicode="&#xeaa2;" />
+                  </div>
+                  <h2 className="m-0 flex-1 text-[36px] font-bold leading-[1.32] text-transparent bg-linear-to-r from-[#efaf00] to-[#ff9500] bg-clip-text">
+                    使用情况
+                  </h2>
+                </div>
+                <Select value={usageFilterType} onValueChange={setUsageFilterType}>
+                  <SelectTrigger className="min-w-[100px] h-[30px] rounded-[20px] border-[#d8d8d8] px-3.5 text-[15px] text-[#8c8c8c]">
+                    <SelectValue placeholder="请选择" />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {USAGE_FILTER_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id} className='cursor-pointer'>
+                        {opt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="min-h-[480px] max-h-[660px] h-[660px] flex flex-col overflow-hidden px-[35px] pt-6 pb-[35px]">
+              <div className="flex-1 min-h-0 flex flex-col border border-[#e5e5e5] rounded-[20px] overflow-hidden bg-white">
+                <div className="shrink-0 flex items-center px-5 py-3.5 text-[15px] font-semibold text-[#8c8c8c] bg-[#e8e8e8] border-b border-[#e0e0e0]">
+                  <div className="flex-1 min-w-0 text-left">详情</div>
+                  <div className="w-[200px] shrink-0 text-left">日期</div>
+                  <div className="w-[110px] shrink-0 text-left">积分变更</div>
+                </div>
+                <div
+                  ref={usageContentRef}
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"
+                  onScroll={handleUsageScroll}
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {isLoadingUsage && ordersList.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#8c8c8c]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>加载中...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {ordersList.map((order, index) => (
+                        <div
+                          key={order.id}
+                          className={`flex items-center px-5 py-3.5 text-sm text-[#666] border-b border-[#f0f0f0] ${index % 2 === 0 ? 'bg-[#ebebeb]' : 'bg-white'}`}
+                        >
+                          <div
+                            className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left"
+                            title={getDetailText(order)}
+                          >
+                            {getDetailText(order)}
+                          </div>
+                          <div className="w-[200px] shrink-0 text-left">
+                            {formatLocalTime(order.createdTime)}
+                          </div>
+                          <div
+                            className={`w-[110px] shrink-0 text-left font-medium ${getPointsClass(order)}`}
+                          >
+                            {formatPoints(order)}
+                          </div>
+                        </div>
+                      ))}
+                      {ordersList.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-[60px] px-5 text-[#8c8c8c] text-sm">
+                          暂无使用记录
+                        </div>
+                      )}
+                      {isLoadingMoreUsage && (
+                        <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#8c8c8c]">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>加载中...</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="px-8 pt-8 pb-0">
+              <h2 className="h-17 px-5 text-[36px] leading-17 text-2xl font-bold text-transparent bg-linear-to-r from-[#efaf00] to-[#ff9500] bg-clip-text">
+                额度
+              </h2>
+            </div>
+
+            <div className="flex flex-col items-center w-full px-[69px] pb-8 h-[660px]">
+              <div className="relative mt-[9px] w-full">
+                <img
+                  src={quotaBackImg}
+                  alt=""
+                  className="absolute left-0 top-0 w-full z-1 aspect-195/62 object-cover"
+                  aria-hidden
+                />
+                <div className="w-full aspect-195/62" />
+                <div className="absolute left-0 top-0 w-full aspect-195/62 flex flex-row items-center justify-center z-2">
+                  <div className="flex-1 flex flex-col items-center text-center mt-[15px]">
+                    <div className="text-[40px] font-bold text-white leading-[1.32]">
+                      {dailyFreeUsed}/{dailyFreeTotal}
+                    </div>
+                    <div className="text-base text-white/80 leading-[1.32] mt-[10px]">
+                      （内测每日积分）
+                    </div>
+                  </div>
+                  <img
+                    src={separateWhiteIcon}
+                    alt=""
+                    className="w-[2px] h-[67px] shrink-0 mx-6 self-center"
+                    aria-hidden
+                  />
+                  <div className="flex-1 flex flex-col items-center text-center mt-[15px]">
+                    <div className="text-[40px] font-bold text-white leading-[1.32]">
+                      {fixedQuota}
+                    </div>
+                    <div className="text-base text-white/80 leading-[1.32] mt-[10px]">
+                      （固定积分）
+                    </div>
+                  </div>
+                </div>
+                <div className="flex h-[54px] w-full flex-row items-center justify-center border-b border-l border-r border-[#EFAF00] rounded-b-[20px]">
+                  <div
+                    role="button"
+                    className="flex flex-1 flex-row items-center justify-center gap-1.5 cursor-pointer text-[20px] font-normal text-[#9a9a9a] leading-[1.32] border-none bg-transparent p-0"
+                    onClick={handleTopUp}
+                    onKeyDown={e => e.key === 'Enter' && handleTopUp()}
+                  >
+                    <img src={topUpIcon} alt="" className="h-[21px] w-[21px]" />
+                    <span>充值</span>
+                  </div>
+                  <img src={separateYellowIcon} alt="" className="w-px h-[39px]" />
+                  <div
+                    role="button"
+                    className="flex flex-1 flex-row items-center justify-center gap-1.5 cursor-pointer text-[20px] font-normal text-[#9a9a9a] leading-[1.32] border-none bg-transparent p-0"
+                    onClick={handleOpenExchange}
+                    onKeyDown={e => e.key === 'Enter' && handleOpenExchange()}
+                  >
+                    <img src={exchangeIcon} alt="" className="h-[24px] w-[26px]" />
+                    <span>兑换</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full bg-[#dadada] opacity-50 h-px my-5" />
+
+              <div className="w-full pl-1.5">
+                <div className="flex items-center gap-4 mb-5">
+                  <img src={invitationIcon} alt="" className="h-[26px] w-[24px]" />
+                  <span className="text-[20px] font-bold text-transparent bg-linear-to-r from-[#efaf00] to-[#ff9500] bg-clip-text">
+                    邀请记录
+                  </span>
+                </div>
+                <div className="flex items-center justify-center mb-5 h-[122px] w-full rounded-[20px] border border-transparent bg-linear-to-b from-[#fff8e5] to-white bg-clip-padding relative">
+                  <div className="absolute inset-0 rounded-[20px] p-px bg-linear-to-r from-[#efaf00] to-[#ff9500] mask-exclude [mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)]" />
+                  <div className="flex-1 flex flex-col items-center text-center">
+                    <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
+                      {bonusPoints}
+                    </div>
+                    <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
+                      （累计获赠积分）
+                    </div>
+                  </div>
+                  <img src={separateYellowIcon} alt="" className="w-px h-12 shrink-0" aria-hidden />
+                  <div className="flex-1 flex flex-col items-center text-center">
+                    <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
+                      {inviteeCount}
+                      <span className="text-[15px]">人</span>
+                    </div>
+                    <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
+                      （邀请人数）
+                    </div>
+                  </div>
+                </div>
+                <div className="text-sm text-[#999] leading-[1.32] mb-3.5">
+                  分享邀请链接，新用户注册每人可获得200积分
+                </div>
+                <div className="flex items-center gap-5 h-[43px] mb-5">
+                  <input
+                    type="text"
+                    readOnly
+                    value={invitationLink}
+                    className="flex-1 h-[43px] px-3 rounded-[10px] border-none bg-[#f5f5f5] text-base text-[#999] outline-none cursor-default"
+                  />
+                  <div
+                    className="shrink-0 w-[68px] h-[37px] flex items-center justify-center rounded-[10px] bg-linear-to-r from-[#efaf00] to-[#ff9500] text-lg font-normal text-white cursor-pointer leading-[1.32] hover:brightness-110 active:brightness-90"
+                    onClick={handleCopyLink}
+                    onKeyDown={e => e.key === 'Enter' && handleCopyLink()}
+                  >
+                    复制
+                  </div>
+                </div>
+                <div className="h-px w-full bg-[#dadada] opacity-50 mb-5" />
+                <div
+                  role="button"
+                  className="flex items-center gap-2 cursor-pointer text-base font-normal text-[#9a9a9a] leading-[1.32] hover:text-[#ff9500]"
+                  onClick={handleOpenUsageDetails}
+                  onKeyDown={e => e.key === 'Enter' && handleOpenUsageDetails()}
+                >
+                  <span className="iconfont text-xl text-[#9a9a9a] hover:text-[#ff9500]">
+                    <Iconfont unicode="&#xe619;" />
+                  </span>
+                  <span>使用情况</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export const openQuotaDialog = () => openDialog(QuotaDialog)

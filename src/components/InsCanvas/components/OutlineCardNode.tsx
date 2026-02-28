@@ -7,6 +7,7 @@ export default function OutlineCardNode(props: any) {
     <EditableFlowCard
       {...props}
       data={props.data}
+      type="outlineCard"
       id={props.id}
       cardLabel="故事大纲"
       generateLabel="开始创作"

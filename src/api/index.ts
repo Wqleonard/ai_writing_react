@@ -43,7 +43,8 @@ export interface ApiClientOptions {
 
 function defaultBaseURL() {
   // Vite：用 import.meta.env（.env.* 里必须是 VITE_ 前缀）
-  const vite = (import.meta as any)?.env?.VITE_API_BASE_URL;
+  const vite = import.meta.env.VITE_API_BASE_URL;
+  console.log(import.meta.env.MODE, import.meta.env.VITE_API_BASE_URL);
   // 2) 兜底：vite.config.ts 通过 define 注入（loadEnv(mode, ...)）
   const injected = typeof __API_BASE_URL__ === "string" ? __API_BASE_URL__ : "";
 

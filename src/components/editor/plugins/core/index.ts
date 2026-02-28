@@ -1,6 +1,6 @@
 import type { EditorContentType, EditorContentValue, EditorPlugin } from "../../types";
 
-export function corePlugin(): EditorPlugin {
+export const corePlugin = (): EditorPlugin => {
   return {
     id: "core",
     setup(ctx) {
@@ -38,4 +38,4 @@ export function corePlugin(): EditorPlugin {
       };
     },
   };
-}
+};

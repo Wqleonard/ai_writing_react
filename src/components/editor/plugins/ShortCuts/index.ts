@@ -1,6 +1,6 @@
 import type { EditorPlugin } from "../../types";
 
-export function shortcutsPlugin(): EditorPlugin {
+export const shortcutsPlugin = (): EditorPlugin => {
   return {
     id: "shortcuts",
     // 挂载插件
@@ -16,4 +16,4 @@ export function shortcutsPlugin(): EditorPlugin {
       ctx.addDisposer(() => window.removeEventListener("keydown", onKeyDown));
     },
   };
-}
+};

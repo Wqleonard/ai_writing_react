@@ -1,6 +1,6 @@
 import type { EditorPlugin } from "../../types";
 
-export function autosavePlugin(): EditorPlugin {
+export const autosavePlugin = (): EditorPlugin => {
   return {
     id: "autosave",
     onMount(ctx) {
@@ -29,4 +29,4 @@ export function autosavePlugin(): EditorPlugin {
       };
     },
   };
-}
+};

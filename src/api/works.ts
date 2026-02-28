@@ -1,57 +1,108 @@
-// 这里先提供最小可用的 API 占位实现，避免 InsCanvas 中的动态 import 出现类型错误。
-// 后续接入真实后端时，替换为实际的 fetch/axios 调用即可。
+import apiClient, { type RequestConfig } from "./index";
+import type { CreateWorkType } from "./generate-dialog";
 
-import apiClient from "./index";
+export type WorkInfoStage = string;
 
-export async function generateInspirationDrawIdReq(
-  workId: string,
-  _payload: { nodes: unknown; edges: unknown },
-): Promise<{ id: string }> {
-  // mock：用时间戳生成一个 id
-  return { id: `${workId}-${Date.now()}` };
-}
-
-export async function generateInspirationReq(
-  ideaContent?: string,
-): Promise<{ inspirationWord: string; inspirations: Array<{ inspirationTheme: string; referenceStyle: string }> }> {
-  const inspirationWord = (ideaContent ?? "灵感").slice(0, 20) || "灵感";
-  return {
-    inspirationWord,
-    inspirations: [
-      { inspirationTheme: "蒸汽朋克城市与齿轮钟楼", referenceStyle: "cinematic" },
-      { inspirationTheme: "雪夜列车上的密室故事", referenceStyle: "noir" },
-      { inspirationTheme: "海底遗迹与发光生物群", referenceStyle: "fantasy" },
-    ],
-  };
-}
-
-export const generateInspirationReqNew = (inspiration?: string) => {
-    return apiClient.post("/api/works/inspiration", {
-        inspiration: inspiration != "" ? inspiration : undefined,
-    });
+const getWorksListReq = (page: number, pageSize: number = 20) => {
+  return apiClient.get("/api/works", { page, size: pageSize });
 };
 
-export async function generateInspirationImageReq(_payload: {
-  inspirationWord?: string;
-  inspirations?: Array<{ inspirationTheme: string }>;
-}): Promise<Array<{ inspirationTheme: string; imageUrl: string }>> {
-  // mock：暂不生成图片
-  return apiClient.post("/api/works/inspiration-image", {
-    inspirationWord: _payload.inspirationWord,
-    inspirations: _payload.inspirations,
+const createWorkReq = (type: CreateWorkType = "editor") => {
+  return apiClient.post("/api/works", { type });
+};
+
+const getWorksByIdReq = (workId: string) => {
+  return apiClient.get(`/api/works/${workId}`);
+};
+
+const getSessionHistoryReq = (workId: string, sessionId: string) => {
+  return apiClient.get(`/api/works/${workId}/session/${sessionId}/history`);
+};
+
+const deleteSessionReq = (workId: string, sessionId: string) => {
+  return apiClient.del(`/api/works/${workId}/session/${sessionId}`);
+};
+
+const getWorksByIdAndVersionReq = (workId: string, versionId: string) => {
+  return apiClient.get(`/api/works/${workId}/versions/${versionId}`);
+};
+
+const deleteWorkReq = (workId: string) => {
+  return apiClient.del(`/api/works/${workId}`);
+};
+
+const batchDeleteWorkReq = (workIds: string[]) => {
+  return apiClient.del(`/api/works/batch`, { data: workIds });
+};
+
+const generateGuideReq = (
+  sessionId: string,
+  workId: number,
+  config?: RequestConfig
+) => {
+  return apiClient.post(
+    "/api/works/guide",
+    { sessionId, workId },
+    config
+  );
+};
+
+const getWorkTagsReq = () => {
+  return apiClient.get("/api/works/tags/editor");
+};
+
+const getScriptSelectedTagsReq = (novelPlot: string) => {
+  return apiClient.post("/api/works/script/tag", { novelPlot });
+};
+
+const getScriptStorySynopsisReq = (novelPlot: string, description: string) => {
+  return apiClient.post("/api/works/script/brain-storm", {
+    novelPlot,
+    description,
   });
+};
+
+const updateWorkInfoReq = async (
+  workId: string,
+  data: {
+    title?: string;
+    introduction?: string;
+    stage?: WorkInfoStage;
+    background?: string;
+    tagIds?: number[];
+    description?: string;
+    userId?: string;
+    chapterNum?: number;
+    wordNum?: number;
+  }
+) => {
+  return apiClient.put(`/api/works/${workId}`, data);
+};
+
+const generateBrainstormReq = (tagIds: number[]) => {
+  return apiClient.post("/api/works/brain-storm", { tagIds });
+};
+
+const generateInspirationReq = (inspiration?: string) => {
+  return apiClient.post("/api/works/inspiration", {
+    inspiration: inspiration != "" ? inspiration : undefined,
+  });
+};
+
+interface GenerateInspirationImageReqData {
+  inspirationWord: string;
+  inspirations: {
+    inspirationTheme: string;
+    referenceStyle: string;
+  }[];
 }
 
-export async function getWorksByIdReq(workId: string): Promise<any> {
-  // mock：返回一个示例工作对象
-  return {
-    id: workId,
-    title: "示例工作",
-    description: "这是一个示例工作",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-}
+const generateInspirationImageReq = (data: GenerateInspirationImageReqData) => {
+  return apiClient.post("/api/works/inspiration-image", {
+    inspirationWord: data.inspirationWord,
+    inspirations: data.inspirations,
+  });
+};
 
 interface PostInspirationStreamData {
   inspirationWord: string;
@@ -61,23 +112,128 @@ interface PostInspirationStreamData {
   modelEndpoint?: string;
 }
 
-// 保存灵感画布数据
-export async function saveInspirationCanvasReq(
-  inspirationDrawId: string | number,
-  payload: { nodes: unknown[]; edges: unknown[] },
-) {
-  return apiClient.post("/api/works/inspiration-canvas/save", {
-    inspirationDrawId,
-    ...payload,
-  });
-}
-
-// 灵感画布流式输出内容
-export async function postInspirationStream(
+const postInspirationStream = (
   data: PostInspirationStreamData,
   onData: (data: any) => void,
   onError: (error: any) => void,
   onComplete: () => void
-) {
-  return apiClient.postStream("/api/works/inspiration-stream", data, onData, onError, onComplete);
+) => {
+  return apiClient.postStream(
+    "/api/works/inspiration-stream",
+    data,
+    onData,
+    onError,
+    onComplete
+  );
 };
+
+const generateInspirationDrawIdReq = (
+  workId: string,
+  canvas: { nodes: any; edges: any }
+): Promise<{ id: string }> => {
+  return apiClient.post("/api/works/inspiration-draw", {
+    workId,
+    content: JSON.stringify(canvas),
+  });
+};
+
+/** 更新灵感画布内容（PUT） */
+const updateInspirationDrawReq = (
+  inspirationDrawId: string,
+  canvas: { nodes: any; edges: any }
+) => {
+  return apiClient.put(`/api/works/inspiration-draw/${inspirationDrawId}`, {
+    content: JSON.stringify(canvas),
+  });
+};
+
+/** 保存灵感画布数据（POST，InsCanvas 等使用） */
+const saveInspirationCanvasReq = (
+  inspirationDrawId: string | number,
+  payload: { nodes: unknown[]; edges: unknown[] }
+) => {
+  return apiClient.post("/api/works/inspiration-canvas/save", {
+    inspirationDrawId,
+    ...payload,
+  });
+};
+
+const messageLikeReq = (messageId: string, likeValue: 1 | 2) => {
+  return apiClient.post("/api/works/message/like", {
+    messageId,
+    likeValue,
+  });
+};
+
+export interface SentimentAnalysisItem {
+  sentiment: string;
+  emoji: string;
+  originalText: string;
+}
+
+const sentimentAnalysisReq = (text: string): Promise<SentimentAnalysisItem[]> => {
+  return apiClient.post("/api/works/sentiment-analysis", { text });
+};
+
+const updateWorkVersionReq = async (
+  workId: string | number,
+  content: string,
+  saveStatus: "0" | "1" | "2"
+) => {
+  return apiClient.post(`/api/works/${workId}/versions`, {
+    content,
+    saveStatus,
+  });
+};
+
+const addCustomTagReq = (
+  categoryId: string,
+  tagName: string,
+  tagType: "editor" | "script" = "editor"
+) => {
+  return apiClient.post("/api/works/tags", {
+    categoryId,
+    tagName,
+    tagType,
+  });
+};
+
+const delCustomTagReq = (tagId: string) => {
+  return apiClient.del(`/api/works/tags/${tagId}`);
+};
+
+const generateInspirationReqNew = (inspiration?: string) => {
+  return apiClient.post("/api/works/inspiration", {
+    inspiration: inspiration != "" ? inspiration : undefined,
+  });
+};
+
+export {
+  getWorksListReq,
+  createWorkReq,
+  deleteWorkReq,
+  getWorksByIdReq,
+  getWorksByIdAndVersionReq,
+  getSessionHistoryReq,
+  deleteSessionReq,
+  generateGuideReq,
+  getWorkTagsReq,
+  getScriptSelectedTagsReq,
+  getScriptStorySynopsisReq,
+  updateWorkInfoReq,
+  generateBrainstormReq,
+  generateInspirationReq,
+  generateInspirationReqNew,
+  generateInspirationImageReq,
+  postInspirationStream,
+  generateInspirationDrawIdReq,
+  saveInspirationCanvasReq,
+  updateInspirationDrawReq,
+  messageLikeReq,
+  sentimentAnalysisReq,
+  updateWorkVersionReq,
+  addCustomTagReq,
+  delCustomTagReq,
+  batchDeleteWorkReq,
+};
+

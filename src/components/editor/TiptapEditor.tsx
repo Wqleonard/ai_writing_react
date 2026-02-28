@@ -2,13 +2,15 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from '@tiptap/markdown'
+import { forwardRef, useImperativeHandle } from 'react'
+import type { EditorRef, EditorEventBus } from './types'
 
-const defaultContent = '# Hello World'
+const defaultContent = 'Please start typing...'
 
-export function TiptapEditor() {
+export const TiptapEditor = forwardRef<EditorRef, { workId?: string }>((props, ref) => {
   const editor = useEditor({
     extensions: [
-      StarterKit, 
+      StarterKit,
       Markdown
     ],
     content: defaultContent,
@@ -19,6 +21,28 @@ export function TiptapEditor() {
       },
     },
   })
+
+  // 简单事件总线实现
+  const eventBus: EditorEventBus = {
+    emit: (event, payload) => {
+      console.log('Event emitted:', event, payload)
+    },
+    on: (event, handler) => {
+      console.log('Event registered:', event)
+      return () => {}
+    },
+  }
+
+  useImperativeHandle(ref, () => ({
+    getState: () => ({
+      workId: props.workId,
+      currentContentType: 'markdown',
+    }),
+    commands: {
+      save: () => editor?.commands?.selectAll(),
+    },
+    bus: eventBus,
+  }), [editor, props.workId])
 
   if (!editor) {
     return (
@@ -38,4 +62,4 @@ export function TiptapEditor() {
       </BubbleMenu>
     </div>
   )
-}
+})

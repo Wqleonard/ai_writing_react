@@ -1,0 +1,140 @@
+.markdown-editor {
+  width: 100%;
+  height: 100%;
+}
+
+.markdown-editor.is-readonly .markdown-editor-content .ProseMirror {
+  cursor: default;
+  user-select: text;
+}
+
+.markdown-editor.is-readonly .markdown-editor-content .ProseMirror:focus {
+  outline: none;
+}
+
+.markdown-editor .editor-content,
+.markdown-editor .markdown-editor-content {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap {
+  min-height: 24px !important;
+  /* padding: 12px !important; */
+  outline: none;
+  color: #303133;
+  line-height: 1.8;
+  font-size: 16px;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap p {
+  margin: 0.5em 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap p:first-child.is-editor-empty.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h1,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h2,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h3,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h4,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h5,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h6 {
+  margin: 0;
+  color: #303133;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h1 { font-size: 1.5em; }
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h2 { font-size: 1.3em; }
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap h3 { font-size: 1.15em; }
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap p {
+  margin: 0;
+  line-height: 1.8;
+  word-break: break-word;
+  text-indent: 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap ul,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap ol {
+  margin: 0.8em 0;
+  padding-left: 2em;
+  line-height: 1.8;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap li {
+  margin: 0.4em 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap ul {
+  list-style: disc;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap ol {
+  list-style: decimal;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap strong {
+  font-weight: 600;
+  color: #303133;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap em {
+  font-style: italic;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap code {
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'YaHei', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #e83e8c;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap pre {
+  background: #f5f5f5;
+  /* padding: 12px; */
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid #ebeef5;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap pre code {
+  background: transparent;
+  padding: 0;
+  color: #303133;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap blockquote {
+  border-left: 4px solid #409eff;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #606266;
+  background: #f0f9ff;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap hr {
+  border: none;
+  border-top: 1px solid #ebeef5;
+  margin: 1.5em 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}

@@ -26,25 +26,25 @@ export interface TiptapEditorNewProps {
   style?: React.CSSProperties;
 }
 
-function looksLikeHtml(input: string) {
+const looksLikeHtml = (input: string) => {
   const s = input.trim();
   if (!s) return false;
   return /<\/?[a-z][\s\S]*>/i.test(s);
-}
+};
 
-function isLikelyTiptapDoc(v: any): v is TiptapJsonDoc {
+const isLikelyTiptapDoc = (v: any): v is TiptapJsonDoc => {
   return !!v && typeof v === "object" && v.type === "doc";
-}
+};
 
-function tryParseJson(input: string): any | null {
+const tryParseJson = (input: string): any | null => {
   try {
     return JSON.parse(input);
   } catch {
     return null;
   }
-}
+};
 
-function detectContentTypeFromValue(value: string | TiptapJsonDoc): Exclude<ContentType, "auto"> {
+const detectContentTypeFromValue = (value: string | TiptapJsonDoc): Exclude<ContentType, "auto"> => {
   if (typeof value !== "string") return "json";
   const s = value.trim();
   if (!s) return "markdown";
@@ -53,9 +53,9 @@ function detectContentTypeFromValue(value: string | TiptapJsonDoc): Exclude<Cont
   if (isLikelyTiptapDoc(parsed)) return "json";
   if (looksLikeHtml(s)) return "html";
   return "markdown";
-}
+};
 
-export default function TiptapEditorNew(props: TiptapEditorNewProps) {
+const TiptapEditorNew = (props: TiptapEditorNewProps) => {
   const {
     value,
     onChange,
@@ -166,5 +166,7 @@ export default function TiptapEditorNew(props: TiptapEditorNewProps) {
       <EditorContent editor={editor} />
     </div>
   );
-}
+};
+
+export default TiptapEditorNew;
 
