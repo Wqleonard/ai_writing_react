@@ -88,4 +88,12 @@
       cursor: not-allowed;
     }
   }
+    .shadow-popper-base {
+        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
+    }
+
+    .shadow-popper-base\!{
+        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
+    }
+
 }

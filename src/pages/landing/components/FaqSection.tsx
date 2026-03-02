@@ -34,43 +34,28 @@ export function FaqSection() {
   }, [])
 
   return (
-    <div style={{
-      width: '100%', maxWidth: '100vw', height: '100vh', minHeight: '100vh',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '2.5vh 0 2vh', boxSizing: 'border-box', overflow: 'hidden',
-    }}>
-      <div style={{
-        flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
-        marginTop: '7vh', width: 'min(627px, calc(100% - 120px))', maxWidth: 627, marginBottom: '3vh',
-      }}>
-        <h2 style={{ fontSize: 26, fontWeight: 700, color: '#464646', margin: '0 0 6px', lineHeight: 1.32 }}>常见问题</h2>
-        <p style={{ fontSize: 18, color: '#464646', margin: 0, lineHeight: 1.32 }}>解答你关于爆文猫写作的疑惑</p>
+    <div className="flex h-screen min-h-screen w-full max-w-screen flex-col items-center overflow-hidden box-border pt-[2.5vh] pb-[2vh]">
+      <div className="flex shrink-0 flex-col items-center mt-[7vh] mb-[3vh] mx-15 w-full max-w-[627px]">
+        <h2 className="m-0 mb-1.5 text-[1.625rem] font-bold leading-[1.32] text-[#464646]">
+          常见问题
+        </h2>
+        <p className="m-0 text-[1.125rem] leading-[1.32] text-[#464646]">
+          解答你关于爆文猫写作的疑惑
+        </p>
       </div>
 
-      <div style={{
-        flex: 1, minHeight: 0,
-        width: 'min(871px, calc(100vw - 200px))', maxWidth: 871,
-        display: 'flex', flexDirection: 'column', gap: 20,
-      }}>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 mx-[100px] w-full max-w-[871px]">
         {FAQS.map((faq, index) => (
           <div
             key={index}
             ref={el => { itemsRef.current[index] = el }}
-            className="scroll-reveal"
-            style={{
-              transitionDelay: `${index * 0.1}s`,
-              minHeight: 0, background: 'white', borderRadius: 20,
-              padding: 18, display: 'flex', flexDirection: 'column',
-              justifyContent: 'flex-start', cursor: 'pointer',
-              transition: 'box-shadow 0.3s ease, opacity 0.8s ease, transform 0.8s ease',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.08)')}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+            className="scroll-reveal flex min-h-0 cursor-pointer flex-col justify-start rounded-[1.25rem] bg-white p-4.5 transition-[box-shadow_0.3s_ease,opacity_0.8s_ease,transform_0.8s_ease] hover:shadow-[0_10px_20px_rgba(0,0,0,0.08)]"
+            style={{ transitionDelay: `${index * 0.1}s` }}
           >
-            <h3 style={{ fontSize: 22, fontWeight: 700, color: '#464646', margin: '0 0 16px', lineHeight: 1.32 }}>
+            <h3 className="m-0 mb-4 text-[1.375rem] font-bold leading-[1.32] text-[#464646]">
               {faq.question}
             </h3>
-            <p style={{ fontSize: 16, fontWeight: 400, color: '#999', lineHeight: 1.3, margin: 0 }}>
+            <p className="m-0 text-base font-normal leading-[1.3] text-[#999]">
               {faq.answer}
             </p>
           </div>
