@@ -171,6 +171,7 @@ export const CreationInput = (props: CreationInputProps) => {
   const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? (() => {}))
   const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {}))
 
+  const [inputFocused, setInputFocused] = useState(false)
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
   /** 富文本模式下每个 mold===input 的当前值，与 Vue 中 input-tag-input 的 value 对应 */
   const [richInputValues, setRichInputValues] = useState<string[]>([])
@@ -341,7 +342,10 @@ export const CreationInput = (props: CreationInputProps) => {
           </div>
         )}
         <div
-          className="flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a]"
+          className={clsx(
+            "flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a] transition-shadow duration-200",
+            inputFocused && "shadow-[0px_0px_0px_2px_#ff9500]"
+          )}
           id='newbiew-tour-step-1'
         >
           <div className="flex-1 overflow-y-auto min-h-0 py-4 text-sm">
@@ -405,9 +409,11 @@ export const CreationInput = (props: CreationInputProps) => {
               </div>
             ) : (
               <textarea
-                className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted) outline-none border-none focus:outline-none focus:ring-0"
+                className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted) outline-none border-none"
                 placeholder={placeholder}
                 value={value}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 onChange={e => onChange(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
