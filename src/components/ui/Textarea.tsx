@@ -16,23 +16,32 @@ const Textarea = ({
   maxLength,
   resize = false,
   areaClassName,
+  onFocus,
+  onBlur,
   ...props
 }: TextareaProps) => {
+  const [focused, setFocused] = React.useState(false)
   const length = typeof value === "string" ? value.length : 0
   const showLimit = showWordLimit && maxLength != null
 
   return (
-    <div className={cn("relative w-full min-w-0", className)}>
+    <div className={cn(
+      "relative w-full min-w-0 px-3 py-2 rounded-md border border-input transition-shadow",
+      focused && "ring-[3px] ring-ring/50",
+      className,
+    )}>
       <textarea
         data-slot="textarea"
         value={value}
         maxLength={maxLength}
         className={cn(
-          "flex min-h-[80px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          "flex min-h-[80px] w-full resize-none bg-background text-base text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
           showLimit && "pb-6 pr-12",
           resize && 'resize-y!',
           areaClassName,
         )}
+        onFocus={(e) => { setFocused(true); onFocus?.(e) }}
+        onBlur={(e) => { setFocused(false); onBlur?.(e) }}
         {...props}
       />
       {showLimit && (

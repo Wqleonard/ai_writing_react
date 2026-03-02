@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { verifyTicket } from '@/api/users'
+import { verifyTicket, getNewbieMission, completeNewbieMissionReq, type GuideTask } from '@/api/users'
 import { getInsiteNotification, type NotificationItem } from '@/api/insite-notification'
 import type {
   UserInfo,
@@ -157,6 +157,8 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     hasNewbieTourShowed: localStorage.getItem(NEWBIE_TOUR_STORAGE_KEY) === 'true',
     interceptedActions: [],
     loginDialogRequest: 0,
+    sendIdeaTourShow: false,
+    missionGroup: [],
 
     setNewbieTourShowed: () => {
       set({ hasNewbieTourShowed: true })
@@ -366,6 +368,102 @@ export const useLoginStore = create<LoginStore>((set, get) => {
 
     makeRandomAvatar,
     renderAvatarFromData,
+
+    setSendIdeaTourShow: (show) => set({ sendIdeaTourShow: show }),
+
+    updateNewbieMission: async () => {
+      if (!get().isLoggedIn) return
+      try {
+        const res = await getNewbieMission()
+        const tasks = res?.tasks
+        if (Array.isArray(tasks)) {
+          set({ missionGroup: tasks })
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    },
+
+    completeNewbieMission: async (taskId: number) => {
+      try {
+        if (!taskId) return
+        if (!get().isLoggedIn) return
+        if (!get().missionGroup.length) {
+          await get().updateNewbieMission()
+        }
+        await completeNewbieMissionReq(taskId)
+        await get().updateNewbieMission()
+      } catch (error) {
+        console.error(error)
+      }
+    },
+
+    completeNewbieMissionByCode: async (code: string): Promise<boolean> => {
+      try {
+        if (!code) return false
+        if (!get().isLoggedIn) return false
+
+        const findTaskByCode = (tasks: GuideTask[]): GuideTask | null => {
+          for (const task of tasks) {
+            if (task.code === code) return task
+            if (task.children?.length) {
+              const found = findTaskByCode(task.children)
+              if (found) return found
+            }
+          }
+          return null
+        }
+
+        const task = findTaskByCode(get().missionGroup)
+        if (!task) {
+          console.warn(`未找到任务代码: ${code}`)
+          return false
+        }
+
+        if (task.status === 1) {
+          console.log(`任务 ${code} 已完成`)
+          return true
+        }
+
+        await get().completeNewbieMission(task.taskId)
+        return true
+      } catch (error) {
+        console.error(`完成任务 ${code} 失败:`, error)
+        return false
+      }
+    },
+
+    getNewbieMissionProgressPercent: () => {
+      const countTasks = (tasks: GuideTask[]): { total: number; done: number } => {
+        let total = 0
+        let done = 0
+
+        tasks.forEach((task) => {
+          total++
+          if (task.status === 1) {
+            done++
+          }
+
+          if (task.children && task.children.length > 0) {
+            const childStats = countTasks(task.children)
+            total += childStats.total
+            done += childStats.done
+          }
+        })
+
+        return { total, done }
+      }
+
+      const tasks = get().missionGroup
+      if (!tasks || tasks.length === 0) return '0%'
+
+      const { total, done } = countTasks(tasks)
+
+      if (total === 0) return '0%'
+
+      const percent = Math.round((done / total) * 100)
+      return `${percent}%`
+    },
   }
 })
 
@@ -374,3 +472,4 @@ export const selectUserInfo = (s: LoginStore) => s.userInfo
 export const selectAvatarDataUrl = (s: LoginStore) => getAvatarDataUrl(s.userInfo)
 export const selectHasUnreadMessages = (s: LoginStore) =>
   s.messages.some((m) => !m.isReaded)
+export const hasNewbieTourShowed = (s:LoginStore) => s.hasNewbieTourShowed

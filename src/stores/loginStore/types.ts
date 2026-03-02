@@ -1,3 +1,5 @@
+import type { GuideTask } from '@/api/users'
+
 export interface UserInfo {
   id: string
   createdTime?: string
@@ -37,6 +39,8 @@ export interface LoginState {
   interceptedActions: InterceptedAction[]
   /** 递增即表示请求打开登录弹窗 */
   loginDialogRequest: number
+  sendIdeaTourShow: boolean
+  missionGroup: GuideTask[]
 }
 
 export interface LoginActions {
@@ -59,6 +63,11 @@ export interface LoginActions {
   consumeLoginDialogRequest: () => number
   makeRandomAvatar: (token: string) => AvatarData
   renderAvatarFromData: (avatarData: AvatarData, pixelSize?: number, size?: number) => string
+  setSendIdeaTourShow: (show: boolean) => void
+  updateNewbieMission: () => Promise<void>
+  completeNewbieMission: (taskId: number) => Promise<void>
+  completeNewbieMissionByCode: (code: string) => Promise<boolean>
+  getNewbieMissionProgressPercent: () => string
 }
 
 export type LoginStore = LoginState & LoginActions

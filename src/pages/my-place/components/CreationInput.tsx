@@ -309,49 +309,53 @@ export const CreationInput = (props: CreationInputProps) => {
 
   return (
     <div className="relative z-1 flex w-full flex-1 flex-col">
-      {/* 顶部工具标签 - 对应 Vue tool-tags-container-top / tool-tag-top */}
-      {showToolTags && (
-        <div className="tool-tags-container-top mb-3 flex flex-wrap gap-1.5">
-          {QUICK_CHAT_INPUT_CHANNELS.map(channel => {
-            const isActive = selectedTool === channel.title
-            return (
+      <div id="newbiew-tour-step-2" className="z-1 ">
+        {/* 顶部工具标签 - 对应 Vue tool-tags-container-top / tool-tag-top */}
+        {showToolTags && (
+          <div className="tool-tags-container-top mb-3 flex flex-wrap gap-1.5">
+            {QUICK_CHAT_INPUT_CHANNELS.map(channel => {
+              const isActive = selectedTool === channel.title
+              return (
+                <div
+                  key={channel.title}
+                  role="button"
+                  tabIndex={0}
+                  className={clsx(
+                    'tool-tag-top cursor-pointer whitespace-nowrap rounded-[10px] border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-normal text-[#333] transition-all duration-200',
+                    'hover:border-[#efc04e] hover:bg-[#efc04e] hover:text-white',
+                    isActive && 'bg-[#efc04e]! text-white!'
+                  )}
+                  title={isActive ? '再次点击切换回普通输入模式' : '点击使用此工具'}
+                  onClick={() => handleToolTagClick(channel.title)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleToolTagClick(channel.title)
+                    }
+                  }}
+                >
+                  {channel.title}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div
+          className="flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a]"
+          id='newbiew-tour-step-1'
+        >
+          <div className="flex-1 overflow-y-auto min-h-0 py-4 text-sm">
+            {currentChannel ? (
+              /* 富文本区域：与 Vue rich-text-content 一致，tip + span + 内联 input */
               <div
-                key={channel.title}
-                role="button"
-                tabIndex={0}
-                className={clsx(
-                  'tool-tag-top cursor-pointer whitespace-nowrap rounded-[10px] border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-normal text-[#333] transition-all duration-200',
-                  'hover:border-[#efc04e] hover:bg-[#efc04e] hover:text-white',
-                  isActive && 'bg-[#efc04e]! text-white!'
-                )}
-                title={isActive ? '再次点击切换回普通输入模式' : '点击使用此工具'}
-                onClick={() => handleToolTagClick(channel.title)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleToolTagClick(channel.title)
-                  }
-                }}
+                className="outline-none transition-all duration-300 flex flex-wrap items-baseline gap-0 wrap-break-word text-(--text-primary)"
+                contentEditable="true"
+                key={currentChannel.title + Math.random()}
               >
-                {channel.title}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      <div className="z-1 flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a]">
-        <div className="flex-1 overflow-y-auto min-h-0 py-4 text-sm">
-          {currentChannel ? (
-            /* 富文本区域：与 Vue rich-text-content 一致，tip + span + 内联 input */
-            <div
-              className="outline-none transition-all duration-300 flex flex-wrap items-baseline gap-0 wrap-break-word text-(--text-primary)"
-              contentEditable="true"
-              key={currentChannel.title + Math.random()}
-            >
-              {currentChannel.value.map((item, index) => {
-                if (item.mold === 'tip') {
-                  return (
-                    <span key={index} className="tip-text-wrapper relative mr-2 inline-block">
+                {currentChannel.value.map((item, index) => {
+                  if (item.mold === 'tip') {
+                    return (
+                      <span key={index} className="tip-text-wrapper relative mr-2 inline-block">
                       <span className="tip-text inline text-sm font-semibold text-(--bg-editor-save)">
                         {item.value}
                       </span>
@@ -368,22 +372,22 @@ export const CreationInput = (props: CreationInputProps) => {
                         <X className="size-2.5" strokeWidth={2.5} />
                       </div>
                     </span>
-                  )
-                }
-                if (item.mold === 'span') {
-                  return (
-                    <span key={index} className="text-part inline">
+                    )
+                  }
+                  if (item.mold === 'span') {
+                    return (
+                      <span key={index} className="text-part inline">
                       {item.value}
                     </span>
-                  )
-                }
-                if (item.mold === 'input') {
-                  const inputIndex = currentChannel.value
-                    .slice(0, index)
-                    .filter(i => i.mold === 'input').length
-                  const inputWidth = item.width ?? '120px'
-                  return (
-                    <span key={index} className="input-tag mx-0.5 inline-block align-middle">
+                    )
+                  }
+                  if (item.mold === 'input') {
+                    const inputIndex = currentChannel.value
+                      .slice(0, index)
+                      .filter(i => i.mold === 'input').length
+                    const inputWidth = item.width ?? '120px'
+                    return (
+                      <span key={index} className="input-tag mx-0.5 inline-block align-middle">
                       <input
                         type="text"
                         className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:border-[#ff9500] focus:bg-white focus:text-(--text-primary) focus:ring-2 focus:ring-[#ff9500]/20"
@@ -394,88 +398,89 @@ export const CreationInput = (props: CreationInputProps) => {
                         onKeyDown={e => handleRichKeyDown(e, inputIndex)}
                       />
                     </span>
-                  )
-                }
-                return null
-              })}
-            </div>
-          ) : (
-            <textarea
-              className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted)"
-              placeholder={placeholder}
-              value={value}
-              onChange={e => onChange(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  if (!disabled) handleSubmitClick()
-                }
-              }}
-            />
-          )}
-        </div>
+                    )
+                  }
+                  return null
+                })}
+              </div>
+            ) : (
+              <textarea
+                className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted) outline-none border-none focus:outline-none focus:ring-0"
+                placeholder={placeholder}
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (!disabled) handleSubmitClick()
+                  }
+                }}
+              />
+            )}
+          </div>
 
-        {/* 底部控制栏 */}
-        <div className="h-8 shrink-0 flex items-center justify-between gap-4">
-          <div className="action-buttons flex gap-2" />
-          <div className="control-right flex h-full items-center gap-3">
-            {/* 文风选择器 */}
-            <div className="answer-only-wrap relative">
-              <Select
-                value={selectedWritingStyle}
-                onValueChange={setSelectedWritingStyle}
-                disabled={isAnswerOnly}
-              >
-                <SelectTrigger className="h-8 min-w-[80px] border-0 text-sm text-(--text-secondary)">
-                  <SelectValue placeholder="文风" />
+          {/* 底部控制栏 */}
+          <div className="h-8 shrink-0 flex items-center justify-between gap-4">
+            <div className="action-buttons flex gap-2" />
+            <div className="control-right flex h-full items-center gap-3">
+              {/* 文风选择器 */}
+              <div className="answer-only-wrap relative">
+                <Select
+                  value={selectedWritingStyle}
+                  onValueChange={setSelectedWritingStyle}
+                  disabled={isAnswerOnly}
+                >
+                  <SelectTrigger className="h-8 min-w-[80px] border-0 text-sm text-(--text-secondary)">
+                    <SelectValue placeholder="文风" />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {writingStyleOptions.map(opt => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 模型选择器 */}
+              <Select value={modelLLM} onValueChange={setModelLLM}>
+                <SelectTrigger className="h-8 min-w-[100px] border-0 text-sm text-(--text-secondary)">
+                  <SelectValue placeholder="模型" />
                 </SelectTrigger>
                 <SelectContent align="end">
-                  {writingStyleOptions.map(opt => (
+                  {modelsLLM.map(opt => (
                     <SelectItem key={opt.id} value={opt.id}>
                       {opt.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* 仅回答 + 提示 */}
+              <div className="answer-only-wrap flex items-center" title="直接成文需要关闭仅回答哦！">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-(--text-secondary)">
+                  <Checkbox
+                    checked={isAnswerOnly}
+                    onCheckedChange={checked => onAnswerOnlyChange?.(checked === true)}
+                    className="rounded-full text-white!"
+                  />
+                  <span>仅回答</span>
+                </label>
+              </div>
+
+              {/* 发送按钮 - 多状态图标 */}
+              <Button
+                role="button"
+                onClick={handleSubmitClick}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !disabled) handleSubmitClick()
+                }}
+                className="w-7.5 h-7.5 rounded-full"
+              >
+                <Iconfont unicode="&#xe615;" className="text-lg" />
+              </Button>
             </div>
-
-            {/* 模型选择器 */}
-            <Select value={modelLLM} onValueChange={setModelLLM}>
-              <SelectTrigger className="h-8 min-w-[100px] border-0 text-sm text-(--text-secondary)">
-                <SelectValue placeholder="模型" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {modelsLLM.map(opt => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* 仅回答 + 提示 */}
-            <div className="answer-only-wrap flex items-center" title="直接成文需要关闭仅回答哦！">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-(--text-secondary)">
-                <Checkbox
-                  checked={isAnswerOnly}
-                  onCheckedChange={checked => onAnswerOnlyChange?.(checked === true)}
-                  className="rounded-full text-white!"
-                />
-                <span>仅回答</span>
-              </label>
-            </div>
-
-            {/* 发送按钮 - 多状态图标 */}
-            <Button
-              role="button"
-              onClick={handleSubmitClick}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !disabled) handleSubmitClick()
-              }}
-              className="w-7.5 h-7.5 rounded-full"
-            >
-              <Iconfont unicode="&#xe615;" className="text-lg" />
-            </Button>
           </div>
         </div>
       </div>
@@ -487,6 +492,7 @@ export const CreationInput = (props: CreationInputProps) => {
             'meme-words-container-bottom -mt-8 overflow-hidden rounded-b-[20px] bg-white px-2 pb-3 pt-8 transition-[max-height,background-color] duration-300 ease',
             !isMemeWordsExpanded && 'bg-[#e8e8e8]!'
           )}
+          id="newbiew-tour-step-3"
         >
           {isMemeWordsExpanded ? (
             <div className="meme-words-container-bottom-content">

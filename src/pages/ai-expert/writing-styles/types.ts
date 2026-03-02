@@ -4,6 +4,7 @@ export interface WritingStyleCardData {
   updatedAt: string
   isAdd: boolean
   description: string
+  id: string | number
 }
 
 export interface WritingStyleCardProps {

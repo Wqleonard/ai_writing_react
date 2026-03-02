@@ -70,11 +70,7 @@ export const FeedbackDialog = ({ open, onOpenChange }: FeedbackDialogProps) => {
               onChange={(e) => setContent(e.target.value)}
               rows={5}
               placeholder="请详细描述您遇到的问题..."
-              className={clsx(
-                'resize-none rounded-[10px] border-2 px-3 py-3 text-sm leading-relaxed',
-                'border-(--theme-color) focus-visible:border-(--theme-color)',
-                'focus-visible:ring-0 focus-visible:ring-offset-0'
-              )}
+
             />
           ) : (
             <div className="flex flex-col items-center gap-3">

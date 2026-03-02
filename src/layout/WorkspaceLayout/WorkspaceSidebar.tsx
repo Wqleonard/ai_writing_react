@@ -1,12 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import LOGO from '@/assets/images/logo.webp'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip'
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from '@/components/ui/Popover'
 import { clsx } from 'clsx'
 import { AddNewWorkPopover } from '@/components/AddNewWorkPopover'
@@ -33,7 +32,7 @@ const menuData: MenuItem[] = [
   {
     title: '我的空间',
     route: '/workspace/my-place',
-    routeName: 'workspace',
+    routeName: 'my-place',
     icon: '\ue607',
   },
   {
@@ -226,6 +225,15 @@ export function WorkspaceSidebar() {
 
   const optionsStore = useOptionsStore()
 
+  // 监听路由变化，自动展开对应的父菜单
+  useEffect(() => {
+    const parentMenusToExpand = menuData
+      .filter(item => item.children?.some(c => location.pathname.startsWith(c.route)))
+      .map(i => i.route)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpandedMenus(parentMenusToExpand)
+  }, [location.pathname])
+
   const toggleExpand = (route: string) => {
     setExpandedMenus(prev =>
       prev.includes(route) ? prev.filter(r => r !== route) : [...prev, route]
@@ -265,7 +273,7 @@ export function WorkspaceSidebar() {
         </AddNewWorkPopover>
 
         {/* 菜单导航 */}
-        <nav className="mt-3 flex flex-col">
+        <nav className="workspace-layout-sidebar mt-3 flex flex-col">
           {menuData.map(item => {
             const isParentActive = item.children?.some(c => c.route === activeRoute) ?? false
             const isExpanded = expandedMenus.includes(item.route)
@@ -277,9 +285,10 @@ export function WorkspaceSidebar() {
                     <div
                       onClick={() => toggleExpand(item.route)}
                       className={clsx({
-                        'mb-4 flex h-10 w-full cursor-pointer items-center gap-1 rounded-lg px-5 text-base transition-colors text-(--text-primary)': true,
+                        'workspace-layout-sidebar-item mb-4 flex h-10 w-full cursor-pointer items-center gap-1 rounded-lg px-5 text-base transition-colors text-(--text-primary)': true,
                         // 'font-semibold': isParentActive,
                         'hover:bg-[#CDCDCD]': !isParentActive,
+                        [item.routeName]: true,
                       })}
                     >
                       <span className="iconfont mr-1 text-xl">{item.icon}</span>
@@ -307,9 +316,10 @@ export function WorkspaceSidebar() {
                                 key={child.route}
                                 onClick={() => handleMenuClick(child)}
                                 className={clsx({
-                                  'mb-4 h-10 leading-10 cursor-pointer rounded-lg pl-3.5 text-left text-base transition-colors text-(--text-primary)': true,
+                                  'workspace-layout-sidebar-item-child mb-4 h-10 leading-10 cursor-pointer rounded-lg pl-3.5 text-left text-base transition-colors text-(--text-primary)': true,
                                   'bg-[#EED09F] font-semibold hover:bg-[#EED09F]': isChildActive,
                                   'hover:bg-[#CDCDCD]': !isChildActive,
+                                  [child.routeName]: true,
                                 })}
                               >
                                 {child.title}
@@ -324,9 +334,10 @@ export function WorkspaceSidebar() {
                   <div
                     onClick={() => handleMenuClick(item)}
                     className={clsx({
-                      'mb-4 flex h-10 w-full items-center gap-1 rounded-lg px-5 text-base transition-colors text-(--text-primary) cursor-pointer': true,
+                      'workspace-layout-sidebar-item mb-4 flex h-10 w-full items-center gap-1 rounded-lg px-5 text-base transition-colors text-(--text-primary) cursor-pointer': true,
                       'bg-[#EED09F] font-semibold hover:bg-[#EED09F]': activeRoute === item.route,
                       'hover:bg-[#CDCDCD]': activeRoute !== item.route,
+                      [item.routeName]: true,
                     })}
                   >
                     <span className="iconfont mr-1 text-xl">{item.icon}</span>

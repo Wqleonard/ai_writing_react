@@ -102,14 +102,14 @@ const WritingStylesPage = () => {
       const list = await getWritingStyleHistoryList()
       if (Array.isArray(list)) {
         setHistoryList(
-          list.map((item: any) => {
+          list.map((item: any, index: number) => {
             const content = item?.writingAnalyzeResult || '暂无内容'
             return {
               ...item,
               name: item?.attachmentName ?? '',
               content,
               description: stripMarkdownAndTruncate(content, 100),
-              id: item?.writingAnalyzeResult,
+              id: item?.id ?? `history-${index}`,
               updatedAt: item?.createdTime ?? '',
               isAdd: item?.isAdd ?? false,
             }
@@ -378,9 +378,9 @@ const WritingStylesPage = () => {
               </div>
               {historyList.length > 0 ? (
                 <div className="mb-5 grid w-full grid-cols-3 gap-4">
-                  {historyList.map((item) => (
+                  {historyList.map((item, i) => (
                     <WritingStyleCard
-                      key={String((item as any).id ?? item.name + (item.updatedAt ?? ''))}
+                      key={item.id + String(i)}
                       data={item}
                       onClick={handleHistoryCardClick}
                     />
@@ -455,7 +455,7 @@ const WritingStylesPage = () => {
       </div>
 
       <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
-        <DialogContent showCloseButton>
+        <DialogContent showCloseButton className="w-100">
           <DialogHeader>
             <DialogTitle>给文风起个名字</DialogTitle>
           </DialogHeader>

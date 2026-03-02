@@ -1,7 +1,10 @@
-import { Outlet, useLocation } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { WorkspaceHeader } from './WorkspaceHeader'
+import { NewbieTour } from "@/layout/components/NewbieTour/NewbieTour.tsx";
+import { NewbieMission } from "@/layout/components/NewbieMission/NewbieMission.tsx";
+import { useLoginStore } from "@/stores/loginStore";
 
 /**
  * 主应用布局：左侧固定侧边栏 + 右侧顶部 Header + 路由内容区。
@@ -10,17 +13,19 @@ import { WorkspaceHeader } from './WorkspaceHeader'
 export function WorkspaceLayout() {
   const location = useLocation()
   const [newbieTourOpen, setNewbieTourOpen] = useState(false)
-  const hasNewbieTourShowed = useRef(false)
+  const setNewbieTourShowed = useLoginStore(state => state.setNewbieTourShowed)
+  const hasNewbieTourShowed = useLoginStore(state => state.hasNewbieTourShowed)
 
   useEffect(() => {
-    if (location.pathname === '/workspace' && !hasNewbieTourShowed.current) {
+    if (location.pathname === '/workspace/my-place' && !hasNewbieTourShowed) {
       const timer = setTimeout(() => {
         setNewbieTourOpen(true)
-        hasNewbieTourShowed.current = true
+        setNewbieTourShowed()
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [location.pathname])
+
+  }, [hasNewbieTourShowed, location.pathname, setNewbieTourShowed])
 
   return (
     <div
@@ -31,7 +36,7 @@ export function WorkspaceLayout() {
       }}
     >
       {/* 侧边栏 */}
-      <WorkspaceSidebar />
+      <WorkspaceSidebar/>
 
       {/* 右侧主体 */}
       <main
@@ -42,17 +47,17 @@ export function WorkspaceLayout() {
         <div
           className="sticky top-0 flex h-14 w-full shrink-0 flex-row-reverse items-center pr-[76px] bg-(--bg-primary)"
         >
-          <WorkspaceHeader />
+          <WorkspaceHeader/>
         </div>
 
         {/* 内容区 */}
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 66px)' }}>
-          <Outlet />
+          <Outlet/>
+          <NewbieMission/>
         </div>
       </main>
 
-      {/* 新手引导（待后续重构 NewbieTour 后接入） */}
-      {newbieTourOpen && null}
+      <NewbieTour open={newbieTourOpen} onOpenChange={setNewbieTourOpen}/>
     </div>
   )
 }
