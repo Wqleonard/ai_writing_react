@@ -36,8 +36,6 @@ import type { MyWorkData, PageInfo, WorkItem, MessageDetail } from './types'
 import { serverData2FileTreeData } from '@/utils/aiTreeNodeConverter'
 import clsx from 'clsx'
 import LOGO from '@/assets/images/logo.webp'
-import DEFAULT_BOOM_CAT from '@/assets/images/my-place/default.gif'
-import HOVER_BOOM_CAT from '@/assets/images/my-place/hover.gif'
 import './my-place.css'
 
 const PAGE_SIZE = 20
@@ -81,8 +79,6 @@ export default function MyPlacePage() {
   const [showMessageDetailDialog, setShowMessageDetailDialog] = useState(false)
   const [messageDetail, setMessageDetail] = useState<MessageDetail | null>(null)
   const [currentTheme] = useState<'light' | 'dark' | 'eye-care'>('light')
-  const [isCatHover, setIsCatHover] = useState(false)
-  const [shouldAnimate, setShouldAnimate] = useState(false)
   const [isAnswerOnly, setIsAnswerOnly] = useState(true)
 
   const [isBatchDelete, setIsBatchDelete] = useState(false)
@@ -96,7 +92,6 @@ export default function MyPlacePage() {
   const [hasMore, setHasMore] = useState(true)
   const isFirstPageLoadRef = useRef(true)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const catHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateMyWorks = useCallback(async () => {
     setWorkListPageInfo((prev) => ({ ...prev, page: -1, total: 0 }))
@@ -366,26 +361,6 @@ export default function MyPlacePage() {
     setShowMessageDetailDialog(true)
   }, [bannerConfig])
 
-  const handleCatMouseEnter = useCallback(() => {
-    if (catHoverTimerRef.current) {
-      clearTimeout(catHoverTimerRef.current)
-      catHoverTimerRef.current = null
-    }
-    setIsCatHover(true)
-    catHoverTimerRef.current = setTimeout(() => {
-      setIsCatHover(false)
-      catHoverTimerRef.current = null
-    }, 200)
-  }, [])
-
-  const handleCatMouseLeave = useCallback(() => {
-    if (catHoverTimerRef.current) {
-      clearTimeout(catHoverTimerRef.current)
-      catHoverTimerRef.current = null
-    }
-    setIsCatHover(false)
-  }, [])
-
   useEffect(() => {
     if (!isLoggedIn()) return
     // 避免在 React StrictMode 下初次挂载时重复请求列表
@@ -397,37 +372,28 @@ export default function MyPlacePage() {
   useEffect(() => {
     const state = location.state as { shouldAnimate?: boolean; newStyleId?: string } | null
     if (state?.shouldAnimate === true) {
-      setShouldAnimate(true)
       if (state.newStyleId) {
         setSelectedWritingStyle(state.newStyleId)
       }
-      const t = setTimeout(() => setShouldAnimate(false), 10000)
-      return () => clearTimeout(t)
     }
   }, [location.state, setSelectedWritingStyle])
 
-  useEffect(() => {
-    return () => {
-      if (catHoverTimerRef.current) {
-        clearTimeout(catHoverTimerRef.current)
-      }
-    }
-  }, [])
 
   return (
     <div ref={scrollRef} className="workspace-scrollbar h-full w-full">
       <ScrollArea className="h-full w-full">
         {loading ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"/>
         ) : null}
-        <div className="workspace-container mx-auto flex h-full w-full max-w-[800px] flex-col font-['YaHei',sans-serif]">
+        <div
+          className="workspace-container mx-auto flex h-full w-full max-w-[800px] flex-col font-['YaHei',sans-serif]">
           <header className="workspace-header">
             <div className="mb-17 mt-13">
               <div className="title-section relative flex flex-col items-center overflow-visible text-sm">
                 {bannerConfig?.title && bannerConfig?.icon ? (
                   <div className="flex h-8 w-fit items-center gap-3 rounded-full bg-[#f9eece] px-2.5">
                     <div className="h-6 w-6">
-                      <img src={bannerConfig.icon} alt="" className="h-full w-full object-cover" />
+                      <img src={bannerConfig.icon} alt="" className="h-full w-full object-cover"/>
                     </div>
                     <div>{bannerConfig.title}</div>
                     <div
@@ -445,7 +411,7 @@ export default function MyPlacePage() {
                 ) : null}
                 <div className="mt-4 flex items-center justify-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full shadow-logo">
-                    <img src={LOGO} alt="title" className="h-7 w-7 object-cover" />
+                    <img src={LOGO} alt="title" className="h-7 w-7 object-cover"/>
                   </div>
                   <div className="text-[25px] font-bold text-black">爆文猫，写爆文</div>
                 </div>
@@ -484,7 +450,8 @@ export default function MyPlacePage() {
                 </div>
                 {isBatchDelete ? (
                   <div className="flex gap-2">
-                    <Button className='h-7 leading-7 text-sm! font-normal' variant="outline" onClick={cancelBatchDelete}>
+                    <Button className='h-7 leading-7 text-sm! font-normal' variant="outline"
+                            onClick={cancelBatchDelete}>
                       退出
                     </Button>
                     <Button className='h-7 leading-7 text-sm! font-normal' onClick={doBatchDelete}>批量删除</Button>
@@ -494,7 +461,8 @@ export default function MyPlacePage() {
 
               <div className="works-grid grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-4 pt-2">
                 <AddNewWorkPopover from="Workspace" placement="bottom">
-                  <div className="add-work flex h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-[#d9d9d9] text-[#c2c2c2] hover:shadow-md">
+                  <div
+                    className="add-work flex h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-[#d9d9d9] text-[#c2c2c2] hover:shadow-md">
                     <span className="iconfont text-xl">&#xe60d;</span>
                     <div>创建新作品</div>
                   </div>
@@ -523,19 +491,6 @@ export default function MyPlacePage() {
           </main>
         </div>
 
-        {/*{isLoggedIn() ? (*/}
-        {/*  <div*/}
-        {/*    className="fixed -bottom-4 right-28 h-24 w-24 cursor-pointer"*/}
-        {/*    onMouseEnter={handleCatMouseEnter}*/}
-        {/*    onMouseLeave={handleCatMouseLeave}*/}
-        {/*  >*/}
-        {/*    <img*/}
-        {/*      src={isCatHover ? HOVER_BOOM_CAT : DEFAULT_BOOM_CAT}*/}
-        {/*      alt=""*/}
-        {/*      className="h-full w-full object-cover"*/}
-        {/*    />*/}
-        {/*  </div>*/}
-        {/*) : null}*/}
       </ScrollArea>
 
       <MessageDetailDialog

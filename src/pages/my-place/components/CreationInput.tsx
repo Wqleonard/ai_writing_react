@@ -405,7 +405,7 @@ export const CreationInput = (props: CreationInputProps) => {
               </div>
             ) : (
               <textarea
-                className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted)"
+                className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted) outline-none border-none focus:outline-none focus:ring-0"
                 placeholder={placeholder}
                 value={value}
                 onChange={e => onChange(e.target.value)}
