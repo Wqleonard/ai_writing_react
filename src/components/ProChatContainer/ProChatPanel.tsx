@@ -1,20 +1,23 @@
 "use client"
 
-import React from "react"
+import React, { useRef, useEffect, useCallback } from "react"
 import clsx from "clsx"
-import { ScrollArea } from "@/components/ui/ScrollArea"
+import { AutoScrollArea, type AutoScrollAreaRef } from "@/components/AutoScrollArea"
 import { QuillChatInput } from "@/components/QuillChatInput"
 import type { ChatMessage } from "@/stores/chatStore"
 import { useProChatContainer } from "./ProChatContext"
 import titleLogo from "@/assets/images/logo.webp"
 
 /**
- * Editor 用聊天面板：自己维护 DOM（ScrollArea + 空状态/消息列表 + 输入框），
+ * Editor 用聊天面板：有消息时使用 AutoScrollArea 实现对话区自动滚动，
  * 通过 useProChatContainer 从 ProChatContainer 获取状态。
  * 必须在 ProChatContainer 内部使用。
  */
 export const ProChatPanel = () => {
   const ctx = useProChatContainer()
+  const panelRootRef = useRef<HTMLDivElement>(null)
+  const autoScrollRef = useRef<AutoScrollAreaRef | null>(null)
+
   if (!ctx) return null
 
   const {
@@ -30,7 +33,19 @@ export const ProChatPanel = () => {
     isAnswerOnly,
     onAnswerOnlyChange,
     slots,
+    scrollToBottomRef,
   } = ctx
+
+  const scrollToBottom = useCallback(() => {
+    autoScrollRef.current?.scrollToBottom()
+  }, [])
+
+  useEffect(() => {
+    scrollToBottomRef.current = scrollToBottom
+    return () => {
+      scrollToBottomRef.current = null
+    }
+  }, [scrollToBottomRef, scrollToBottom])
 
   const defaultEmptyState = (
     <div className="flex-1 w-full flex items-center justify-center min-h-full">
@@ -75,21 +90,28 @@ export const ProChatPanel = () => {
     <div
       key={msg.id}
       className={clsx(
-        "rounded-lg px-3 py-2 text-sm",
-        msg.role === "user"
-          ? "ml-8 bg-primary text-primary-foreground"
-          : "mr-8 bg-muted"
+        "w-full flex text-sm",
+        msg.role === "user" ? "justify-end" : "justify-start"
       )}
     >
-      <div className="whitespace-pre-wrap break-words">
-        {msg.content || "(无文本)"}
+      <div
+        className={clsx(
+          "rounded-lg px-3 py-2 max-w-[85%]",
+          msg.role === "user"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted"
+        )}
+      >
+        <div className="whitespace-pre-wrap break-words">
+          {msg.content || "(无文本)"}
+        </div>
       </div>
     </div>
   )
 
   const inputBlock = (
     <div
-      className="sticky bottom-0 w-[95%] rounded-[10px] mb-1.5 transition-opacity duration-200"
+      className="w-full rounded-[10px] transition-opacity duration-200"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -99,7 +121,7 @@ export const ProChatPanel = () => {
         onSubmit={onSubmit}
         placeholder="输入消息... (Enter 发送)"
         status="ready"
-        hideAssistUI={true}
+        hideAssistUI={false}
         clearOnSubmit={true}
         hasMessages={true}
         onDrop={handleDrop}
@@ -114,36 +136,51 @@ export const ProChatPanel = () => {
   )
 
   return (
-    <div className="h-full w-full flex flex-col items-center rounded-[0.5rem] overflow-hidden relative chat-dashboard-panel">
+    <div
+      ref={panelRootRef}
+      className="h-full w-full flex flex-col rounded-[0.5rem] overflow-hidden relative chat-dashboard-panel"
+    >
       {slots?.header}
-      <ScrollArea
+      <div
         className={clsx(
-          "flex-1 w-full overflow-hidden flex flex-col transition-all duration-300 ease-in-out chat-panel-body",
+          "flex-1 min-h-0 w-full flex flex-col transition-all duration-300 ease-in-out chat-panel-body",
           hasMessages && "has-messages",
           !hasMessages && !slots?.emptyState && "flex items-center justify-center"
         )}
       >
         {!hasMessages ? (
-          <>
+          <div className="flex-1 min-h-0 w-full flex flex-col items-center overflow-auto">
             {slots?.beforeMessages}
             {slots?.emptyState ?? defaultEmptyState}
-          </>
-        ) : (
-          <div className="h-full w-full p-4 overflow-x-hidden overflow-y-auto flex flex-col gap-3 chat-container">
-            {slots?.beforeMessages}
-            {displayMessages.map((msg) =>
-              slots?.renderMessage ? (
-                <React.Fragment key={msg.id}>
-                  {slots.renderMessage(msg)}
-                </React.Fragment>
-              ) : (
-                defaultMessageBubble(msg)
-              )
-            )}
-            {inputBlock}
           </div>
+        ) : (
+          <>
+            <AutoScrollArea
+              ref={autoScrollRef}
+              className="flex-1 min-h-0 w-full overflow-hidden"
+              maxHeight="100%"
+              autoScroll={true}
+              bottomThreshold={50}
+            >
+              <div className="w-full p-4 flex flex-col gap-3 chat-container">
+                {slots?.beforeMessages}
+                {displayMessages.map((msg) =>
+                  slots?.renderMessage ? (
+                    <React.Fragment key={msg.id}>
+                      {slots.renderMessage(msg)}
+                    </React.Fragment>
+                  ) : (
+                    defaultMessageBubble(msg)
+                  )
+                )}
+              </div>
+            </AutoScrollArea>
+            <div className="shrink-0 w-[95%] self-center rounded-[10px] py-2 px-0 mb-1.5 chat-panel-footer">
+              {inputBlock}
+            </div>
+          </>
         )}
-      </ScrollArea>
+      </div>
       {slots?.footer}
     </div>
   )

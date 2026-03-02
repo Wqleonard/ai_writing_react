@@ -7,7 +7,7 @@ import type { AxiosInstance, AxiosRequestConfig } from "axios";
 // =====================
 export const WRITE_SREAM_URL = "/api/v1/writing/generate-stream";
 export const SUBMIT_URL = "/submit";
-export const STREAM_CHAT_URL = "api/works/chat";
+export const STREAM_CHAT_URL = "/api/works/chat";
 
 // =====================
 // 类型

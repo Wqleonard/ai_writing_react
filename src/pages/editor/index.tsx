@@ -16,10 +16,13 @@ import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
 import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
 import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
+import { useLangGraphStream } from "@/hooks/useLangGraphStream";
+import { useLLM } from "@/hooks/useLLM";
 import type {
   ChatMessage,
   FileItem as FileItemType,
 } from "@/stores/chatStore";
+import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
 import { updateWorkInfoReq } from "@/api/works";
 import {
@@ -120,10 +123,12 @@ const MarkdownEditorPage = () => {
     currentWorkId,
     chatCurrentSession,
     faqCurrentSession,
+    chatMessages,
     setWorkId,
     createNewSession,
     loadSession,
     saveCurrentSession,
+    addMessage: addMessageToDualTab,
   } = useDualTabChat();
 
   const currentSessionId =
@@ -132,6 +137,44 @@ const MarkdownEditorPage = () => {
       : activeTab === "faq"
         ? faqCurrentSession?.id ?? ""
         : "";
+
+  const { modelLLM, selectedWritingStyle } = useLLM();
+  const streamingMessageRef = useRef<ChatMessage | null>(null);
+  const streamingMessageIdRef = useRef<string>("");
+  const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
+  const langGraphStream = useLangGraphStream({
+    onMessagesUpdate: (messages) => {
+      setStreamingMessage((prev) => {
+        const id = (prev?.id ?? streamingMessageIdRef.current) || `assistant_${Date.now()}`;
+        if (!streamingMessageIdRef.current) streamingMessageIdRef.current = id;
+        const msg: ChatMessage = {
+          id,
+          role: "assistant",
+          content: "",
+          createdAt: prev?.createdAt ?? new Date(),
+          messageType: "normal",
+          mode: "chat",
+          customMessage: messages,
+        };
+        streamingMessageRef.current = msg;
+        return msg;
+      });
+    },
+    onComplete: () => {
+      if (streamingMessageRef.current) {
+        addMessageToDualTab("chat", streamingMessageRef.current as DualTabChatMessage);
+      }
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+    },
+    onError: (err, needSendErrorMsg) => {
+      if (needSendErrorMsg) toast.error(err.message);
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+    },
+  });
 
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const insCanvasRef = useRef<InsCanvasApi | null>(null);
@@ -490,9 +533,9 @@ const MarkdownEditorPage = () => {
           className="shrink-0"
         />
 
-        {/* 右侧聊天面板：与 NuxtUIProChatContainer 一致，chat-dashboard-panel + chat-panel-body 结构 */}
+        {/* 右侧聊天面板：与 Vue 一致，chat-content 内仅消息区滚动、输入框固定在底部 */}
         <div
-          className="shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)]"
+          className="shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] isolate"
           style={{ width: `${rightPanelWidthRem}rem` }}
         >
           <ChatHeader
@@ -534,8 +577,49 @@ const MarkdownEditorPage = () => {
                 <ProChatContainer
                   workId={workId ?? undefined}
                   activeTab="chat"
-                  onSendMessage={() => {}}
-                  onSaveCurrentSession={() => {}}
+                  messages={
+                    streamingMessage
+                      ? [...chatMessages, streamingMessage]
+                      : chatMessages
+                  }
+                  sessionId={chatCurrentSession?.id ?? ""}
+                  onSendMessage={(msg: ChatMessage) => {
+                    let sessionId = chatCurrentSession?.id ?? "";
+                    if (!chatCurrentSession) {
+                      const session = createNewSession("chat");
+                      sessionId = session.id;
+                    }
+                    addMessageToDualTab("chat", msg as DualTabChatMessage);
+                    if (workId && sessionId) {
+                      const placeholderId = `assistant_${Date.now()}`;
+                      streamingMessageIdRef.current = placeholderId;
+                      const placeholder: ChatMessage = {
+                        id: placeholderId,
+                        role: "assistant",
+                        content: "",
+                        createdAt: new Date(),
+                        messageType: "normal",
+                        mode: "chat",
+                        customMessage: [],
+                      };
+                      streamingMessageRef.current = placeholder;
+                      setStreamingMessage(placeholder);
+                      langGraphStream.submit(
+                        msg.content ?? "",
+                        sessionId,
+                        workId,
+                        isAnswerOnly ? "agent" : "chat",
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        modelLLM,
+                        selectedWritingStyle
+                      );
+                    }
+                  }}
+                  onSaveCurrentSession={() => saveCurrentSession("chat")}
+                  checkStreamingStatusAndConfirm={async () => true}
                   isHomePage={false}
                   hideAssociationFeature={false}
                   onOpenAssociationSelector={() => setShowAssociationSelector(true)}
@@ -558,12 +642,18 @@ const MarkdownEditorPage = () => {
                       return (
                         <div
                           className={clsx(
-                            "rounded-lg px-3 py-2 text-sm",
-                            msg.role === "user"
-                              ? "ml-8 bg-primary text-primary-foreground"
-                              : "mr-8 bg-muted"
+                            "w-full flex text-sm",
+                            msg.role === "user" ? "justify-end" : "justify-start"
                           )}
                         >
+                          <div
+                            className={clsx(
+                              "rounded-lg px-3 py-2 max-w-[85%]",
+                              msg.role === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted"
+                            )}
+                          >
                           {hasCustomMessage ? (
                             <AgentCustomMessageRenderer
                               customMessage={msg.customMessage!}
@@ -606,6 +696,7 @@ const MarkdownEditorPage = () => {
                               )}
                             </>
                           )}
+                          </div>
                         </div>
                       );
                     },
