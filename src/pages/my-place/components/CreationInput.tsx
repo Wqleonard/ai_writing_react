@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/Button'
 import { Iconfont } from '@/components/IconFont'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { getKeywords } from '@/api/tools-square'
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover.tsx";
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from "@/components/ui/Popover.tsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 
@@ -425,15 +426,20 @@ export const CreationInput = (props: CreationInputProps) => {
             <div className="flex gap-2">
               {/* 选择工具按钮 + 弹窗 */}
               <Popover open={toolPopoverOpen} onOpenChange={setToolPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant='outline'
-                    size="icon-sm"
-                    className="size-6 rounded-full"
-                  >
-                    <Iconfont unicode="&#xe614;" className="text-sm"/>
-                  </Button>
-                </PopoverTrigger>
+                <Tooltip>
+                  <PopoverAnchor asChild>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant='outline'
+                        size="icon-sm"
+                        className="size-6 rounded-full"
+                      >
+                        <Iconfont unicode="&#xe614;" className="text-sm"/>
+                      </Button>
+                    </TooltipTrigger>
+                  </PopoverAnchor>
+                  <TooltipContent side="top">选择工具</TooltipContent>
+                </Tooltip>
                 <PopoverContent className="w-40 p-2" align="center" side='top' sideOffset={8}>
                   {QUICK_CHAT_INPUT_CHANNELS.map((channel) => (
                     <div
@@ -458,15 +464,20 @@ export const CreationInput = (props: CreationInputProps) => {
 
               {/* 文件/关联/笔记入口 */}
               <Popover open={filePopoverOpen} onOpenChange={setFilePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant='outline'
-                    size="icon-sm"
-                    className="size-6 rounded-full"
-                  >
-                    <Iconfont unicode="&#xe613;" className="text-sm"/>
-                  </Button>
-                </PopoverTrigger>
+                <Tooltip>
+                  <PopoverAnchor asChild>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant='outline'
+                        size="icon-sm"
+                        className="size-6 rounded-full"
+                      >
+                        <Iconfont unicode="&#xe613;" className="text-sm"/>
+                      </Button>
+                    </TooltipTrigger>
+                  </PopoverAnchor>
+                  <TooltipContent side="top">关联文件或更多内容</TooltipContent>
+                </Tooltip>
                 <PopoverContent className="w-44 p-2" align="center" side="top" sideOffset={8}>
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
