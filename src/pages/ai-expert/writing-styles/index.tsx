@@ -455,7 +455,7 @@ const WritingStylesPage = () => {
       </div>
 
       <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
-        <DialogContent showCloseButton>
+        <DialogContent showCloseButton className="w-100">
           <DialogHeader>
             <DialogTitle>给文风起个名字</DialogTitle>
           </DialogHeader>
