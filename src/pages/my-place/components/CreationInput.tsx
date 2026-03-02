@@ -329,7 +329,7 @@ export const CreationInput = (props: CreationInputProps) => {
         )}
         <div
           className={clsx(
-            "z-1 flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a] transition-shadow duration-200",
+            "z-1 flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_0.5rem_#0000001a] transition-shadow duration-200",
           )}
           id='newbiew-tour-step-1'
         >
