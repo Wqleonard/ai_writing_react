@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { WorkspaceHeader } from './WorkspaceHeader'
 import { NewbieTour } from "@/layout/components/NewbieTour/NewbieTour.tsx";
+import { NewbieMission } from "@/layout/components/NewbieMission/NewbieMission.tsx";
 
 /**
  * 主应用布局：左侧固定侧边栏 + 右侧顶部 Header + 路由内容区。
@@ -49,6 +50,7 @@ export function WorkspaceLayout() {
         {/* 内容区 */}
         <div className="flex-1" style={{ minHeight: 'calc(100vh - 66px)' }}>
           <Outlet />
+          <NewbieMission/>
         </div>
       </main>
 

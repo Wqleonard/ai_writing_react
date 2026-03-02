@@ -523,19 +523,19 @@ export default function MyPlacePage() {
           </main>
         </div>
 
-        {isLoggedIn() ? (
-          <div
-            className="fixed -bottom-4 right-28 h-24 w-24 cursor-pointer"
-            onMouseEnter={handleCatMouseEnter}
-            onMouseLeave={handleCatMouseLeave}
-          >
-            <img
-              src={isCatHover ? HOVER_BOOM_CAT : DEFAULT_BOOM_CAT}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          </div>
-        ) : null}
+        {/*{isLoggedIn() ? (*/}
+        {/*  <div*/}
+        {/*    className="fixed -bottom-4 right-28 h-24 w-24 cursor-pointer"*/}
+        {/*    onMouseEnter={handleCatMouseEnter}*/}
+        {/*    onMouseLeave={handleCatMouseLeave}*/}
+        {/*  >*/}
+        {/*    <img*/}
+        {/*      src={isCatHover ? HOVER_BOOM_CAT : DEFAULT_BOOM_CAT}*/}
+        {/*      alt=""*/}
+        {/*      className="h-full w-full object-cover"*/}
+        {/*    />*/}
+        {/*  </div>*/}
+        {/*) : null}*/}
       </ScrollArea>
 
       <MessageDetailDialog

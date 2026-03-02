@@ -86,6 +86,30 @@ const verifyTicket = (ticket: string, invitationCode: string = "") => {
   });
 };
 
+export interface GuideTask {
+  code: string;
+  taskId: number;
+  type: string;
+  name: string;
+  description: string;
+  status: number;
+  rewardPoints: number;
+  linkUrl: string;
+  children: GuideTask[];
+}
+
+export interface GetNewbieMissionData {
+  tasks: GuideTask[];
+}
+
+const getNewbieMission = () => {
+  return apiClient.get<GetNewbieMissionData>("/api/users/guide/tasks");
+};
+
+const completeNewbieMissionReq = (taskId: number) => {
+  return apiClient.post(`/api/users/guide/tasks/${taskId}/complete`);
+};
+
 export {
   getUserBalanceReq,
   createNewUserReq,
@@ -99,4 +123,6 @@ export {
   verifyTicket,
   postFrozenUserEmailReq,
   getFrozenUserEmailReq,
+  getNewbieMission,
+  completeNewbieMissionReq,
 };

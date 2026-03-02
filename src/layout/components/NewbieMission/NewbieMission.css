@@ -1,0 +1,13 @@
+.child-mission {
+  position: relative;
+}
+
+.child-mission:not(:last-child)::after {
+  content: '';
+  width: 1px;
+  height: 10px;
+  background: #cfcfcf;
+  position: absolute;
+  left: 6px;
+  bottom: -9px;
+}
