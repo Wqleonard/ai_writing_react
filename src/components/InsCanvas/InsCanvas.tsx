@@ -1036,7 +1036,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
               </h1>
               <div className="relative z-10 mt-8 w-[308px] rounded-xl border-2 border-dashed border-orange-200 bg-background p-4 pb-12 shadow-sm">
                 <Textarea
-                  className="min-h-0 w-full"
+                  className="min-h-0 w-full border-0 outline-none ring-0 shadow-none p-0 focus-within:ring-0"
                   areaClassName="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none outline-none focus:border-0 focus:outline-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
                   value={ideaContent}
                   onChange={(e) => setIdeaContent(e.target.value)}
@@ -1199,7 +1199,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
                 <div
                 className="
                   pointer-events-auto absolute left-1/2 z-50 isolate flex -translate-x-1/2 flex-col items-center
-                  top-[320px] sm:top-[360px] md:top-[400px] lg:top-[440px] xl:top-[480px]
+                  top-[360px] sm:top-[400px] md:top-[440px] lg:top-[480px] xl:top-[520px]
                 "
               >
                   <Button
@@ -1213,7 +1213,8 @@ import { saveInspirationCanvasReq } from "@/api/works";
                   </Button>
                   <div className="relative z-10 mt-8 w-[308px] rounded-xl border-2 border-dashed border-orange-200 bg-background p-4 pb-12 shadow-sm">
                     <Textarea
-                      className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
+                      className="min-h-0 w-full border-0 outline-none ring-0 shadow-none p-0 focus-within:ring-0"
+                      areaClassName="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none outline-none focus:border-0 focus:outline-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
                       value={ideaContent}
                       disabled={isLoading}
                       onChange={(e) => setIdeaContent(e.target.value)}
