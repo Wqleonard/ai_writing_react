@@ -171,7 +171,6 @@ export const CreationInput = (props: CreationInputProps) => {
   const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? (() => {}))
   const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {}))
 
-  const [inputFocused, setInputFocused] = useState(false)
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
   /** 富文本模式下每个 mold===input 的当前值，与 Vue 中 input-tag-input 的 value 对应 */
   const [richInputValues, setRichInputValues] = useState<string[]>([])
@@ -344,7 +343,6 @@ export const CreationInput = (props: CreationInputProps) => {
         <div
           className={clsx(
             "flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a] transition-shadow duration-200",
-            inputFocused && "shadow-[0px_0px_0px_2px_#ff9500]"
           )}
           id='newbiew-tour-step-1'
         >
@@ -354,7 +352,7 @@ export const CreationInput = (props: CreationInputProps) => {
               <div
                 className="outline-none transition-all duration-300 flex flex-wrap items-baseline gap-0 wrap-break-word text-(--text-primary)"
                 contentEditable="true"
-                key={currentChannel.title + Math.random()}
+                key={currentChannel.title}
               >
                 {currentChannel.value.map((item, index) => {
                   if (item.mold === 'tip') {
@@ -412,8 +410,6 @@ export const CreationInput = (props: CreationInputProps) => {
                 className="w-full resize-none text-(--text-secondary) transition-all duration-300 placeholder:text-(--text-muted) outline-none border-none"
                 placeholder={placeholder}
                 value={value}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
                 onChange={e => onChange(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
