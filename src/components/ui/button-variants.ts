@@ -15,6 +15,17 @@ export const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Quick Editor 专用变体
+        "quick-primary":
+          "bg-gradient-to-r from-[#efaf00] to-[#ff9500] text-white font-bold hover:from-[#efaf00]/90 hover:to-[#ff9500]/90 hover:-translate-y-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.2)]",
+        "quick-revert":
+          "bg-white text-[#999999] border-2 border-solid border-[#999999] font-normal hover:text-[var(--bg-editor-save)] hover:border-[var(--bg-editor-save)] hover:-translate-y-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.15)]",
+        "quick-tag":
+          "border border-black/20 bg-transparent text-[#4d4d4d] font-normal hover:border-black/30",
+        "quick-tag-selected":
+          "border-none bg-gradient-to-r from-[#efaf00] to-[#ff9500] text-white font-bold hover:from-[#efaf00]/90 hover:to-[#ff9500]/90",
+        "quick-ghost":
+          "bg-transparent border-none text-[#999999] hover:text-[var(--bg-editor-save)]",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -25,6 +36,11 @@ export const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
+        // Quick Editor 专用尺寸
+        "quick-confirm": "h-[52px] w-[221px] text-[28px] font-bold leading-[1.32em] px-0 rounded-[10px]",
+        "quick-revert-size": "h-[52px] w-[261px] text-[28px] font-normal leading-[1.32em] px-0 py-[7px] rounded-[10px]",
+        "quick-action": "h-[46px] w-[200px] text-[24px] font-bold leading-[1.32em] px-0 py-0 rounded-[8px]",
+        "quick-action-revert": "h-[46px] w-[230px] text-[24px] font-normal leading-[1.32em] px-0 py-[6px] rounded-[8px]",
       },
     },
     defaultVariants: {

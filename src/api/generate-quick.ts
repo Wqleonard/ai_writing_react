@@ -1,5 +1,6 @@
-import apiClient, { type RequestConfig } from "./index";
+import apiClient, { type PostStreamData, type RequestConfig } from "./index";
 import type { CreateWorkType } from "./generate-dialog";
+import type { PostDocTemplateStreamOutlineRequestData } from "@/api/writing-templates.ts";
 
 export interface CharacterCardData {
   title?: string;
@@ -45,4 +46,14 @@ const getQuickStoriesReq = (
   );
 };
 
-export { getQuickCharacterSettings, getQuickStoriesReq };
+const postDocTemplateStreamOutline = (
+  data: PostDocTemplateStreamOutlineRequestData,
+  onData: (data: PostStreamData) => void,
+  onError: (error: any) => void,
+  onComplete: () => void,
+  config?: { signal?: AbortSignal }
+) => {
+  return apiClient.postStream("api/works/doc/outline", data, onData, onError, onComplete, config);
+};
+
+export { getQuickCharacterSettings, getQuickStoriesReq, postDocTemplateStreamOutline };

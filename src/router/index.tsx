@@ -88,7 +88,6 @@ const routes: RouteObject[] = [
     path: '/editor/:workId',
     element: <MarkdownEditorPage/>,
   },
-  // Mobile routes
   {
     path: '/m',
     element: <MLayout/>,

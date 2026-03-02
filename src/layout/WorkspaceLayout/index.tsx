@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { WorkspaceHeader } from './WorkspaceHeader'
+import { NewbieTour } from "@/layout/components/NewbieTour/NewbieTour.tsx";
 
 /**
  * 主应用布局：左侧固定侧边栏 + 右侧顶部 Header + 路由内容区。
@@ -9,17 +10,17 @@ import { WorkspaceHeader } from './WorkspaceHeader'
  */
 export function WorkspaceLayout() {
   const location = useLocation()
-  const [newbieTourOpen, setNewbieTourOpen] = useState(false)
-  const hasNewbieTourShowed = useRef(false)
+  const [newbieTourOpen, setNewbieTourOpen] = useState(true)
 
   useEffect(() => {
-    if (location.pathname === '/workspace' && !hasNewbieTourShowed.current) {
-      const timer = setTimeout(() => {
-        setNewbieTourOpen(true)
-        hasNewbieTourShowed.current = true
-      }, 200)
-      return () => clearTimeout(timer)
-    }
+    // if (location.pathname === '/workspace' && !hasNewbieTourShowed.current) {
+    //   const timer = setTimeout(() => {
+    //     setNewbieTourOpen(true)
+    //     hasNewbieTourShowed.current = true
+    //   }, 200)
+    //   return () => clearTimeout(timer)
+    // }
+
   }, [location.pathname])
 
   return (
@@ -51,8 +52,7 @@ export function WorkspaceLayout() {
         </div>
       </main>
 
-      {/* 新手引导（待后续重构 NewbieTour 后接入） */}
-      {newbieTourOpen && null}
+      <NewbieTour open={newbieTourOpen} onOpenChange={setNewbieTourOpen}/>
     </div>
   )
 }
