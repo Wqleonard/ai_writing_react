@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { createWorkReq } from '@/api/works'
 import { KeywordsDetailDialog } from './KeywordsDetailDialog'
 import { SocialDetailDialog } from './SocialDetailDialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
 
 export interface KeywordsDetailData {
   name: string
@@ -134,7 +135,6 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
             <div
               key={getItemKey(item, i)}
               className="trending-item flex h-[54px] cursor-pointer items-center rounded-[27px] transition-colors hover:bg-(--el-color-primary-light-8) [&:hover_.create-btn]:visible"
-              onClick={() => handleItemClick(item)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
@@ -155,17 +155,23 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
               <div className="keyword-text min-w-0 flex-1 truncate text-xl cursor-pointer" title={getItemName(item)}>
                 {getItemName(item)}
               </div>
-              <div
-                className="create-btn iconfont invisible flex h-[34px] w-[34px] flex-shrink-0 cursor-pointer select-none items-center justify-center rounded-full mr-2.5 text-2xl text-white"
-                style={{
-                  background: 'linear-gradient(42.67deg, #efaf00 14.59%, #d78b00 84.59%)',
-                }}
-                title="立即创作"
-                onClick={(e) => handleCreateClick(getItemName(item), e)}
-                role="button"
-              >
-                &#xe642;
-              </div>
+              <Tooltip>
+                <TooltipTrigger>
+                  <div
+                    className="create-btn iconfont invisible flex size-8 flex-shrink-0 cursor-pointer select-none items-center justify-center rounded-full text-2xl text-white"
+                    style={{
+                      background: 'linear-gradient(42.67deg, #efaf00 14.59%, #d78b00 84.59%)',
+                    }}
+                    onClick={() => handleItemClick(item)}
+                    role="button"
+                  >
+                    &#xe642;
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  立即创作
+                </TooltipContent>
+              </Tooltip>
             </div>
           ))
         ) : (
@@ -177,14 +183,14 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
 
       <KeywordsDetailDialog
         open={showKeywordsDialog}
-        onClose={() => setShowKeywordsDialog(false)}
+        onOpenChange={setShowKeywordsDialog}
         detailData={currentKeywordsDetail}
         onDetailDataChange={setCurrentKeywordsDetail}
         title={title}
       />
       <SocialDetailDialog
         open={showSocialDialog}
-        onClose={() => setShowSocialDialog(false)}
+        onOpenChange={setShowSocialDialog}
         detailData={currentSocialDetail}
         onDetailDataChange={setCurrentSocialDetail}
         title={title}

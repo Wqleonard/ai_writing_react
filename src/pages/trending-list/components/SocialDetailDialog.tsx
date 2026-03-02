@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { createWorkReq } from '@/api/works'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
 import type { SocialDetailData } from './TrendingCard'
 
 export interface SocialDetailDialogProps {
   open: boolean
-  onClose: () => void
+  onOpenChange: (open: boolean) => void
   detailData: SocialDetailData
   onDetailDataChange: (data: SocialDetailData) => void
   title?: string
@@ -22,7 +23,7 @@ const requireLogin = (callback: () => void) => {
 
 export const SocialDetailDialog = ({
   open,
-  onClose,
+  onOpenChange,
   detailData,
   onDetailDataChange,
   title = '灵感素材',
@@ -31,14 +32,6 @@ export const SocialDetailDialog = ({
   const [mainSubject, setMainSubject] = useState('')
   const [tags, setTags] = useState('')
   const [moreSettings, setMoreSettings] = useState('')
-
-  useEffect(() => {
-    if (open && detailData) {
-      setMainSubject(detailData.mainSubject ?? '')
-      setTags(detailData.tags ?? '')
-      setMoreSettings(detailData.moreSettings ?? '')
-    }
-  }, [open, detailData])
 
   const handleTagClick = (tag: string) => {
     const current = tags.trim()
@@ -62,7 +55,7 @@ export const SocialDetailDialog = ({
       moreSettings: moreSettings.trim() || undefined,
     }
     onDetailDataChange(nextData)
-    onClose()
+    onOpenChange(false)
 
     const contentParts = [title, nextData.name, '核心梗:', nextData.mainSubject]
     if (nextData.tags) contentParts.push('标签:', nextData.tags)
@@ -80,7 +73,7 @@ export const SocialDetailDialog = ({
             'rankingListTransmission',
             JSON.stringify({ content, message })
           )
-          navigate(`/workspace/editor/${req.id}`)
+          navigate(`/editor/${req.id}`)
         }
       } catch (e) {
         console.error('创建作品失败:', e)
@@ -89,28 +82,22 @@ export const SocialDetailDialog = ({
     })
   }
 
-  if (!open) return null
+  useEffect(() => {
+    if (detailData) {
+      setMainSubject(detailData.mainSubject ?? '')
+      setTags(detailData.tags ?? '')
+      setMoreSettings(detailData.moreSettings ?? '')
+    }
+  }, [detailData.mainSubject, detailData.tags, detailData.moreSettings, detailData])
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center" role="dialog">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div
-        className="relative w-[600px] overflow-hidden rounded-[20px] bg-[var(--bg-primary)] shadow-lg"
-        style={{ padding: 0 }}
-      >
-        <div className="flex items-start justify-between px-9 pt-9">
-          <h2 className="m-0 text-2xl font-semibold leading-[1.32] text-[var(--text-primary)]">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[600px] max-w-none rounded-[20px] p-0">
+        <DialogHeader className="px-9 pt-9">
+          <DialogTitle className="text-2xl font-semibold leading-[1.32] text-[var(--text-primary)]">
             灵感素材详情
-          </h2>
-          <button
-            type="button"
-            className="flex h-[22px] w-[22px] flex-shrink-0 cursor-pointer items-center justify-center border-none bg-transparent p-0"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            <span className="text-[28px] font-light leading-none text-black">×</span>
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         <div className="flex flex-col gap-6 px-9 pb-9">
           <div className="category-section flex justify-center align-center mb-2">
@@ -127,7 +114,7 @@ export const SocialDetailDialog = ({
               value={mainSubject}
               onChange={(e) => setMainSubject(e.target.value)}
               className="w-full resize-none rounded-lg border-none bg-[#f5f5f5] px-3 py-3 text-sm leading-relaxed text-[var(--text-primary)] outline-none placeholder:text-[#999] focus:bg-[#eeeeee]"
-              placeholder="输入核心梗，如：时空重叠+倒计时等"
+              placeholder="输入核心梗，如：时空重叠 + 倒计时等"
               rows={4}
             />
           </div>
@@ -174,16 +161,15 @@ export const SocialDetailDialog = ({
           </div>
 
           <div className="action-section flex justify-center pt-2">
-            <button
-              type="button"
-              className="h-11 w-[200px] cursor-pointer rounded-[22px] border-none bg-[#f5f5f5] text-base font-medium text-[var(--text-primary)] transition-all hover:bg-[#eeeeee] active:scale-[0.98]"
+            <div
+              className="h-11 w-[200px] cursor-pointer rounded-[22px] border-none bg-[#f5f5f5] text-base font-medium text-[var(--text-primary)] transition-all hover:bg-[#eeeeee] active:scale-[0.98] text-center leading-[44px]"
               onClick={handleCreate}
             >
               立即创作
-            </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -123,7 +123,7 @@ const TrendingListPage = () => {
             words={keywordsRankList}
             onLoadingChange={setLoading}
           />
-          <div className="divider w-[2px] shrink-0 bg-(--bg-secondary)" style={{ marginTop: 54, height: 'calc(100% - 54px)' }} />
+          <div className="divider w-[2px] shrink-0 bg-(--bg-secondary) mt-[3.375rem] mx-10 h-[calc(100%-3.375rem)]" />
           <TrendingCard
             key="灵感素材"
             title="灵感素材"

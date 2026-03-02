@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { createWorkReq } from '@/api/works'
+import { Dialog, DialogContent, DialogHeader, type DialogProps, DialogTitle } from '@/components/ui/Dialog'
 import type { KeywordsDetailData } from './TrendingCard'
 
-export interface KeywordsDetailDialogProps {
-  open: boolean
-  onClose: () => void
+export interface KeywordsDetailDialogProps extends DialogProps {
   detailData: KeywordsDetailData
   onDetailDataChange: (data: KeywordsDetailData) => void
   title?: string
@@ -20,21 +19,22 @@ const requireLogin = (callback: () => void) => {
 
 export const KeywordsDetailDialog = ({
   open,
-  onClose,
+  onOpenChange,
   detailData,
   onDetailDataChange,
   title = '收稿风向',
 }: KeywordsDetailDialogProps) => {
   const navigate = useNavigate()
-  const [workReference, setWorkReference] = useState('')
-  const [description, setDescription] = useState('')
+  const [workReference, setWorkReference] = useState(detailData?.workReference ?? '')
+  const [description, setDescription] = useState(detailData.description ?? '')
 
-  useEffect(() => {
-    if (open && detailData) {
-      setWorkReference(detailData.workReference ?? '')
-      setDescription(detailData.description ?? '')
-    }
-  }, [open, detailData])
+  const handleOpenChange = (newOpen: boolean) => {
+    onOpenChange(newOpen)
+  }
+
+  const handleClose = () => {
+    handleOpenChange(false)
+  }
 
   const handleCreate = async () => {
     if (!workReference?.trim()) {
@@ -47,7 +47,7 @@ export const KeywordsDetailDialog = ({
       description: description.trim(),
     }
     onDetailDataChange(nextData)
-    onClose()
+    handleClose()
 
     const contentParts = [
       title,
@@ -68,7 +68,7 @@ export const KeywordsDetailDialog = ({
             'rankingListTransmission',
             JSON.stringify({ content, message })
           )
-          navigate(`/workspace/editor/${req.id}`)
+          navigate(`/editor/${req.id}`)
         }
       } catch (e) {
         console.error('创建作品失败:', e)
@@ -77,28 +77,24 @@ export const KeywordsDetailDialog = ({
     })
   }
 
-  if (!open) return null
+  useEffect(() => {
+    if (detailData) {
+      setWorkReference(detailData.workReference ?? '')
+      setDescription(detailData.description ?? '')
+    }
+  }, [detailData.workReference, detailData.description, detailData])
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center" role="dialog">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div
-        className="relative w-[600px] overflow-hidden rounded-[20px] bg-[var(--bg-primary)] shadow-lg"
-        style={{ padding: 0 }}
-      >
-        <div className="flex items-start justify-between px-9 pt-9">
-          <h2 className="m-0 text-2xl font-semibold leading-[1.32] text-[var(--text-primary)]">
+    <Dialog
+      open={open}
+      onOpenChange={handleOpenChange}
+    >
+      <DialogContent className="w-[600px] max-w-none rounded-[20px] p-0">
+        <DialogHeader className="px-9 pt-9">
+          <DialogTitle className="text-2xl font-semibold leading-[1.32] text-[var(--text-primary)]">
             收稿风向详情
-          </h2>
-          <button
-            type="button"
-            className="flex h-[22px] w-[22px] flex-shrink-0 cursor-pointer items-center justify-center border-none bg-transparent p-0"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            <span className="text-[28px] font-light leading-none text-black">×</span>
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         <div className="flex flex-col gap-6 px-9 pb-9">
           <div className="category-section flex justify-center align-center mb-2">
@@ -134,16 +130,15 @@ export const KeywordsDetailDialog = ({
           </div>
 
           <div className="action-section flex justify-center pt-2">
-            <button
-              type="button"
-              className="h-11 w-[200px] cursor-pointer rounded-[22px] border-none bg-[#f5f5f5] text-base font-medium text-[var(--text-primary)] transition-all hover:bg-[#eeeeee] active:scale-[0.98]"
+            <div
+              className="h-11 w-[200px] cursor-pointer rounded-[22px] border-none bg-[#f5f5f5] text-base font-medium text-[var(--text-primary)] transition-all hover:bg-[#eeeeee] active:scale-[0.98] text-center leading-[44px]"
               onClick={handleCreate}
             >
               立即创作
-            </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
