@@ -9,14 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select'
-import { FileText, Link, Paperclip, X } from 'lucide-react'
+import { FileText, Link, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { QuickChatInputChannel, QuickChatInputChannelValue } from '../types'
 import { Button } from '@/components/ui/Button'
 import { Iconfont } from '@/components/IconFont'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { getKeywords } from '@/api/tools-square'
-import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from "@/components/ui/Popover.tsx";
+import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
@@ -449,7 +449,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   </PopoverAnchor>
                   <TooltipContent side="top">选择工具</TooltipContent>
                 </Tooltip>
-                <PopoverContent className="w-40 p-2" align="center" side='top' sideOffset={8}>
+                <PopoverContent className="w-40 p-3" align="center" side='top' sideOffset={8}>
                   {QUICK_CHAT_INPUT_CHANNELS.map((channel) => (
                     <div
                       key={channel.title}
@@ -488,29 +488,20 @@ export const CreationInput = (props: CreationInputProps) => {
                   </PopoverAnchor>
                   <TooltipContent side="top">关联文件或更多内容</TooltipContent>
                 </Tooltip>
-                <PopoverContent className="w-44 p-2" align="center" side="top" sideOffset={8}>
+                <PopoverContent className="w-44 p-3" align="center" side="top" sideOffset={8}>
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                     // onClick={handleLocalFileSelect}
                   >
-                    <FileText className="h-4 w-4"/>
-                    从本地文件添加
+                    <Iconfont unicode="&#xe643;" className="size-4 leading-4"/>
+                    <span>从本地文件添加</span>
                   </div>
-                  {(
-                    <div
-                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                      // onClick={handleOpenAssociationSelector}
-                    >
-                      <Link className="h-4 w-4"/>
-                      关联本书内容
-                    </div>
-                  )}
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                     // onClick={handleOpenNotesSelector}
                   >
-                    <FileText className="h-4 w-4"/>
-                    使用全局笔记
+                    <Iconfont unicode="&#xe644;" className="size-4 leading-4"/>
+                    <span>使用全局笔记</span>
                   </div>
                 </PopoverContent>
               </Popover>
