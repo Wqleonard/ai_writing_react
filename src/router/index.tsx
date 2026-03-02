@@ -11,6 +11,7 @@ import PromptPage from '@/pages/creation-community/prompt'
 import BookAnalysisPage from '@/pages/ai-expert/book-analysis'
 import WritingStylesPage from '@/pages/ai-expert/writing-styles'
 import MyPlacePage from '@/pages/my-place'
+import NotFoundPage from '@/pages/not-found'
 
 import LandingPage from '@/pages/landing'
 
@@ -143,6 +144,10 @@ const routes: RouteObject[] = [
         element: <MPrivacyPolicyPage/>,
       },
     ],
+  },
+  {
+    path: '*',
+    element: <NotFoundPage/>,
   },
 ]
 
