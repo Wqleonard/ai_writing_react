@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select'
-import { Loader2, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { X } from 'lucide-react'
 import clsx from 'clsx'
 import type { QuickChatInputChannel, QuickChatInputChannelValue } from '../types'
 import { Button } from '@/components/ui/Button'
@@ -39,35 +39,6 @@ interface MemeWordItem {
   description?: string
   workReference?: string
 }
-
-const SendIcon = () => (
-  <svg
-    className="size-4 shrink-0"
-    width="15"
-    height="15"
-    viewBox="0 0 15 15"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      d="M6.64773 0.307172C7.05682 -0.101919 7.71136 -0.101919 8.07954 0.307172L14.4614 6.64808C14.8705 7.05717 14.8705 7.71172 14.4614 8.0799C14.2568 8.28444 14.0114 8.36626 13.725 8.36626C13.4386 8.36626 13.1932 8.28444 12.9886 8.0799L8.40682 3.49808L8.40682 12.989C8.40682 13.5617 7.95682 14.0117 7.38409 14.0117C6.81136 14.0117 6.36136 13.5617 6.36136 12.989L6.36136 3.49808L1.77954 8.0799C1.575 8.28445 1.32954 8.36626 1.04318 8.36626C0.756818 8.36626 0.511363 8.28445 0.306818 8.0799C-0.102273 7.67081 -0.102273 7.01626 0.306818 6.64808L6.64773 0.307172Z"
-      fill="currentColor"
-    />
-  </svg>
-)
-
-const StreamingIcon = () => (
-  <svg
-    className="size-5 shrink-0"
-    width="20"
-    height="20"
-    viewBox="0 0 20 20"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <rect x="4" y="4" width="12" height="12" rx="0.5" fill="currentColor" />
-  </svg>
-)
 
 const QUICK_CHAT_INPUT_CHANNELS: QuickChatInputChannel[] = [
   {
@@ -353,6 +324,27 @@ export const CreationInput = (props: CreationInputProps) => {
                 className="outline-none transition-all duration-300 flex flex-wrap items-baseline gap-0 wrap-break-word text-(--text-primary)"
                 contentEditable="true"
                 key={currentChannel.title}
+                suppressContentEditableWarning
+                style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+                onInput={(e) => {
+                  const el = e.currentTarget
+                  // 移除所有子元素的格式标签，只保留 text 节点和 span
+                  const walk = (node: Node) => {
+                    if (node.nodeType === 1) {
+                      const element = node as Element
+                      if (element.tagName === 'FONT' || element.tagName === 'B' || element.tagName === 'STRONG') {
+                        const parent = element.parentNode!
+                        while (element.firstChild) {
+                          parent.insertBefore(element.firstChild, element)
+                        }
+                        parent.removeChild(element)
+                        return
+                      }
+                      Array.from(element.childNodes).forEach(walk)
+                    }
+                  }
+                  Array.from(el.childNodes).forEach(walk)
+                }}
               >
                 {currentChannel.value.map((item, index) => {
                   if (item.mold === 'tip') {
