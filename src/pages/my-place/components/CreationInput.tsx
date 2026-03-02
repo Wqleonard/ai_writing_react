@@ -9,13 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select'
-import { X } from 'lucide-react'
+import { FileText, Link, Paperclip, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { QuickChatInputChannel, QuickChatInputChannelValue } from '../types'
 import { Button } from '@/components/ui/Button'
 import { Iconfont } from '@/components/IconFont'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { getKeywords } from '@/api/tools-square'
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover.tsx";
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 
@@ -137,10 +138,13 @@ export const CreationInput = (props: CreationInputProps) => {
 
   const ctx = useProChatContainer()
   const value = ctx ? ctx.inputValue : (valueProp ?? '')
-  const onChange = ctx ? (v: string) => ctx.setInputValue(v) : (onChangeProp ?? (() => {}))
+  const onChange = ctx ? (v: string) => ctx.setInputValue(v) : (onChangeProp ?? (() => {
+  }))
   const isAnswerOnly = ctx ? ctx.isAnswerOnly : (isAnswerOnlyProp ?? true)
-  const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? (() => {}))
-  const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {}))
+  const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? (() => {
+  }))
+  const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {
+  }))
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
   /** 富文本模式下每个 mold===input 的当前值，与 Vue 中 input-tag-input 的 value 对应 */
@@ -149,6 +153,9 @@ export const CreationInput = (props: CreationInputProps) => {
   const [memeWords, setMemeWords] = useState<MemeWordItem[]>([])
   /** 创作热点是否展开，首页可折叠 */
   const [isMemeWordsExpanded, setIsMemeWordsExpanded] = useState(true)
+
+  const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
+  const [filePopoverOpen, setFilePopoverOpen] = useState(false)
 
   const {
     modelLLM,
@@ -313,7 +320,7 @@ export const CreationInput = (props: CreationInputProps) => {
         )}
         <div
           className={clsx(
-            "flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a] transition-shadow duration-200",
+            "z-1 flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_10px_#0000001a] transition-shadow duration-200",
           )}
           id='newbiew-tour-step-1'
         >
@@ -363,7 +370,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         title="切换回普通输入模式"
                         aria-label="关闭并切换回普通输入"
                       >
-                        <X className="size-2.5" strokeWidth={2.5} />
+                        <X className="size-2.5" strokeWidth={2.5}/>
                       </div>
                     </span>
                     )
@@ -415,7 +422,78 @@ export const CreationInput = (props: CreationInputProps) => {
 
           {/* 底部控制栏 */}
           <div className="h-8 shrink-0 flex items-center justify-between gap-4">
-            <div className="action-buttons flex gap-2" />
+            <div className="flex gap-2">
+              {/* 选择工具按钮 + 弹窗 */}
+              <Popover open={toolPopoverOpen} onOpenChange={setToolPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size="icon-sm"
+                    className="size-6 rounded-full"
+                  >
+                    <Iconfont unicode="&#xe614;" className="text-sm"/>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-2" align="center" side='top' sideOffset={8}>
+                  {QUICK_CHAT_INPUT_CHANNELS.map((channel) => (
+                    <div
+                      key={channel.title}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        handleToolTagClick(channel.title)
+                        setToolPopoverOpen(false)
+                      }}
+                    >
+                      {channel.icon && (
+                        <span
+                          className="iconfont text-sm"
+                          dangerouslySetInnerHTML={{ __html: channel.icon }}
+                        />
+                      )}
+                      <span className="text-sm">{channel.title}</span>
+                    </div>
+                  ))}
+                </PopoverContent>
+              </Popover>
+
+              {/* 文件/关联/笔记入口 */}
+              <Popover open={filePopoverOpen} onOpenChange={setFilePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size="icon-sm"
+                    className="size-6 rounded-full"
+                  >
+                    <Iconfont unicode="&#xe613;" className="text-sm"/>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-44 p-2" align="center" side="top" sideOffset={8}>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                    // onClick={handleLocalFileSelect}
+                  >
+                    <FileText className="h-4 w-4"/>
+                    从本地文件添加
+                  </div>
+                  {(
+                    <div
+                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                      // onClick={handleOpenAssociationSelector}
+                    >
+                      <Link className="h-4 w-4"/>
+                      关联本书内容
+                    </div>
+                  )}
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                    // onClick={handleOpenNotesSelector}
+                  >
+                    <FileText className="h-4 w-4"/>
+                    使用全局笔记
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
             <div className="control-right flex h-full items-center gap-3">
               {/* 文风选择器 */}
               <div className="answer-only-wrap relative">
@@ -425,7 +503,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   disabled={isAnswerOnly}
                 >
                   <SelectTrigger className="h-8 min-w-[80px] border-0 text-sm text-(--text-secondary)">
-                    <SelectValue placeholder="文风" />
+                    <SelectValue placeholder="文风"/>
                   </SelectTrigger>
                   <SelectContent align="end">
                     {writingStyleOptions.map(opt => (
@@ -440,7 +518,7 @@ export const CreationInput = (props: CreationInputProps) => {
               {/* 模型选择器 */}
               <Select value={modelLLM} onValueChange={setModelLLM}>
                 <SelectTrigger className="h-8 min-w-[100px] border-0 text-sm text-(--text-secondary)">
-                  <SelectValue placeholder="模型" />
+                  <SelectValue placeholder="模型"/>
                 </SelectTrigger>
                 <SelectContent align="end">
                   {modelsLLM.map(opt => (
@@ -472,7 +550,7 @@ export const CreationInput = (props: CreationInputProps) => {
                 }}
                 className="w-7.5 h-7.5 rounded-full"
               >
-                <Iconfont unicode="&#xe615;" className="text-lg" />
+                <Iconfont unicode="&#xe615;" className="text-lg"/>
               </Button>
             </div>
           </div>
@@ -492,7 +570,7 @@ export const CreationInput = (props: CreationInputProps) => {
             <div className="meme-words-container-bottom-content">
               <div className="h-[30px] mt-3 flex items-center justify-between">
                 <div className="meme-words-title ml-3 flex items-center gap-1 text-base font-bold text-black">
-                  <Iconfont unicode="&#xe63b;" className="text-[#ff5801]!" />
+                  <Iconfont unicode="&#xe63b;" className="text-[#ff5801]!"/>
                   <span>创作热点</span>
                 </div>
                 <div
@@ -501,7 +579,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   onClick={toggleMemeWordsExpanded}
                   aria-label="折叠创作热点"
                 >
-                  <Iconfont unicode="&#xeaa6;" className="text-xl text-[#898989]" />
+                  <Iconfont unicode="&#xeaa6;" className="text-xl text-[#898989]"/>
                 </div>
               </div>
               <div className="flex gap-0 pt-3">
@@ -515,7 +593,7 @@ export const CreationInput = (props: CreationInputProps) => {
                     />
                   ))}
                 </div>
-                <div className="w-px self-stretch bg-black/10 mx-3 shrink-0" aria-hidden />
+                <div className="w-px self-stretch bg-black/10 mx-3 shrink-0" aria-hidden/>
                 <div className="w-1/2 min-w-0 flex-1 flex-col items-start pl-3.2">
                   {rightColumnWords.map(memeWord => (
                     <MemeWordItem
@@ -530,8 +608,9 @@ export const CreationInput = (props: CreationInputProps) => {
             </div>
           ) : (
             <div className="h-[30px] mt-3 flex items-center gap-3 rounded-[20px]">
-              <div className="meme-words-title-collapsed flex shrink-0 items-center gap-1 text-base font-bold text-black">
-                <Iconfont unicode="&#xe63b;" className="text-[#ff5801]! ml-3" />
+              <div
+                className="meme-words-title-collapsed flex shrink-0 items-center gap-1 text-base font-bold text-black">
+                <Iconfont unicode="&#xe63b;" className="text-[#ff5801]! ml-3"/>
                 <span>创作热点</span>
               </div>
               <div className="meme-words-preview-tags flex min-w-0 flex-1 flex-nowrap items-center">
@@ -547,7 +626,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       {memeWord.name}
                     </div>
                     {index < collapsedPreviewWords.length - 1 && (
-                      <div className="meme-words-preview-separator h-4 w-px shrink-0 bg-black/10" />
+                      <div className="meme-words-preview-separator h-4 w-px shrink-0 bg-black/10"/>
                     )}
                   </React.Fragment>
                 ))}
@@ -558,7 +637,7 @@ export const CreationInput = (props: CreationInputProps) => {
                 onClick={toggleMemeWordsExpanded}
                 aria-label="展开创作热点"
               >
-                <Iconfont unicode="&#xeaa1;" className="text-xl text-[#898989]" />
+                <Iconfont unicode="&#xeaa1;" className="text-xl text-[#898989]"/>
               </div>
             </div>
           )}
