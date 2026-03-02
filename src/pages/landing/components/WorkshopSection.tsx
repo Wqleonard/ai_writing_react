@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { cn } from '@/lib/utils'
 import wheelBg from '@/assets/landing_image/yuanhuan.png'
 import wheelIcon1 from '@/assets/landing_image/item_1.svg'
 import wheelIcon1Active from '@/assets/landing_image/item_1_active.svg'
@@ -136,46 +137,41 @@ export function WorkshopSection() {
   const item = WHEEL_ITEMS[currentWheel]
 
   return (
-    <div style={{
-      width: '100vw', display: 'flex', flexDirection: 'column',
-      justifyContent: 'flex-start', alignItems: 'center',
-      paddingTop: 84, minHeight: '100vh', position: 'relative',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <h2 style={{ fontSize: 36, fontWeight: 700, color: '#464646', margin: '0 0 15px', lineHeight: 1.32 }}>一人工作室，全链路护航写作</h2>
-        <p style={{ fontSize: 18, color: '#464646', margin: 0, lineHeight: 1.32 }}>爆文猫写作提供全方位智能写作辅助，技能点满！</p>
+    <div className="relative flex min-h-screen w-screen flex-col items-center justify-start pt-21">
+      <div className="flex flex-col items-center">
+        <h2 className="m-0 mb-4 text-4xl font-bold leading-[1.32] text-[#464646]">
+          一人工作室，全链路护航写作
+        </h2>
+        <p className="m-0 text-[1.125rem] leading-[1.32] text-[#464646]">
+          爆文猫写作提供全方位智能写作辅助，技能点满！
+        </p>
       </div>
 
       {/* Carousel wheel */}
-      <div style={{
-        position: 'absolute', left: 200, bottom: 0,
-        width: 'calc(100vh - 176px)', height: 'calc(100vh - 176px)',
-        display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-      }}>
-        <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
-          <img src={wheelBg} alt="wheel background" style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, objectFit: 'cover' }} />
+      <div className="absolute bottom-0 left-[200px] flex h-[calc(100vh-176px)] w-[calc(100vh-176px)] flex-row items-center justify-center">
+        <div className="absolute h-full w-full">
+          <img src={wheelBg} alt="wheel background" className="absolute top-0 left-0 h-full w-full object-cover" />
           {WHEEL_ITEMS.map((wItem, index) => (
             <div
               key={index}
               onClick={() => handleWheelClick(index)}
               style={{
-                position: 'absolute', display: 'flex', alignItems: 'center', gap: 20,
-                cursor: 'pointer', transition: 'all 0.3s', zIndex: 10,
-                top: WHEEL_POSITIONS[index].top, left: WHEEL_POSITIONS[index].left,
+                top: WHEEL_POSITIONS[index].top,
+                left: WHEEL_POSITIONS[index].left,
               }}
-              onMouseEnter={e => (e.currentTarget.style.transform = 'translateX(-5px)')}
-              onMouseLeave={e => (e.currentTarget.style.transform = 'translateX(0)')}
+              className="absolute z-10 flex cursor-pointer items-center gap-5 transition-all duration-300 hover:-translate-x-[5px]"
             >
               <img
                 src={currentWheel === index ? wItem.iconActive : wItem.icon}
                 alt={wItem.title}
-                style={{ width: 60, height: 60 }}
+                className="size-15"
               />
-              <span style={{
-                fontSize: 24, fontFamily: 'YaHei, sans-serif', fontWeight: 700,
-                color: currentWheel === index ? '#464646' : '#8e8e8e',
-                whiteSpace: 'nowrap', transition: 'all 0.3s',
-              }}>
+              <span
+                className={cn(
+                  'font-YaHei text-2xl font-bold whitespace-nowrap transition-all duration-300',
+                  currentWheel === index ? 'text-[#464646]' : 'text-[#8e8e8e]',
+                )}
+              >
                 {wItem.title}
               </span>
             </div>
@@ -184,29 +180,24 @@ export function WorkshopSection() {
       </div>
 
       {/* Right content */}
-      <div style={{ position: 'absolute', bottom: 0, right: 200, zIndex: 5 }}>
+      <div className="absolute bottom-0 right-[200px] z-5">
         <div
           key={animKey}
-          style={{
-            display: 'flex', height: 'calc(100vh - 176px)', maxWidth: 985,
-            flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-            boxSizing: 'border-box', overflow: 'hidden',
-            animation: 'slideIn 0.5s ease',
-          }}
+          className="flex h-[calc(100vh-176px)] max-w-[985px] flex-col items-center justify-center overflow-hidden box-border animate-[slideIn_0.5s_ease]"
         >
           <style>{`@keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }`}</style>
-          <img src={item.image} alt={item.title} style={{ ...getImageStyle(currentWheel), width: 'auto', height: 'auto', objectFit: 'contain', flexShrink: 0 }} />
-          <p style={{
-            position: 'relative', width: 474, fontSize: 24, color: '#696969',
-            lineHeight: 1.32, textAlign: 'center', fontFamily: 'YaHei, sans-serif',
-            fontWeight: 700, marginTop: 40, flexShrink: 0,
-          }}>
-            <span style={{
-              display: 'block', width: 8, height: 8, background: '#efaf00',
-              borderRadius: '50%', position: 'absolute', top: 12, left: -20,
-            }} />
+          <img
+            src={item.image}
+            alt={item.title}
+            style={getImageStyle(currentWheel)}
+            className="h-auto w-auto shrink-0 object-contain"
+          />
+          <p className="font-YaHei relative mt-10 w-[474px] shrink-0 text-center text-2xl font-bold leading-[1.32] text-[#696969]">
+            <span className="absolute top-3 left-[-20px] block size-2 rounded-full bg-[#efaf00]" />
             {item.descriptionParts.map((part, i) => (
-              <span key={i} style={{ color: part.highlight ? '#efaf00' : undefined }}>{part.text}</span>
+              <span key={i} className={part.highlight ? 'text-[#efaf00]' : undefined}>
+                {part.text}
+              </span>
             ))}
           </p>
         </div>

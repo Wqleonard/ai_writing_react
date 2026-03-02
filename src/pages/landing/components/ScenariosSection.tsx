@@ -38,59 +38,59 @@ export function ScenariosSection() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   return (
-    <div style={{
-      width: '100vw', display: 'flex', minHeight: '100vh',
-      flexDirection: 'column', alignItems: 'center',
-      padding: '100px 200px 0 200px',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 60 }}>
-        <h2 style={{ fontSize: 36, fontWeight: 700, color: '#464646', margin: '0 0 15px', lineHeight: 1.32 }}>适合什么样的创作者？</h2>
-        <p style={{ fontSize: 18, color: '#464646', margin: 0, lineHeight: 1.32 }}>无论你是哪种类型，爆文猫写作都能为你提供全方位的智能写作支持</p>
+    <div className="flex min-h-screen w-screen flex-col items-center pt-25 pb-0 px-50">
+      <div className="flex flex-col items-center mb-15">
+        <h2 className="m-0 mb-4 text-4xl font-bold leading-[1.32] text-[#464646]">
+          适合什么样的创作者？
+        </h2>
+        <p className="m-0 text-[1.125rem] leading-[1.32] text-[#464646]">
+          无论你是哪种类型，爆文猫写作都能为你提供全方位的智能写作支持
+        </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+      <div className="relative flex flex-col items-center">
         {/* People images row */}
-        <div style={{
-          display: 'flex', flexDirection: 'row', justifyContent: 'center',
-          alignItems: 'flex-end', flex: 1, width: '100%', position: 'relative', zIndex: 2,
-          backgroundImage: `url(${bgImage})`, backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center top', backgroundSize: '100% auto', overflow: 'hidden',
-        }}>
-          {SCENARIOS.map((scenario, index) => (
-            <div
-              key={index}
-              onMouseEnter={() => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              style={{
-                ...getPersonStyle(index),
-                cursor: 'pointer',
-                transition: 'transform 0.3s ease-in-out',
-                transform: hoveredIndex === index ? 'translateY(-5px)' : 'translateY(0)',
-                display: 'flex', alignItems: 'flex-end', position: 'relative', zIndex: 2,
-                marginLeft: index === 3 ? '40px' : index === 2 ? '10px' : getPersonStyle(index).marginLeft,
-              }}
-            >
-              <img
-                src={hoveredIndex === index ? scenario.hoverImage : scenario.image}
-                alt={scenario.title}
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', transition: 'opacity 0.3s ease-in-out' }}
-              />
-            </div>
-          ))}
+        <div
+          className="relative z-2 flex flex-1 w-full flex-row items-end justify-center overflow-hidden"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center top',
+            backgroundSize: '100% auto',
+          }}
+        >
+          {SCENARIOS.map((scenario, index) => {
+            const personStyle = getPersonStyle(index)
+            return (
+              <div
+                key={index}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                style={{
+                  ...personStyle,
+                  marginLeft: index === 3 ? '40px' : index === 2 ? '10px' : personStyle.marginLeft,
+                  transform: hoveredIndex === index ? 'translateY(-5px)' : 'translateY(0)',
+                }}
+                className="relative z-2 flex cursor-pointer shrink-0 items-end transition-transform duration-300 ease-in-out"
+              >
+                <img
+                  src={hoveredIndex === index ? scenario.hoverImage : scenario.image}
+                  alt={scenario.title}
+                  className="block h-full w-full object-contain transition-opacity duration-300 ease-in-out"
+                />
+              </div>
+            )
+          })}
         </div>
 
         {/* Text labels */}
-        <div style={{
-          display: 'flex', flexDirection: 'row', justifyContent: 'center',
-          alignItems: 'flex-start', width: 'calc(100vw - 720px)',
-          padding: 0, marginTop: 53, gap: 0,
-        }}>
+        <div className="mt-[53px] flex w-[calc(100vw-720px)] flex-row items-start justify-center gap-0 p-0">
           {SCENARIOS.map((scenario, index) => (
-            <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
-              <h3 style={{ fontSize: 28, fontWeight: 700, color: '#464646', margin: '0 0 18px', lineHeight: 1.32, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div key={index} className="flex min-w-0 flex-1 flex-col items-center">
+              <h3 className="m-0 mb-[18px] overflow-hidden text-center text-[1.75rem] font-bold leading-[1.32] text-[#464646] whitespace-nowrap text-ellipsis">
                 {scenario.title}
               </h3>
-              <p style={{ fontSize: 23, color: '#999', lineHeight: 1.32, margin: 0, textAlign: 'center', maxWidth: 144, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              <p className="m-0 max-w-[144px] overflow-hidden text-center text-[23px] leading-[1.32] text-[#999] line-clamp-3">
                 {scenario.desc}
               </p>
             </div>
