@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLLM } from '@/hooks/useLLM'
 import { useProChatContainer } from '@/components/ProChatContainer'
 import {
@@ -157,6 +157,14 @@ export const CreationInput = (props: CreationInputProps) => {
 
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
+
+  const openToolPopover = useCallback(() => {
+    setToolPopoverOpen(true)
+  }, [setToolPopoverOpen])
+
+  const openFilePopover = useCallback(()=>{
+    setFilePopoverOpen(true)
+  }, [setFilePopoverOpen])
 
   const {
     modelLLM,
@@ -433,6 +441,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         variant='outline'
                         size="icon-sm"
                         className="size-6 rounded-full"
+                        onClick={openToolPopover}
                       >
                         <Iconfont unicode="&#xe614;" className="text-sm"/>
                       </Button>
@@ -471,6 +480,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         variant='outline'
                         size="icon-sm"
                         className="size-6 rounded-full"
+                        onClick={openFilePopover}
                       >
                         <Iconfont unicode="&#xe613;" className="text-sm"/>
                       </Button>
