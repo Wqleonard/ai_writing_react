@@ -36,7 +36,10 @@ export interface ProChatContainerContextValue {
   slots?: {
     header?: React.ReactNode
     emptyState?: React.ReactNode
-    renderMessage?: (message: ChatMessage) => React.ReactNode
+    renderMessage?: (
+      message: ChatMessage,
+      options?: { isLastMessage?: boolean }
+    ) => React.ReactNode
     beforeMessages?: React.ReactNode
     afterInput?: React.ReactNode
     footer?: React.ReactNode

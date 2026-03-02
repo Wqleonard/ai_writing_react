@@ -41,6 +41,8 @@ export interface AgentCustomMessage {
   tool_calls: ToolCallItem[];
   invalid_tool_calls: unknown[];
   usage_metadata: null;
+  /** 联想提示词（guide 接口返回），展示在流式内容下方 */
+  suggestions?: string[];
 }
 
 export interface ChatMessage {

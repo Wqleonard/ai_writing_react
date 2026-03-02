@@ -164,10 +164,12 @@ export const ProChatPanel = () => {
             >
               <div className="w-full p-4 flex flex-col gap-3 chat-container">
                 {slots?.beforeMessages}
-                {displayMessages.map((msg) =>
+                {displayMessages.map((msg, index) =>
                   slots?.renderMessage ? (
                     <React.Fragment key={msg.id}>
-                      {slots.renderMessage(msg)}
+                      {slots.renderMessage(msg, {
+                        isLastMessage: index === displayMessages.length - 1,
+                      })}
                     </React.Fragment>
                   ) : (
                     defaultMessageBubble(msg)

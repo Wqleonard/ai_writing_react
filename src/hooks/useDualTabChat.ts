@@ -756,6 +756,29 @@ export function useDualTabChat() {
     []
   );
 
+  /** 更新最后一条聊天消息（用于流式结束后合并 guide 联想提示词等） */
+  const updateLastChatMessage = useCallback(
+    (updater: (prev: ChatMessage) => ChatMessage): void => {
+      const prev = state.chatMessages;
+      if (prev.length === 0) return;
+      const last = prev[prev.length - 1];
+      const next = updater(last);
+      const nextMessages = [...prev.slice(0, -1), next];
+      setStoreState({ chatMessages: nextMessages });
+      const currentSession = state.chatCurrentSession;
+      if (currentSession && nextMessages.length > 0) {
+        setStoreState({
+          chatCurrentSession: {
+            ...currentSession,
+            messages: nextMessages,
+            updatedAt: Date.now(),
+          },
+        });
+      }
+    },
+    []
+  );
+
   const deleteSession = useCallback(
     async (tabType: ChatTabType, sessionId: string): Promise<void> => {
       if (!state.currentWorkId) {
@@ -865,6 +888,7 @@ export function useDualTabChat() {
     loadSession,
     loadLatestSession,
     addMessage,
+    updateLastChatMessage,
     deleteSession,
     startNewChat,
     clearMessages,

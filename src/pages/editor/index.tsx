@@ -24,7 +24,7 @@ import type {
 } from "@/stores/chatStore";
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
-import { updateWorkInfoReq } from "@/api/works";
+import { updateWorkInfoReq, generateGuideReq } from "@/api/works";
 import {
   useEditorStore,
   DEFAULT_EDITING_FILE_KEY,
@@ -129,6 +129,7 @@ const MarkdownEditorPage = () => {
     loadSession,
     saveCurrentSession,
     addMessage: addMessageToDualTab,
+    updateLastChatMessage,
   } = useDualTabChat();
 
   const currentSessionId =
@@ -141,6 +142,7 @@ const MarkdownEditorPage = () => {
   const { modelLLM, selectedWritingStyle } = useLLM();
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
+  const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const langGraphStream = useLangGraphStream({
     onMessagesUpdate: (messages) => {
@@ -160,13 +162,73 @@ const MarkdownEditorPage = () => {
         return msg;
       });
     },
-    onComplete: () => {
-      if (streamingMessageRef.current) {
-        addMessageToDualTab("chat", streamingMessageRef.current as DualTabChatMessage);
+    onComplete: async () => {
+      const finalized = streamingMessageRef.current;
+      if (finalized) {
+        const suffix = "(内容由AI生成，仅供参考)";
+        const withSuffix = { ...finalized };
+        if (withSuffix.content) {
+          withSuffix.content = (withSuffix.content || "").trimEnd() + suffix;
+        } else if (
+          Array.isArray(withSuffix.customMessage) &&
+          withSuffix.customMessage.length > 0
+        ) {
+          const last = withSuffix.customMessage[withSuffix.customMessage.length - 1];
+          if (last?.content) {
+            withSuffix.customMessage = [...withSuffix.customMessage];
+            (withSuffix.customMessage[withSuffix.customMessage.length - 1] as { content?: string }).content =
+              (last.content || "").trimEnd() + suffix;
+          }
+        }
+        addMessageToDualTab("chat", withSuffix as DualTabChatMessage);
       }
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
+
+      // 流式结束后调用 guide 接口，将联想提示词展示在最后一条消息下方（与 Vue 一致）
+      const pending = guideRequestRef.current;
+      guideRequestRef.current = null;
+      if (pending?.sessionId && pending?.workId) {
+        const { sessionId, workId: wid } = pending;
+        try {
+          const res = await generateGuideReq(sessionId, Number(wid)) as { guides?: string[] | string } | undefined;
+          const raw = res?.guides;
+          const guides = Array.isArray(raw)
+            ? raw
+            : typeof raw === "string"
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(raw) as string[] | unknown;
+                    return Array.isArray(parsed) ? parsed : [];
+                  } catch {
+                    return [];
+                  }
+                })()
+              : [];
+          if (guides.length > 0) {
+            updateLastChatMessage((prev) => {
+              const existing = prev.customMessage ?? [];
+              const guideItem: import("@/types/chat").AgentCustomMessage = {
+                id: `guide_${Date.now()}`,
+                type: "ai",
+                content: "",
+                name: null,
+                example: false,
+                tool_calls: [],
+                invalid_tool_calls: [],
+                usage_metadata: null,
+                additional_kwargs: {},
+                response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
+                suggestions: guides,
+              };
+              return { ...prev, customMessage: [...existing, guideItem] };
+            });
+          }
+        } catch (_) {
+          // 联想提示词失败不打断交互，静默忽略
+        }
+      }
     },
     onError: (err, needSendErrorMsg) => {
       if (needSendErrorMsg) toast.error(err.message);
@@ -591,6 +653,7 @@ const MarkdownEditorPage = () => {
                     }
                     addMessageToDualTab("chat", msg as DualTabChatMessage);
                     if (workId && sessionId) {
+                      guideRequestRef.current = { sessionId, workId };
                       const placeholderId = `assistant_${Date.now()}`;
                       streamingMessageIdRef.current = placeholderId;
                       const placeholder: ChatMessage = {
@@ -626,7 +689,7 @@ const MarkdownEditorPage = () => {
                   isAnswerOnly={isAnswerOnly}
                   onAnswerOnlyChange={setIsAnswerOnly}
                   slots={{
-                    renderMessage: (msg: ChatMessage) => {
+                    renderMessage: (msg: ChatMessage, options?: { isLastMessage?: boolean }) => {
                       const hasCustomMessage =
                         msg.customMessage &&
                         Array.isArray(msg.customMessage) &&
@@ -658,9 +721,53 @@ const MarkdownEditorPage = () => {
                             <AgentCustomMessageRenderer
                               customMessage={msg.customMessage!}
                               activeTab="chat"
-                              isLastMessage={false}
+                              isLastMessage={options?.isLastMessage ?? false}
                               onFileNameClick={(_fileName: string) => {
                                 // TODO: 与编辑器联动定位到文件
+                              }}
+                              onSendMessage={(text) => {
+                                const synthetic: ChatMessage = {
+                                  id: `user_${Date.now()}`,
+                                  role: "user",
+                                  content: text,
+                                  createdAt: new Date(),
+                                  messageType: "normal",
+                                  mode: "chat",
+                                };
+                                let sid = chatCurrentSession?.id ?? "";
+                                if (!chatCurrentSession) {
+                                  const session = createNewSession("chat");
+                                  sid = session.id;
+                                }
+                                addMessageToDualTab("chat", synthetic as DualTabChatMessage);
+                                if (workId && sid) {
+                                  guideRequestRef.current = { sessionId: sid, workId };
+                                  const placeholderId = `assistant_${Date.now()}`;
+                                  streamingMessageIdRef.current = placeholderId;
+                                  const placeholder: ChatMessage = {
+                                    id: placeholderId,
+                                    role: "assistant",
+                                    content: "",
+                                    createdAt: new Date(),
+                                    messageType: "normal",
+                                    mode: "chat",
+                                    customMessage: [],
+                                  };
+                                  streamingMessageRef.current = placeholder;
+                                  setStreamingMessage(placeholder);
+                                  langGraphStream.submit(
+                                    text,
+                                    sid,
+                                    workId,
+                                    isAnswerOnly ? "agent" : "chat",
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    modelLLM,
+                                    selectedWritingStyle
+                                  );
+                                }
                               }}
                             />
                           ) : (

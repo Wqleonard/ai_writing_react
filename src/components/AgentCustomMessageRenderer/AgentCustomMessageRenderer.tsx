@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
+import { ChevronRight } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import type { AgentCustomMessageItem } from "@/stores/chatStore";
+import { Button } from "../ui/Button";
 
 export interface AgentCustomMessageRendererProps {
   customMessage: AgentCustomMessageItem[];
@@ -51,26 +53,36 @@ const AgentCustomMessageRenderer = ({
           {isLastMessage &&
             msg.suggestions &&
             msg.suggestions.length > 0 && (
-              <div className="suggestions-container mt-2 flex flex-wrap gap-1">
-                {msg.suggestions.map((suggestion, i) => (
-                  <div
-                    key={i}
-                    role="button"
-                    tabIndex={0}
-                    className="suggestion-item flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-xs cursor-pointer hover:bg-muted/60"
-                    onClick={() => onSendMessage?.(suggestion)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSendMessage?.(suggestion);
+              <div className="suggestions-container mt-3 flex flex-col gap-1.5 items-start">
+                {msg.suggestions.map((suggestion, i) => {
+                  const isSelected = i === msg.suggestions!.length - 1;
+                  return (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      className={
+                        isSelected
+                          ? "suggestion-item suggestion-item-selected inline-flex items-center justify-between gap-2 rounded-[30px] px-4 py-1.5 text-base cursor-pointer transition-all border-2 border-white bg-[var(--bg-editor-save)] text-white font-semibold hover:bg-[var(--bg-editor-save)] hover:text-white w-fit max-w-full text-left"
+                          : "suggestion-item inline-flex items-center justify-between gap-2 rounded-[30px] px-4 py-1.5 text-base cursor-pointer transition-all border border-[var(--border-color,#e5e7eb)] bg-white text-black hover:bg-[#e0e0e0] w-fit max-w-full text-left"
                       }
-                    }}
-                  >
-                    <span className="suggestion-text truncate max-w-[180px]">
-                      {suggestion}
-                    </span>
-                  </div>
-                ))}
+                      onClick={() => onSendMessage?.(suggestion)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSendMessage?.(suggestion);
+                        }
+                      }}
+                    >
+                      <span className="suggestion-text break-words flex-1 min-w-0">
+                        {suggestion}
+                      </span>
+                      <ChevronRight
+                        className="h-4 w-4 flex-shrink-0 ml-1 [color:inherit]"
+                        aria-hidden
+                      />
+                    </Button>
+                  );
+                })}
               </div>
             )}
         </div>

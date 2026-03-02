@@ -3,15 +3,11 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import clsx from "clsx"
 import {
-  Send,
   Loader2,
   FileText,
   Trash2,
   ChevronDown,
   ChevronUp,
-  Paperclip,
-  Link,
-  X,
 } from "lucide-react"
 import { Iconfont } from "@/components/IconFont"
 import {
@@ -25,7 +21,10 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  PopoverAnchor,
 } from "@/components/ui/Popover"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip"
+import { Button } from "@/components/ui/Button"
 import { useChatInputStore } from "@/stores/chatInputStore"
 import { useModels } from "@/hooks/useModels"
 import { useLLM } from "@/hooks/useLLM"
@@ -118,12 +117,21 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
   const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
+  const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
+  const [filePopoverOpen, setFilePopoverOpen] = useState(false)
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
+
+  const openToolPopover = useCallback(() => setToolPopoverOpen(true), [])
+  const openFilePopover = useCallback(() => setFilePopoverOpen(true), [])
   const [isMemeWordsExpanded, setIsMemeWordsExpanded] = useState(true)
   const [memeWords, setMemeWords] = useState<
     { name: string; description?: string; workReference?: string }[]
   >([])
   const [isLoadingMemeWords, setIsLoadingMemeWords] = useState(false)
+
+  const [hovered, setHovered] = useState(false)
+
+  const canMove = value.trim() && !disabled
 
   // 富文本容器引用（工具模式下使用 contenteditable + span + input-tag）
   const richTextRef = useRef<HTMLDivElement | null>(null)
@@ -371,68 +379,99 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     <div className="input-controls">
       <div className="flex items-center gap-2 w-full justify-between flex-wrap">
         <div className="flex items-center gap-2">
-          {/* 选择工具按钮 + 弹窗 */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center cursor-pointer hover:bg-muted">
-              <Iconfont unicode="&#xe614;" className="text-sm" />
-            </div>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-2" align="start">
-            {quickChatInputChannels.map((channel) => (
-              <div
-                key={channel.title}
-                className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted"
-                onClick={() => {
-                  handleToolTagClick(channel.title)
-                }}
-              >
-                {channel.icon && (
-                  <span
-                    className="iconfont text-sm"
-                    dangerouslySetInnerHTML={{ __html: channel.icon }}
-                  />
-                )}
-                <span className="text-sm">{channel.title}</span>
-              </div>
-            ))}
-          </PopoverContent>
-        </Popover>
+          {/* 选择工具按钮 + 弹窗 - 与 CreationInput 结构一致 */}
+          <Popover open={toolPopoverOpen} onOpenChange={setToolPopoverOpen}>
+            <Tooltip>
+              <PopoverAnchor asChild>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="size-8 rounded-full"
+                    onClick={openToolPopover}
+                  >
+                    <Iconfont unicode="&#xe614;" className="text-sm" />
+                  </Button>
+                </TooltipTrigger>
+              </PopoverAnchor>
+              <TooltipContent side="top">选择工具</TooltipContent>
+            </Tooltip>
+            <PopoverContent className="w-56 p-2" align="center" side="top" sideOffset={8}>
+              {quickChatInputChannels.map((channel) => (
+                <div
+                  key={channel.title}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                  onClick={() => {
+                    handleToolTagClick(channel.title)
+                    setToolPopoverOpen(false)
+                  }}
+                >
+                  {channel.icon && (
+                    <span
+                      className="iconfont text-sm"
+                      dangerouslySetInnerHTML={{ __html: channel.icon }}
+                    />
+                  )}
+                  <span className="text-sm">{channel.title}</span>
+                </div>
+              ))}
+            </PopoverContent>
+          </Popover>
 
-        {/* 文件/关联/笔记入口 */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center cursor-pointer hover:bg-muted">
-              <Paperclip className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-2" align="start">
-            <div
-              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-              onClick={handleLocalFileSelect}
-            >
-              <FileText className="h-4 w-4" />
-              从本地文件添加
-            </div>
-            {!hideAssociationFeature && (
+          {/* 文件/关联/笔记入口 - 与 CreationInput 结构一致 */}
+          <Popover open={filePopoverOpen} onOpenChange={setFilePopoverOpen}>
+            <Tooltip>
+              <PopoverAnchor asChild>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    className="size-8 rounded-full"
+                    onClick={openFilePopover}
+                  >
+                    <Iconfont unicode="&#xe613;" className="text-sm"/>
+                  </Button>
+                </TooltipTrigger>
+              </PopoverAnchor>
+              <TooltipContent side="top">关联文件或更多内容</TooltipContent>
+            </Tooltip>
+            <PopoverContent className="w-48 p-2" align="center" side="top" sideOffset={8}>
               <div
                 className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                onClick={handleOpenAssociationSelector}
+                onClick={() => {
+                  handleLocalFileSelect()
+                  setFilePopoverOpen(false)
+                }}
               >
-                <Link className="h-4 w-4" />
-                关联本书内容
+                <Iconfont unicode="&#xe643;" className="size-4 leading-4"/>
+                <span>从本地文件添加</span>
               </div>
-            )}
-            <div
-              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-              onClick={handleOpenNotesSelector}
-            >
-              <FileText className="h-4 w-4" />
-              使用全局笔记
-            </div>
-          </PopoverContent>
-        </Popover>
-
+              {/* {!hideAssociationFeature && (
+                <div
+                  className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                  onClick={() => {
+                    handleOpenAssociationSelector?.()
+                    setFilePopoverOpen(false)
+                  }}
+                >
+                  <Link className="h-4 w-4" />
+                  关联本书内容
+                </div>
+              )} */}
+              <div
+                className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                onClick={() => {
+                  handleOpenNotesSelector()
+                  setFilePopoverOpen(false)
+                }}
+              >
+                 <Iconfont unicode="&#xe644;" className="size-4 leading-4"/>
+                 <span>使用全局笔记</span>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="flex items-center gap-2 justify-end flex-1">
           {/* 文风选择器 - 参照 Vue WritingStylePopup */}
@@ -583,26 +622,33 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
         </div>
       </div>
 
-      <div
+      <Button
         className={clsx(
-          "w-8 ml-2 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-          value.trim() && !disabled
-            ? "bg-primary text-primary-foreground hover:opacity-90"
-            : "bg-muted text-muted-foreground cursor-not-allowed"
+          "w-8 ml-2 h-8 rounded-full flex items-center justify-center",
+          canMove
+            ? "cursor-pointer bg-[var(--bg-editor-save)] text-white"
+            : "cursor-not-allowed bg-[#e5e5e5] text-[#b7b7b7]"
         )}
+        style={{
+          transform: hovered && canMove ? "translateY(-2px)" : "translateY(0px)",
+          transition: "transform 150ms ease-out",
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         onClick={() => {
-          if (value.trim() && !disabled) {
+          if (canMove) {
             onSubmit()
             if (clearOnSubmit) onChange("")
           }
         }}
+        disabled={!canMove}
       >
         {isSubmitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin [color:inherit]" />
         ) : (
-          <Send className="h-4 w-4" />
+          <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]" />
         )}
-      </div>
+      </Button>
     </div>
   )
 
