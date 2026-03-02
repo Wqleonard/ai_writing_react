@@ -202,12 +202,26 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
     const maxHeightStyle =
       typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight
 
+    const containerStyle: React.CSSProperties = {
+      ...(rest.style || {}),
+    }
+
+    // 未展开时：固定容器高度 = maxHeight，内部使用滚动
+    if (maxHeightStyle && maxHeightStyle !== 'none') {
+      containerStyle.maxHeight = maxHeightStyle
+      containerStyle.height = maxHeightStyle
+    } else if (maxHeightStyle === 'none') {
+      // 展开态：恢复为自适应高度
+      containerStyle.maxHeight = undefined
+      containerStyle.height = 'auto'
+    }
+
     return (
       <div
         ref={containerRef}
-        {...rest}
         className={cn('auto-scroll-area h-fit-content', className)}
-        style={{ ...rest.style, maxHeight: maxHeightStyle }}
+        style={containerStyle}
+        {...rest}
       >
         <ScrollArea className="h-full w-full">
           <div ref={contentRef} className="min-h-full">

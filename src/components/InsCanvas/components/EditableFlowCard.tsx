@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { RefreshCw, Trash2, Pencil, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { AutoScrollArea } from "@/components/AutoScrollArea/AutoScrollArea";
+import MarkdownEditor from "@/components/MarkdownEditor";
+import type { MarkdownEditorRef } from "@/components/MarkdownEditor";
 import type { CustomNodeData } from "@/components/InsCanvas/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
@@ -22,6 +25,7 @@ interface EditableFlowCardProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, content: string) => void;
   onExpand?: (id: string) => void;
+  msg: (type: "success" | "error" | "warning", msg: string) => void;
 }
 
 const handleStyle = {
@@ -37,6 +41,7 @@ export default function EditableFlowCard({
   cardLabel,
   generateLabel,
   type = '',
+  msg,
   onGenerate,
   onAdd,
   onDelete,
@@ -48,6 +53,8 @@ export default function EditableFlowCard({
   const [editContent, setEditContent] = useState(data.content || "");
   const streamContentRef = useRef("");
   const editContentRef = useRef(editContent);
+  /** 编辑态下由 onChange 写入，仅作缓存不触发重渲染；onBlur 时以 getMarkdown() 为准，此 ref 作兜底 */
+  const editingContentRef = useRef("");
   // 进入编辑后，若接口回写 data.content，且用户未改动（dirty=false），允许同步到输入框
   const editDirtyRef = useRef(false);
   useEffect(() => {
@@ -61,9 +68,53 @@ export default function EditableFlowCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExpandBtn, setShowExpandBtn] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorRef = useRef<MarkdownEditorRef>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  /** 编辑态下在「编辑」按钮上按下鼠标，用于区分「同一次点击退出」与「再次点击进入」，避免 blur + click 导致退出后立刻又进入 */
+  const editButtonMousedownRef = useRef(false);
   const streamingStartedRef = useRef(false);
+  const [showFloatingButtons, setShowFloatingButtons] = useState(false);
+  const hideFloatingButtonsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 记录当前这次生成过程里已经展示过的错误文案
+  const shownErrorMessagesRef = useRef<Set<string>>(new Set());
+
+  const showFloatingButtonsNow = useCallback(() => {
+    if (hideFloatingButtonsTimerRef.current) {
+      clearTimeout(hideFloatingButtonsTimerRef.current);
+      hideFloatingButtonsTimerRef.current = null;
+    }
+    setShowFloatingButtons(true);
+  }, []);
+
+  const scheduleHideFloatingButtons = useCallback(() => {
+    if (hideFloatingButtonsTimerRef.current) clearTimeout(hideFloatingButtonsTimerRef.current);
+    hideFloatingButtonsTimerRef.current = setTimeout(() => {
+      hideFloatingButtonsTimerRef.current = null;
+      setShowFloatingButtons(false);
+    }, 400);
+  }, []);
+
+  const notifyError = (err: any) => {
+    const message =
+      (err && typeof err.message === "string" && err.message) ||
+      "生成失败，请稍后重试";
+
+    const bag = shownErrorMessagesRef.current;
+    // 同一次生成流程中，相同文案只展示一次
+    if (bag.has(message)) return;
+    bag.add(message);
+
+    msg("error", message);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hideFloatingButtonsTimerRef.current) {
+        clearTimeout(hideFloatingButtonsTimerRef.current);
+        hideFloatingButtonsTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 非流式时由 React 渲染；流式时仅用 ref，不触发重渲染，用户可正常滚动内容区
   const displayContent = editContent;
@@ -120,27 +171,46 @@ export default function EditableFlowCard({
   }, [id, isStreaming, setEdges]);
 
   const checkOverflow = () => {
-    if (isEditing || !textRef.current || !wrapperRef.current) {
+    if (isEditing) {
       setShowExpandBtn(false);
       return;
     }
     const el = textRef.current;
-    const wrapper = wrapperRef.current;
-    const origMax = wrapper.style.maxHeight;
-    wrapper.style.maxHeight = "none";
+    if (!el) return;
     const overflow = el.scrollHeight > 150;
-    wrapper.style.maxHeight = origMax;
     setShowExpandBtn(overflow);
   };
 
+  const checkOverflowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    checkOverflow();
+    if (isEditing) {
+      checkOverflow();
+      return;
+    }
+    // 退出编辑后只读视图可能尚未完成布局，延迟执行 checkOverflow 以正确显示「展开/折叠」按钮
+    const rafId = requestAnimationFrame(() => {
+      checkOverflowTimerRef.current = setTimeout(() => {
+        checkOverflowTimerRef.current = null;
+        checkOverflow();
+      }, 200);
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (checkOverflowTimerRef.current) {
+        clearTimeout(checkOverflowTimerRef.current);
+        checkOverflowTimerRef.current = null;
+      }
+    };
   }, [displayContent, isExpanded, isEditing]);
 
   const handleBlur = () => {
     if (isEditing) {
-      updateNodeData(id, { content: editContent });
-      onUpdate(id, editContent);
+      // 以编辑器实例为准；ref 可能在 IME 组合时未更新，仅作兜底
+      const finalContent =
+        editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent);
+      updateNodeData(id, { content: finalContent });
+      onUpdate(id, finalContent);
+      setEditContent(finalContent);
       setIsEditing(false);
     }
   };
@@ -156,17 +226,46 @@ export default function EditableFlowCard({
   };
 
   const handleEdit = () => {
+    if (isEditing) {
+      handleBlur();
+      return;
+    }
+    // 所有卡片均可进入编辑（不依赖 showExpandBtn）
+    // 本次 click 前在编辑按钮上 mousedown 过说明是「点编辑退出」后的同一次点击，不要再次进入编辑
+    if (editButtonMousedownRef.current) {
+      editButtonMousedownRef.current = false;
+      return;
+    }
     setIsEditing(true);
     editDirtyRef.current = false;
-    setEditContent(data.content || "");
+    const initial = data.content || "";
+    setEditContent(initial);
+    editingContentRef.current = initial;
+    // 等 React 提交更新、MarkdownEditor 收到 readonly=false 后，再强制 setEditable+focus 兜底
+    setTimeout(() => {
+      editorRef.current?.editor?.setEditable(true);
+      editorRef.current?.focus();
+    }, 0);
   };
 
   useEffect(() => {
     if (isEditing) {
-      // 下一帧聚焦，避免 textarea 尚未挂载
-      requestAnimationFrame(() => textareaRef.current?.focus());
+      const t = setTimeout(() => editorRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
   }, [isEditing]);
+
+  // 点击卡片外区域时退出编辑（TipTap 在点击非可聚焦元素时可能不触发 blur）
+  useEffect(() => {
+    if (!isEditing) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        handleBlur();
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown, true);
+    return () => document.removeEventListener("mousedown", onMouseDown, true);
+  }, [isEditing, handleBlur]);
 
   const handleCancel = () => {
     editDirtyRef.current = false;
@@ -175,54 +274,22 @@ export default function EditableFlowCard({
   };
 
   const toggleExpand = () => {
+    // 流式输出期间不允许展开，避免内容区域被撑高遮挡下方节点
+    if (isStreaming) return;
     setIsExpanded((v) => !v);
     onExpand?.(id);
   };
 
-  // 处理滚轮事件，阻止冒泡到 ReactFlow（避免触发缩放/平移）
+  // 处理滚轮事件：仅阻止冒泡到 ReactFlow（避免画布缩放/平移），不阻止默认滚动，由 MarkdownEditor / AutoScrollArea 内部处理
   const handleWheel = (event: React.WheelEvent) => {
-    // 滚轮进入卡片区域时，优先滚动 textarea（编辑态），否则滚动正文容器
-    // 同时阻止事件传递到画布，避免触发 zoom/pan
-    const scrollEl: HTMLElement | null = isEditing
-      ? (textareaRef.current as any)
-      : (wrapperRef.current as any);
-
-    if (!scrollEl) {
-      event.stopPropagation();
-      event.preventDefault();
-      return;
-    }
-
-    const isScrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 1;
-    if (!isScrollable) {
-      event.stopPropagation();
-      event.preventDefault();
-      return;
-    }
-
-    const isAtTop = scrollEl.scrollTop <= 0;
-    const isAtBottom =
-      scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 1;
-
-    // 到达边界时也要拦截，避免滚轮“穿透”到画布
-    if ((event.deltaY < 0 && isAtTop) || (event.deltaY > 0 && isAtBottom)) {
-      event.stopPropagation();
-      event.preventDefault();
-      return;
-    }
-
-    // 手动驱动滚动：即便鼠标不在 textarea 上也能滚动 textarea
-    scrollEl.scrollTop += event.deltaY;
     event.stopPropagation();
-    event.preventDefault();
   };
 
-  const children = useMemo(() => {
-    const edges = getEdges() || [];
-    return edges.filter((e: any) => e.source === id).map((e: any) => e.target);
-  }, [getEdges, id]);
+  // 获取当前节点的子节点
+  const children = (getEdges() || []).filter((e: any) => e.source === id).map((e: any) => e.target);
 
   const startStream = async () => {
+    shownErrorMessagesRef.current = new Set();
     // 先占位，避免 handleRefresh 后 effect 再跑一次导致重复请求
     streamingStartedRef.current = true;
     startedStreamNodeIds.add(id);
@@ -238,7 +305,7 @@ export default function EditableFlowCard({
 
       setIsStreaming(true);
       streamContentRef.current = "";
-      if (textRef.current) textRef.current.textContent = "生成中...";
+      setEditContent("生成中...");
 
       const onData = (streamData: PostStreamData) => {
         switch (streamData.event) {
@@ -247,7 +314,7 @@ export default function EditableFlowCard({
             const msg = d?.[0]?.content?.[0]?.text ?? '';
             if (msg) {
               streamContentRef.current = msg;
-              if (textRef.current) textRef.current.textContent = msg;
+              setEditContent(msg);
             }
             break;
           }
@@ -266,9 +333,14 @@ export default function EditableFlowCard({
         }
       };
 
-      const onError = () => {
-        // 保持 UI 可恢复
+      const onError = (err: any) => {
+        // 流式接口报错：弹出错误提示，保持 UI 可恢复，并在“新空节点且无子节点”时自动移除该节点
+        notifyError(err);
         setIsStreaming(false);
+        if (!children.length && !data.content) {
+          onDelete(id);
+        }
+
       };
 
       const saveCanvas = async () => {
@@ -289,14 +361,20 @@ export default function EditableFlowCard({
         const finalContent = streamContentRef.current;
         if (finalContent) commitFinalContent(finalContent);
         else setIsStreaming(false);
-        // await saveCanvas();
+        await saveCanvas();
       };
 
       await postInspirationStream(reqData, onData, onError, onComplete);
-    } catch {
+    } catch (err: any) {
       streamingStartedRef.current = false;
       startedStreamNodeIds.delete(id);
       setIsStreaming(false);
+      // 请求级别的异常（如网络错误）同样视为生成失败，弹出错误并清理“新空节点”
+      notifyError(err);
+      if (!children.length && !data.content) {
+        onDelete(id);
+      }
+
     }
   };
 
@@ -333,11 +411,18 @@ export default function EditableFlowCard({
 
   return (
     <div
+      ref={cardRef}
       className={cn(
-        "vue-flow-card nowheel w-[250px] min-h-[200px] rounded-2xl relative overflow-visible",
+        "vue-flow-card nowheel rounded-2xl relative overflow-visible",
         "bg-card shadow-sm border border-border",
-        "group"
+        "group transition-all duration-200 ease-out",
+         // 展开时加宽并适度增高，方便阅读更多内容
+         isExpanded ? "w-[560px] min-h-[500px]" : "w-[250px] min-h-[200px]",
+        "min-h-[200px]",
+        isEditing && "nodrag nopan"
       )}
+      onMouseEnter={showFloatingButtonsNow}
+      onMouseLeave={scheduleHideFloatingButtons}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 text-sm border-b-0">
@@ -388,69 +473,93 @@ export default function EditableFlowCard({
         )}
       </div>
 
-      {/* Body */}
-      <div className="px-4 py-3 pb-4 min-h-20">
+      {/* Body：使用 MarkdownEditor 展示/编辑 md，展开按钮居中；折叠时在展开按钮上方显示渐变蒙层 */}
+      <div className="flex min-h-20 flex-col items-center px-4 py-3 pb-4">
         {(bodyContent || isStreaming || isEditing) ? (
           <div
-            ref={wrapperRef}
-            className={cn(
-              "w-full max-h-[150px] overflow-y-auto cursor-pointer transition-[max-height]",
-              isExpanded && "max-h-none"
-            )}
-            onWheel={handleWheel}
+            className={cn("relative w-full", isEditing && "nodrag nopan")}
+            onMouseDown={isEditing ? (e) => e.stopPropagation() : undefined}
+            onPointerDown={isEditing ? (e) => e.stopPropagation() : undefined}
           >
-            {!isEditing ? (
-              <div
-                ref={textRef}
-                className="text-sm leading-[1.8] text-foreground whitespace-pre-wrap"
-              >
-                {isStreaming ? null : bodyContent}
+            <AutoScrollArea
+              maxHeight={isExpanded ? "none" : 150}
+              autoScroll={isStreaming && !isEditing}
+              className={cn("relative w-full cursor-pointer")}
+              onWheel={handleWheel}
+            >
+              <div ref={textRef} className="w-full min-h-0">
+                <MarkdownEditor
+                  ref={editorRef}
+                  className="min-h-0"
+                  readonly={!isEditing}
+                  value={isEditing ? editContent : bodyContent}
+                  placeholder=""
+                  loading={isStreaming && !isEditing}
+                  minHeight={0}
+                onChange={
+                  isEditing
+                    ? (md) => {
+                        editDirtyRef.current = true;
+                        editingContentRef.current = md;
+                        // 不 setEditContent，避免重渲染导致光标/IME 问题；失焦时用 getMarkdown() 回写
+                      }
+                    : undefined
+                }
+                onBlur={isEditing ? handleBlur : undefined}
+                onKeyDown={
+                  isEditing
+                    ? (e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          handleCancel();
+                        }
+                      }
+                    : undefined
+                }
+              />
               </div>
-            ) : (
-              <textarea
-                ref={textareaRef}
-                className={cn(
-                  "w-full min-h-20 p-2 rounded-md text-sm leading-[1.8] resize-y box-border",
-                  "border border-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                  "bg-background text-foreground"
-                )}
-                value={editContent}
-                onChange={(e) => {
-                  editDirtyRef.current = true;
-                  setEditContent(e.target.value);
+            </AutoScrollArea>
+            {!isExpanded && showExpandBtn && !isStreaming && (
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 right-0 h-12"
+                style={{
+                  background: "linear-gradient(to bottom, transparent, var(--color-card))",
                 }}
-                onBlur={handleBlur}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    handleCancel();
-                  }
-                }}
-                autoFocus
+                aria-hidden
               />
             )}
           </div>
         ) : (
-          <div className="py-2 space-y-2">
+          <div className="py-2 space-y-2 w-full">
             <div className="h-3.5 bg-muted rounded" />
             <div className="h-3.5 bg-muted rounded" />
           </div>
         )}
-        {!isEditing && showExpandBtn && (
+        {!isEditing && (showExpandBtn || isExpanded) && !isStreaming && (
           <button
             type="button"
             onClick={toggleExpand}
-            className="text-xs cursor-pointer mt-1 hover:underline"
-            style={{ color: "#3b82f6" }}
+            className="mt-2 px-3 py-1.5 text-xs rounded-full border border-border bg-card/90 text-muted-foreground hover:bg-card hover:text-foreground transition-colors cursor-pointer"
           >
-            {`< ${isExpanded ? "折叠" : "展开"} >`}
+            {isExpanded ? "折叠" : "展开"}
           </button>
+        )}
+        {/* 编辑态下保留与「展开/折叠」按钮同高的占位，避免高度塌陷 */}
+        {isEditing && showExpandBtn && (
+          <div className="mt-2 h-8 shrink-0" aria-hidden />
         )}
       </div>
 
       {/* Generate */}
       {!children.length && !isStreaming && (
-        <div className="absolute right-[-164px] top-1/2 -translate-y-1/2 flex items-center gap-3 pl-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-10">
+        <div
+          className={cn(
+            "absolute right-[-164px] top-1/2 -translate-y-1/2 flex items-center gap-3 pl-3 z-10 transition-opacity",
+            showFloatingButtons ? "opacity-100 visible" : "opacity-0 invisible"
+          )}
+          onMouseEnter={showFloatingButtonsNow}
+          onMouseLeave={scheduleHideFloatingButtons}
+        >
           <Button
             size="icon"
             onClick={(e) => {
@@ -459,7 +568,7 @@ export default function EditableFlowCard({
             }}
             className="rounded-full bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90 hover:shadow-md size-7"
           >
-            <Sparkles className="size-4" />
+            <span className="iconfont">&#xe642;</span>
           </Button>
           <button
             type="button"
@@ -475,32 +584,37 @@ export default function EditableFlowCard({
       )}
 
       {/* Add */}
-      <Button
-        size="icon"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAdd();
-        }}
+      <span
         className={cn(
-          "absolute bottom-[-40px] left-1/2 -translate-x-1/2 z-10",
-          "rounded-full bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90 hover:scale-110 hover:shadow-md",
-          "size-8 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all"
+          "absolute bottom-[-40px] left-1/2 -translate-x-1/2 z-10 transition-all",
+          showFloatingButtons ? "opacity-100 visible" : "opacity-0 invisible"
         )}
+        onMouseEnter={showFloatingButtonsNow}
+        onMouseLeave={scheduleHideFloatingButtons}
       >
-        <Plus className="size-4" />
-      </Button>
+        <Button
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleAdd();
+          }}
+          className="rounded-full bg-[#ff6b35] text-white hover:bg-[#ff6b35]/90 hover:scale-110 hover:shadow-md size-8"
+        >
+          <Plus className="size-4" />
+        </Button>
+      </span>
 
       <Handle
         type="target"
         position={Position.Left}
         id="left-handle"
-        style={{ ...handleStyle, background: "#22c55e" }}
+        style={{ ...handleStyle, background: "#22c55e", opacity: 0 }}
       />
       <Handle
         type="source"
         position={Position.Right}
         id="right-handle"
-        style={{ ...handleStyle, background: "#007bff" }}
+        style={{ ...handleStyle, background: "#007bff", opacity: 0 }}
       />
     </div>
   );

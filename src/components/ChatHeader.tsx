@@ -24,6 +24,8 @@ export interface ChatHeaderProps {
   onNewChat: () => void;
   onSwitchSession: (sessionId: string) => void;
   onSaveCurrentSession: () => void;
+  /** 画布 tab 时与 tab 同一排展示的操作按钮（新增画布、历史版本、保存画布等） */
+  canvasActionsSlot?: React.ReactNode;
 }
 
 export interface ChatHeaderRef {
@@ -56,6 +58,7 @@ export const ChatHeader = React.forwardRef<ChatHeaderRef, ChatHeaderProps>(
       onNewChat,
       onSwitchSession,
       onSaveCurrentSession,
+      canvasActionsSlot,
     },
     ref
   ) => {
@@ -313,7 +316,8 @@ export const ChatHeader = React.forwardRef<ChatHeaderRef, ChatHeaderProps>(
           </div>
         </div>
 
-        <div className="header-actions flex gap-3">
+        <div className="header-actions flex h-10 items-center gap-1">
+          {activeTab === "canvas" && canvasActionsSlot}
           {activeTab !== "canvas" && (
             <>
               <div

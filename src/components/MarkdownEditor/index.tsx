@@ -19,6 +19,12 @@ export interface MarkdownEditorProps {
   value?: string
   /** 受控：内容变化回调 */
   onChange?: (markdown: string) => void
+  /** 失焦回调（编辑态下离开编辑器时触发） */
+  onBlur?: () => void
+  /** 按键回调（如 Escape 取消编辑） */
+  onKeyDown?: (e: KeyboardEvent) => void
+  /** 编辑器内容区最小高度（px），传 0 可避免在卡片等场景撑高容器 */
+  minHeight?: number
 }
 
 export interface MarkdownEditorRef {
@@ -43,10 +49,20 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       maxlength,
       value = '',
       onChange,
+      onBlur,
+      onKeyDown,
+      minHeight = 200,
     },
     ref
   ) {
     const isInternalUpdate = useRef(false)
+    const readonlyRef = useRef(readonly)
+    readonlyRef.current = readonly
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
+    const onKeyDownRef = useRef(onKeyDown)
+    onKeyDownRef.current = onKeyDown
+    const isComposingRef = useRef(false)
 
     const extensions = useMemo(
       () => [
@@ -75,31 +91,50 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         editorProps: {
           attributes: {
             class: 'prose prose-sm max-w-none focus:outline-none',
-            style: 'min-height: 200px;',
+            style: `min-height: ${minHeight}px;`,
+          },
+          handleKeyDown: (_, event) => {
+            const onKeyDown = onKeyDownRef.current
+            if (onKeyDown) {
+              onKeyDown(event)
+              if (event.key === 'Escape') return true
+            }
+            return false
+          },
+          handleDOMEvents: {
+            compositionstart: () => {
+              isComposingRef.current = true
+            },
+            compositionend: () => {
+              isComposingRef.current = false
+            },
           },
         },
         onUpdate: ({ editor }) => {
-          if (readonly) return
+          if (readonlyRef.current) return
+          if (isComposingRef.current) return
           isInternalUpdate.current = true
           let content = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
           if (maxlength != null && content.length > maxlength) {
             content = content.slice(0, maxlength)
-            onChange?.(content)
+            onChangeRef.current?.(content)
             editor.commands.setContent(content, { contentType: 'markdown' })
           } else {
-            onChange?.(content)
+            onChangeRef.current?.(content)
           }
           queueMicrotask(() => {
             isInternalUpdate.current = false
           })
         },
       },
-      [readonly, maxlength, placeholder]
+      // 不把 readonly/onChange/onKeyDown 放入 deps，避免父组件重渲染导致 editor 重建（光标跳转、中文 IME 打断）
+      [maxlength, placeholder, minHeight]
     )
 
-    // 同步外部 value 到编辑器
+    // 同步外部 value 到编辑器。可编辑态下不回写，避免 setContent 导致失焦/无法输入
     useEffect(() => {
       if (!editor || isInternalUpdate.current) return
+      if (!readonlyRef.current) return
       try {
         const currentMarkdown = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
         let valueToSet = value ?? ''
@@ -118,12 +153,36 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       }
     }, [editor, value, maxlength])
 
-    // 只读状态变化
+    // 只读状态变化：setEditable；进入可编辑时兜底设置 DOM contenteditable 并 focus
     useEffect(() => {
-      if (editor) {
-        editor.setEditable(!readonly)
+      if (!editor) return
+      const editable = !readonly
+      editor.setEditable(editable)
+      if (editable) {
+        const id = setTimeout(() => {
+          try {
+            const view = (editor as any).view as { dom?: HTMLElement } | undefined
+            if (view?.dom && typeof view.dom.setAttribute === 'function') {
+              view.dom.setAttribute('contenteditable', 'true')
+            }
+            editor.commands.focus()
+          } catch {
+            editor.commands.focus()
+          }
+        }, 50)
+        return () => clearTimeout(id)
       }
     }, [editor, readonly])
+
+    // 失焦回调
+    useEffect(() => {
+      if (!editor || !onBlur) return
+      const fn = () => onBlur()
+      editor.on('blur', fn)
+      return () => {
+        editor.off('blur', fn)
+      }
+    }, [editor, onBlur])
 
     // 卸载时销毁
     useEffect(() => {

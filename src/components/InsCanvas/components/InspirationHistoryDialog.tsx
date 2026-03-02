@@ -1,19 +1,28 @@
 import React, { useEffect, useState } from "react";
-import type { InspirationVersion, CustomNode, CustomEdge } from "@/components/InsCanvas/types";
+import type { InspirationVersion } from "@/components/InsCanvas/types";
 
 interface InspirationHistoryDialogProps {
   open: boolean;
   onClose: () => void;
   workId: string;
-  inspirationDrawId: string | number;
+  inspirationDrawId?: string | number;
   onRestore: (version: InspirationVersion) => void;
   loadVersions?: (workId: string) => Promise<InspirationVersion[]>;
+}
+
+/** 将后端返回的 UTC 时间字符串解析为 Date（无时区时按 UTC 处理） */
+function parseUtcDate(utcTime: string): Date {
+  const s = utcTime.trim();
+  if (!s) return new Date(NaN);
+  if (/Z$|[-+]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  return new Date(s.endsWith("Z") ? s : `${s.replace(/\s+/, "T")}Z`);
 }
 
 const getTimeAgo = (saveTime: string | undefined): string => {
   if (!saveTime) return "刚刚";
   const now = new Date();
-  const saveDate = new Date(saveTime);
+  const saveDate = parseUtcDate(saveTime);
+  if (Number.isNaN(saveDate.getTime())) return "刚刚";
   const diffMs = now.getTime() - saveDate.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));

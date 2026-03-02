@@ -42,7 +42,9 @@ export default function MainCard({ data, id, isCreated = false }: MainCardProps)
           />
         </div>
       ) : (
-        <div className="skeleton-image h-[230px] w-full rounded-2xl bg-muted animate-pulse" />
+        <div className="h-[230px] w-full overflow-hidden rounded-2xl bg-[#f4f4f5]">
+          <div className="ins-skeleton h-full w-full rounded-2xl" />
+        </div>
       )}
 
       {data.content ? (
@@ -52,9 +54,9 @@ export default function MainCard({ data, id, isCreated = false }: MainCardProps)
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          <div className="h-3.5 rounded bg-muted animate-pulse" />
-          <div className="skeleton-line-short h-3.5 w-[30%] rounded bg-muted animate-pulse" />
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="ins-skeleton h-3.5 w-4/5 rounded-full" />
+          <div className="ins-skeleton h-3.5 w-3/5 rounded-full" />
         </div>
       )}
 

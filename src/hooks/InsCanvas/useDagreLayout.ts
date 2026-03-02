@@ -18,8 +18,8 @@ export function useDagreLayout() {
 
       dagreGraph.setGraph({
         rankdir: direction,
-        nodesep: 50,
-        ranksep: 75,
+        nodesep: 60,
+        ranksep: 100, // 层级间垂直间距，TB 时控制上下节点间隙，避免重叠
         edgesep: 20,
       });
 
@@ -28,7 +28,7 @@ export function useDagreLayout() {
       for (const node of nodes) {
         const graphNode = getNode(node.id);
         const width = graphNode?.measured?.width ?? 400;
-        const height = graphNode?.measured?.height ?? 200;
+        const height = graphNode?.measured?.height ?? 280; // 无测值时用偏大估计，避免带内容卡片被低估导致重叠
         nodeSizeMap.set(node.id, { width, height });
 
         dagreGraph.setNode(node.id, {
@@ -46,7 +46,7 @@ export function useDagreLayout() {
 
       return nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
-        const dims = nodeSizeMap.get(node.id) || { width: 300, height: 200 };
+        const dims = nodeSizeMap.get(node.id) || { width: 300, height: 280 };
 
         return {
           ...node,

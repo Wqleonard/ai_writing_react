@@ -16,6 +16,7 @@ export default function OutlineCardNode(props: any) {
       onDelete={handlers.handleOutlineDelete}
       onUpdate={handlers.handleOutlineUpdate}
       onExpand={handlers.handleOutlineExpand}
+      msg={handlers.msg}
     />
   );
 }

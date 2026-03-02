@@ -1,8 +1,8 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5101523 */
-  src: url('iconfont.woff2?t=1772268705797') format('woff2'),
-       url('iconfont.woff?t=1772268705797') format('woff'),
-       url('iconfont.ttf?t=1772268705797') format('truetype');
+  src: url('iconfont.woff2?t=1772422599903') format('woff2'),
+       url('iconfont.woff?t=1772422599903') format('woff'),
+       url('iconfont.ttf?t=1772422599903') format('truetype');
 }
 
 .iconfont {
@@ -11,6 +11,14 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-daohang:before {
+  content: "\e601";
+}
+
+.icon-a-fasongdaohang-m:before {
+  content: "\e7e2";
 }
 
 .icon-baocun:before {
