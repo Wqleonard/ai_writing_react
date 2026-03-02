@@ -271,7 +271,7 @@ const BookAnalysisPage = () => {
             template: JSON.stringify(template),
           })
         )
-        navigate(`/workspace/editor/${req.id}`, {
+        navigate(`/editor/${req.id}`, {
           state: { isNew: true, template: JSON.stringify(template) },
         })
       } catch {
