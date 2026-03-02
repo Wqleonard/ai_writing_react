@@ -77,6 +77,7 @@ export function ScenariosSection() {
                   src={hoveredIndex === index ? scenario.hoverImage : scenario.image}
                   alt={scenario.title}
                   className="block h-full w-full object-contain transition-opacity duration-300 ease-in-out"
+                  loading="lazy"
                 />
               </div>
             )

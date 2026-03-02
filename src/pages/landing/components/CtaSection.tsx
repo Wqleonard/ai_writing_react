@@ -21,7 +21,7 @@ export function CtaSection() {
       {/* CTA Banner */}
       <div className="flex shrink-0 w-full max-w-screen flex-row justify-center pb-20">
         <div className="relative flex h-[32vh] w-[67vw] items-center justify-center overflow-hidden rounded-[1.25rem] bg-[linear-gradient(88deg,#efaf00_0%,#ff9500_100%)]">
-          <img src={ctaBg} alt="bg" className="absolute top-0 left-0 z-0 h-full w-full object-cover" />
+          <img src={ctaBg} alt="bg" className="absolute top-0 left-0 z-0 h-full w-full object-cover" loading="lazy" />
           <div className="relative z-1 flex flex-col items-center justify-center">
             <h2 className="m-0 mb-[2vh] text-center text-[2.5vw] font-bold leading-[1.32] text-white">
               开始你的智能创作之旅
@@ -45,7 +45,7 @@ export function CtaSection() {
           {/* Left */}
           <div className="flex flex-col items-center mr-20 -mt-1.5">
             <div className="flex flex-row items-center justify-center mb-3">
-              <img src={LOGO} alt="爆文猫写作" className="size-9" />
+              <img src={LOGO} alt="爆文猫写作" className="size-9" loading="lazy" />
               <span className="font-YaHei text-base font-bold leading-[1.32] text-black">爆文猫写作</span>
             </div>
             <p className="font-YaHei m-0 mb-[18px] text-sm leading-[1.6] text-[#999]">
@@ -58,7 +58,7 @@ export function CtaSection() {
                 rel="noreferrer"
                 className="flex items-center justify-center transition-transform duration-300 hover:-translate-y-0.5"
               >
-                <img src={socialBili} alt="bilibili" className="size-[18px] object-contain" />
+                <img src={socialBili} alt="bilibili" className="size-[18px] object-contain" loading="lazy" />
               </a>
               <a
                 href="https://www.xiaohongshu.com/user/profile/6944ad0f00000000380380a8"
@@ -66,7 +66,7 @@ export function CtaSection() {
                 rel="noreferrer"
                 className="flex items-center justify-center transition-transform duration-300 hover:-translate-y-0.5"
               >
-                <img src={socialRb} alt="小红书" className="h-[18px] w-[21px] object-contain" />
+                <img src={socialRb} alt="小红书" className="h-[18px] w-[21px] object-contain" loading="lazy" />
               </a>
               <span
                 ref={wechatRef}
@@ -74,10 +74,10 @@ export function CtaSection() {
                 onClick={() => setShowQrCode(v => !v)}
                 aria-label="微信公众号"
               >
-                <img src={socialWechat} alt="微信公众号" className="size-[18px] object-contain" />
+                <img src={socialWechat} alt="微信公众号" className="size-[18px] object-contain" loading="lazy" />
                 {showQrCode && (
                   <div className="wechat-popover">
-                    <img src={qcode} alt="微信公众号" className="block h-auto w-[180px]" />
+                    <img src={qcode} alt="微信公众号" className="block h-auto w-[180px]" loading="lazy" />
                   </div>
                 )}
               </span>
@@ -107,11 +107,11 @@ export function CtaSection() {
             <div className="flex min-w-[144px] flex-col">
               <h4 className="font-YaHei m-0 mb-4 text-base font-bold leading-[1.32] text-[#464646]">联系我们</h4>
               <p className="flex m-0 mb-2.5 items-center gap-2 text-sm leading-[1.32] text-[#999]">
-                <img src={contactMail} alt="Email" className="shrink-0 object-contain" />
+                <img src={contactMail} alt="Email" className="shrink-0 object-contain" loading="lazy" />
                 <span>baowenmaoai@126.com</span>
               </p>
               <p className="flex m-0 items-center gap-2 text-sm leading-[1.32] text-[#999]">
-                <img src={contactLocation} alt="Location" className="shrink-0 object-contain" />
+                <img src={contactLocation} alt="Location" className="shrink-0 object-contain" loading="lazy" />
                 <span>上海浦东新区</span>
               </p>
             </div>
@@ -156,7 +156,7 @@ export function CtaSection() {
             target="_blank"
             className="mt-2.5 flex items-center text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00]"
           >
-            <img src={GONGAN} alt="" className="mr-2 size-4 object-cover" />
+            <img src={GONGAN} alt="" className="mr-2 size-4 object-cover" loading="lazy" />
             <span>浙公网安备33060402002057号</span>
           </a>
         </div>

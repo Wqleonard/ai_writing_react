@@ -60,7 +60,7 @@ export function AdvantagesSection() {
             className="scroll-reveal flex cursor-pointer flex-col items-center justify-start rounded-[1.25rem] px-5 pt-9 pb-5 min-w-[250px] max-w-[318px] w-[26.3%] hover:-translate-y-2 hover:shadow-[0_15px_40px_rgba(0,0,0,0.12)]"
           >
             <div className="flex mb-9.5 h-[clamp(150px,16.54vw,200px)] w-[clamp(150px,16.54vw,200px)] min-h-[150px] min-w-[150px] max-h-[200px] max-w-[200px] items-center justify-center">
-              <img src={benefit.icon} alt="icon" className="max-h-full max-w-full object-contain" />
+              <img src={benefit.icon} alt="icon" className="max-h-full max-w-full object-contain" loading="lazy" />
             </div>
             <h3 className="m-0 mb-[27px] text-[1.75rem] font-bold leading-[1.32] text-[#464646]">
               {benefit.title}

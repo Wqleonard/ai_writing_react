@@ -171,7 +171,7 @@ export default function LandingPage() {
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.75)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.5)')}
         >
-          <img src={arrowUp} alt="" className="w-5.5 h-5.5" />
+          <img src={arrowUp} alt="" className="w-5.5 h-5.5" loading="lazy" />
         </button>
       )}
     </div>

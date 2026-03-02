@@ -74,7 +74,7 @@ export function HeroSection({
     <div className="relative flex flex-row items-center justify-center w-screen min-h-screen overflow-hidden px-20">
       {/* Left text */}
       <div>
-        <img src={penIcon} alt="pen" className="w-29.5 h-27.75 mb-7.5" />
+        <img src={penIcon} alt="pen" className="w-29.5 h-27.75 mb-7.5" loading="lazy" />
         <h1 className="text-[3.3125rem] font-bold leading-[1.32] text-black m-0 mb-7.5 font-YaHei">
           爆文猫写作 陪你写出<span className="text-[#ff9500]">好故事</span>
         </h1>
@@ -96,7 +96,7 @@ export function HeroSection({
                 isButtonHovered || showDropdown ? 'w-69.5 shadow-[0px_4px_15px_0px_rgba(255,149,0,0.5)]' : 'w-61.5',
               )}
             >
-              <img src={vectorIcon} alt="icon" className="size-11.5 shrink-0 object-contain" />
+              <img src={vectorIcon} alt="icon" className="size-11.5 shrink-0 object-contain" loading="lazy" />
               <span className="text-2xl font-bold text-white font-YaHei leading-[1.2] whitespace-nowrap">
                 我是小白写手
               </span>
@@ -131,7 +131,7 @@ export function HeroSection({
                       hoveredItem === 'short' ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <img src={bookIcon} alt="短篇" className="absolute z-1 left-0.5 top-0 w-15.5 h-15.5 object-contain" />
+                  <img src={bookIcon} alt="短篇" className="absolute z-1 left-0.5 top-0 w-15.5 h-15.5 object-contain" loading="lazy" />
                   <span className="absolute z-1 left-2.5 top-15.5 w-11 h-3.75 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
                     短篇
                   </span>
@@ -150,7 +150,7 @@ export function HeroSection({
                       hoveredItem === 'script' ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <img src={scriptIcon} alt="剧本" className="absolute z-1 left-3.5 top-3 size-9 object-contain" />
+                  <img src={scriptIcon} alt="剧本" className="absolute z-1 left-3.5 top-3 size-9 object-contain" loading="lazy" />
                   <span className="absolute z-1 left-1.5 top-15.5 w-13.5 h-3.75 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
                     剧本
                   </span>
@@ -164,7 +164,7 @@ export function HeroSection({
 
           {/* Divider */}
           <div className="w-10.5 h-22.25 my-0 mx-6.25">
-            <img src={fenge} alt="divider" />
+            <img src={fenge} alt="divider" loading="lazy" />
           </div>
 
           {/* Professional button */}
@@ -183,7 +183,7 @@ export function HeroSection({
             >
               {isCreatingWork
                 ? <div className="loading-spinner" />
-                : <img src={groupIcon} alt="icon" className="size-11.5 shrink-0 object-contain" />
+                : <img src={groupIcon} alt="icon" className="size-11.5 shrink-0 object-contain" loading="lazy" />
               }
               <span className="text-2xl font-bold text-white font-YaHei leading-[1.2] whitespace-nowrap">
                 {isCreatingWork ? '请稍后...' : '我是专业写手'}
@@ -202,10 +202,12 @@ export function HeroSection({
           src={greyBg}
           alt="background"
           className="absolute -top-12.5 right-15 z-0 h-auto w-full max-w-186 object-contain aspect-744/628"
+          loading="lazy"
         />
         <img
           src="https://vibe-writing-qa-public.tos-cn-beijing.volces.com/fe07ba9d-3/hero-image.webp"
           alt="Hero"
+          loading="lazy"
           className="relative z-1 h-auto w-full max-w-237.5 object-contain rounded-[0.625rem] shadow-[0_4px_4px_rgba(0,0,0,0.25)] aspect-95/49"
         />
       </div>

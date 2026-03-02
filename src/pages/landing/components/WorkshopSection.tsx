@@ -150,7 +150,7 @@ export function WorkshopSection() {
       {/* Carousel wheel */}
       <div className="absolute bottom-0 left-[200px] flex h-[calc(100vh-176px)] w-[calc(100vh-176px)] flex-row items-center justify-center">
         <div className="absolute h-full w-full">
-          <img src={wheelBg} alt="wheel background" className="absolute top-0 left-0 h-full w-full object-cover" />
+          <img src={wheelBg} alt="wheel background" className="absolute top-0 left-0 h-full w-full object-cover" loading="lazy" />
           {WHEEL_ITEMS.map((wItem, index) => (
             <div
               key={index}
@@ -165,6 +165,7 @@ export function WorkshopSection() {
                 src={currentWheel === index ? wItem.iconActive : wItem.icon}
                 alt={wItem.title}
                 className="size-15"
+                loading="lazy"
               />
               <span
                 className={cn(
@@ -191,6 +192,7 @@ export function WorkshopSection() {
             alt={item.title}
             style={getImageStyle(currentWheel)}
             className="h-auto w-auto shrink-0 object-contain"
+            loading="lazy"
           />
           <p className="font-YaHei relative mt-10 w-[474px] shrink-0 text-center text-2xl font-bold leading-[1.32] text-[#696969]">
             <span className="absolute top-3 left-[-20px] block size-2 rounded-full bg-[#efaf00]" />
