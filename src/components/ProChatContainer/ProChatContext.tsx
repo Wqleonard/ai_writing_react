@@ -30,6 +30,8 @@ export interface ProChatContainerContextValue {
   hideAssociationFeature: boolean
   /** 打开关联选择器 */
   onOpenAssociationSelector?: () => void
+  /** 由 ProChatPanel 注册，发送消息后滚动对话到底部 */
+  scrollToBottomRef: React.MutableRefObject<(() => void) | null>
   /** 插槽（由父组件传入，供子组件使用） */
   slots?: {
     header?: React.ReactNode

@@ -1,13 +1,10 @@
 /**
- * useLangGraphStream - React 占位实现
- *
- * Vue 版依赖：Pinia (useEditorStore, useChatInputStore, useLoginStore)、
- * ElMessage、Vue Router、useLLM、useSuggestionsController、tracking 等。
- * 完整迁移需在 React 中提供对应的 Context/Store 与 toast 等后再实现。
- * 当前仅导出类型与占位 hook，便于先接入再逐步替换。
+ * useLangGraphStream - React 实现
+ * 与 Vue 版对齐：发送消息时调用 api/works/chat 流式接口，解析 SSE 并回调。
  */
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { AgentCustomMessage } from "../types/chat";
+import { apiClient, STREAM_CHAT_URL } from "@/api";
 
 export interface EditFileArgsType {
   file_path: string;
@@ -18,7 +15,8 @@ export interface EditFileArgsType {
 }
 
 export interface LangGraphStreamOptions {
-  apiUrl: string;
+  /** 可选，未传则使用 apiClient 默认 baseURL + STREAM_CHAT_URL */
+  apiUrl?: string;
   onMessagesUpdate?: (
     messages: AgentCustomMessage[],
     isSuggestions?: boolean
@@ -47,17 +45,19 @@ export interface LangGraphStreamState {
 }
 
 export function useLangGraphStream(
-  _options: LangGraphStreamOptions
+  options: LangGraphStreamOptions
 ): LangGraphStreamState & {
   submit: (
-    _message: string,
-    _sessionId: string,
-    _workId: number | string,
-    _chatMode?: string,
-    _tools?: string[],
-    _attachments?: Array<{ name: string; remoteAddress: string }>,
-    _reload?: boolean,
-    _command?: string
+    message: string,
+    sessionId: string,
+    workId: number | string,
+    chatMode?: string,
+    tools?: string[],
+    attachments?: Array<{ name: string; remoteAddress: string }>,
+    reload?: boolean,
+    command?: string,
+    model?: string,
+    writingStyleId?: string | number
   ) => Promise<void>;
   stop: () => void;
   fetchSuggestions: (
@@ -70,12 +70,145 @@ export function useLangGraphStream(
   const [todos, setTodos] = useState<{ content: string; status: string }[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isStreamingRef = useRef(false);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
-  const submit = useCallback(async () => {
-    setError(new Error("useLangGraphStream: 未实现，需在 React 中接入完整逻辑"));
+  function extractContent(data: unknown): string {
+    if (data == null) return "";
+    if (typeof data === "string") return data;
+    if (Array.isArray(data)) {
+      for (const item of data as { type?: string; text?: string }[]) {
+        if (item?.type === "text" && typeof item.text === "string") return item.text;
+      }
+      return "";
+    }
+    return "";
+  }
+
+  const submit = useCallback(
+    async (
+      message: string,
+      sessionId: string,
+      workId: number | string,
+      chatMode?: string,
+      tools?: string[],
+      attachments?: Array<{ name: string; remoteAddress: string }>,
+      reload?: boolean,
+      command?: string,
+      model?: string,
+      writingStyleId?: string | number
+    ) => {
+      if (isStreamingRef.current) return;
+      setError(null);
+      setMessages([]);
+      setIsStreaming(true);
+      isStreamingRef.current = true;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const writingStyleIdNum =
+        writingStyleId != null && writingStyleId !== ""
+          ? Number(writingStyleId) || 1
+          : 1;
+
+      const body = {
+        query: message,
+        workId: String(workId),
+        sessionId,
+        writingStyleId: writingStyleIdNum,
+        stream_mode: ["messages", "updates"],
+        stream_subgraphs: true,
+        model: model ?? "",
+        tools: tools ?? [],
+        quotedFiles: [],
+        quotedContents: [],
+        notes: [],
+        attachments: attachments ?? [],
+        chatMode: chatMode ?? "agent",
+        reload: reload ?? false,
+        auto: false,
+        command: command ?? "",
+      };
+
+      const url = optionsRef.current.apiUrl ?? STREAM_CHAT_URL;
+
+      try {
+        await apiClient.postLangGraphStream(
+          url,
+          body,
+          (eventType, eventData) => {
+            if ((eventType === "messages" || eventType?.startsWith("messages/")) && eventData != null) {
+              const rawList = Array.isArray(eventData) ? eventData : [eventData];
+              setMessages((prev) => {
+                const next = [...prev];
+                for (const item of rawList) {
+                  if (!item || typeof item !== "object") continue;
+                  const itemType = (item as { type?: string }).type;
+                  const isAI = itemType === "ai" || itemType === "AIMessageChunk";
+                  const isTool = itemType === "tool";
+                  if (!isAI && !isTool) continue;
+                  const content = extractContent((item as { content?: unknown }).content);
+                  const id = (item as { id?: string }).id ?? "";
+                  const idx = next.findIndex((m) => m.id === id);
+                  const meta = (item as { response_metadata?: { finish_reason?: string; model_name?: string; service_tier?: string } }).response_metadata;
+                  const msg: AgentCustomMessage = {
+                    id,
+                    type: isTool ? "tool" : "ai",
+                    content,
+                    name: (item as { name?: string }).name ?? null,
+                    example: (item as { example?: boolean }).example ?? false,
+                    tool_calls: ((item as { tool_calls?: { name?: string; args?: Record<string, unknown>; id?: string; type?: string }[] }).tool_calls ?? []) as AgentCustomMessage["tool_calls"],
+                    invalid_tool_calls: (item as { invalid_tool_calls?: unknown[] }).invalid_tool_calls ?? [],
+                    additional_kwargs: (item as { additional_kwargs?: Record<string, unknown> }).additional_kwargs ?? {},
+                    response_metadata: {
+                      finish_reason: meta?.finish_reason ?? "",
+                      model_name: meta?.model_name ?? "",
+                      service_tier: meta?.service_tier ?? "",
+                    },
+                    usage_metadata: null,
+                    resultType: ((item as { resultType?: "input" | "output" }).resultType as "input" | "output" | undefined) ?? "input",
+                  };
+                  if (idx >= 0) next[idx] = msg;
+                  else next.push(msg);
+                }
+                optionsRef.current.onMessagesUpdate?.(next, false);
+                return next;
+              });
+            }
+          },
+          (err) => {
+            setError(err);
+            optionsRef.current.onError?.(err, true);
+          },
+          () => {
+            setIsStreaming(false);
+            isStreamingRef.current = false;
+            abortControllerRef.current = null;
+            optionsRef.current.onComplete?.();
+          },
+          { signal: controller.signal }
+        );
+      } catch (e) {
+        setIsStreaming(false);
+        isStreamingRef.current = false;
+        abortControllerRef.current = null;
+        const err = e instanceof Error ? e : new Error(String(e));
+        setError(err);
+        optionsRef.current.onError?.(err, true);
+      }
+    },
+    []
+  );
+
+  const stop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
   }, []);
-
-  const stop = useCallback(() => {}, []);
 
   const fetchSuggestions = useCallback(async () => {}, []);
 

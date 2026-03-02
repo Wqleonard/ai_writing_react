@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useMemo } from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useChatStore } from "@/stores/chatStore"
 import type { ChatMessage, ChatTabType } from "@/stores/chatStore"
 import {
@@ -114,6 +114,7 @@ const ProChatContainer = (props: ProChatContainerProps) => {
   const displayMessages = propsMessages ?? currentMessages
   const sessionId = propsSessionId ?? currentSession?.id ?? ""
   const hasMessages = displayMessages.length > 0
+  const scrollToBottomRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (workId) setWorkId(workId)
@@ -149,10 +150,15 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       messageType: "normal",
       mode: activeTab,
     }
-    addMessage(activeTab, userMessage)
+    const isControlled = propsMessages != null
+    if (!isControlled) {
+      addMessage(activeTab, userMessage)
+    }
     setInputValue("")
     onSendMessage?.(userMessage)
     onSaveCurrentSession?.()
+    // 发送后滚动对话到底部（与 Vue 版 NuxtUIProChatContainer 一致）；短延迟确保 DOM 已更新
+    setTimeout(() => scrollToBottomRef.current?.(), 100)
   }, [
     inputValue,
     checkStreamingStatusAndConfirm,
@@ -164,6 +170,7 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     addMessage,
     onSendMessage,
     onSaveCurrentSession,
+    propsMessages,
   ])
 
   const handleDrop = useCallback(
@@ -189,6 +196,7 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       isHomePage,
       hideAssociationFeature,
       onOpenAssociationSelector,
+      scrollToBottomRef,
       slots,
     }),
     [
@@ -210,7 +218,9 @@ const ProChatContainer = (props: ProChatContainerProps) => {
 
   return (
     <ProChatContainerContext.Provider value={contextValue}>
-      {children}
+      <div className="h-full flex flex-col overflow-hidden chat-content">
+        {children}
+      </div>
     </ProChatContainerContext.Provider>
   )
 }
