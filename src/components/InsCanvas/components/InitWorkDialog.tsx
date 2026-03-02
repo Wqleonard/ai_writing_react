@@ -1,4 +1,4 @@
-import React from "react";
+import { Button } from "@/components/ui/Button";
 
 interface InitWorkDialogProps {
   open: boolean;
@@ -21,15 +21,25 @@ export default function InitWorkDialog({
         className="init-work-dialog"
         onClick={(e) => e.stopPropagation()}
       >
+        <Button
+          type="button"
+          variant="ghost"
+          className="init-work-dialog-close"
+          size="icon-xs"
+          onClick={onClose}
+          aria-label="关闭"
+        >
+          ×
+        </Button>
         <div className="init-work-dialog-title">确定使用当前链路写作?</div>
         <div className="init-work-dialog-btns">
-          <button onClick={onClose}>取消</button>
-          <button className="primary" onClick={onCreateHere}>
+          <Button onClick={onClose}>取消</Button>
+          <Button className="primary" onClick={onCreateHere}>
             确定并覆盖当前作品
-          </button>
-          <button className="primary" onClick={onCreateNew}>
+          </Button>
+          <Button className="primary" onClick={onCreateNew}>
             确定并创建新作品
-          </button>
+          </Button>
         </div>
       </div>
       <style>{`
@@ -46,20 +56,43 @@ export default function InitWorkDialog({
           width: 420px;
           background: white;
           border-radius: 8px;
-          padding: 24px;
+          padding: 24px 24px 20px;
+          position: relative;
         }
         .init-work-dialog-title {
           font-size: 26px;
           color: #333;
           text-align: center;
         }
+        .init-work-dialog-close {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          border: none;
+          background: transparent;
+          color: #999;
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .init-work-dialog-close:hover {
+          background: #f3f4f6;
+          color: #666;
+        }
         .init-work-dialog-btns {
           margin-top: 26px;
           display: flex;
           flex-wrap: wrap;
           justify-content: center;
-          gap: 12px;
-          padding: 20px 0;
+          gap: 8px;
+          padding: 16px 0 4px;
         }
         .init-work-dialog-btns button {
           padding: 8px 16px;
@@ -67,15 +100,17 @@ export default function InitWorkDialog({
           border: 1px solid #dcdfe6;
           background: white;
           cursor: pointer;
-          font-size: 14px;
+          font-size: 13px;
+          line-height: 1.4;
+          white-space: nowrap;
         }
         .init-work-dialog-btns button.primary {
-          background: #409eff;
+          background: var(--primary);
           color: white;
-          border-color: #409eff;
+         border-color: var(--primary);
         }
         .init-work-dialog-btns button.primary:hover {
-          background: #66b1ff;
+           filter: brightness(1.05);
         }
       `}</style>
     </div>

@@ -3,7 +3,6 @@ import { useInsCanvasHandlers } from "@/components/InsCanvas/InsCanvasContext";
 
 export default function SummaryCardNode(props: any) {
   const handlers = useInsCanvasHandlers();
-  console.log(props, 'props')
   return (
     <EditableFlowCard
       {...props}
@@ -16,6 +15,7 @@ export default function SummaryCardNode(props: any) {
       onAdd={handlers.handleSummaryAdd}
       onDelete={handlers.handleSummaryDelete}
       onUpdate={handlers.handleSummaryUpdate}
+      msg={handlers.msg}
     />
   );
 }

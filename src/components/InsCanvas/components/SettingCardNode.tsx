@@ -15,6 +15,7 @@ export default function SettingCardNode(props: any) {
       onDelete={handlers.handleSettingDelete}
       onUpdate={handlers.handleSettingUpdate}
       onExpand={handlers.handleSettingExpand}
+      msg={handlers.msg}
     />
   );
 }

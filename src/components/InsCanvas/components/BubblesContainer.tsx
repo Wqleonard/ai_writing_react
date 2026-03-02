@@ -71,15 +71,12 @@ export default function BubblesContainer({
           transition: opacity 0.3s ease;
         }
         .bubbles-container .bubble.animate {
-          animation: bubble-float 8s infinite ease-in-out;
+          animation: bubble-bounce 3s infinite ease-in-out;
           animation-fill-mode: both;
         }
-        @keyframes bubble-float {
-          0% { transform: translateY(0) translateX(0) scale(1); opacity: 0.8; }
-          25% { transform: translateY(-60px) translateX(10px) scale(1.05); opacity: 0.7; }
-          50% { transform: translateY(-140px) translateX(-5px) scale(1.1); opacity: 0.6; }
-          75% { transform: translateY(-220px) translateX(8px) scale(1.05); opacity: 0.4; }
-          100% { transform: translateY(-320px) translateX(-10px) scale(0.95); opacity: 0; }
+        @keyframes bubble-bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-32px); }
         }
       `}</style>
     </div>

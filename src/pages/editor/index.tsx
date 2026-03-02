@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
@@ -12,6 +12,10 @@ import { FileMessageDisplay } from "@/components/FileMessageDisplay";
 import { SelectedTextDisplay } from "@/components/SelectedTextDisplay";
 import { AgentCustomMessageRenderer } from "@/components/AgentCustomMessageRenderer";
 import { AssociationSelectorDialog } from "@/components/AssociationSelectorDialog";
+import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
+import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
+import { Button } from "@/components/ui/Button";
+import { useDualTabChat } from "@/hooks/useDualTabChat";
 import type {
   ChatMessage,
   FileItem as FileItemType,
@@ -42,6 +46,14 @@ const LEFT_MIN_REM = pxToRem(200);
 const LEFT_MAX_REM = pxToRem(500);
 const LEFT_DEFAULT_REM = pxToRem(280);
 
+const RIGHT_DEFAULT_REM = 32.5;
+const RIGHT_MIN_REM = pxToRem(280);
+const RIGHT_MAX_REM = pxToRem(640);
+/** 两侧把手总宽度 (10px * 2)，用于右拖时计算右栏上限 */
+const HANDLES_WIDTH_REM = pxToRem(20);
+/** 三栏容器水平 padding (px-2.5 左右各 10px)，计算右栏上限时需扣除避免溢出 */
+const CONTAINER_PADDING_PX = 20;
+
 const EDITOR_PLACEHOLDER = `请输入内容或在右侧对话区指导AI创作...
 tips:
 ·AI创作时将锁定该区域，读取最新内容创作。
@@ -52,11 +64,81 @@ const getWordCount = (text: string): number => {
   return text.replace(/\s/g, "").length;
 };
 
+/** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
+function CanvasToolbar({ apiRef }: { apiRef: RefObject<InsCanvasApi | null> }) {
+  const api = apiRef.current;
+  if (!api) return null;
+  return (
+    <div className="flex h-10 items-center gap-1 px-1.5">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={api.isLoading}
+        onClick={api.addNewCanvas}
+        title={api.isLoading ? "生成选题中，请稍候" : "新增画布"}
+        aria-label="新增画布"
+      >
+        <span className="iconfont !text-xs">&#xe625;</span>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={api.openHistory}
+        title="历史版本"
+        aria-label="历史版本"
+      >
+        <span className="iconfont icon-BtnChatHistory" aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={!api.inspirationDrawId}
+        onClick={() => void api.saveCanvas()}
+        title={api.inspirationDrawId ? "保存画布" : "请先创建画布"}
+        aria-label="保存画布"
+      >
+        <span className="iconfont">&#xe936;</span>
+      </Button>
+    </div>
+  );
+}
+
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
 
+  // chatheader 相关
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState<"chat" | "faq" | "canvas">("chat");
+  const {
+    currentWorkId,
+    chatCurrentSession,
+    faqCurrentSession,
+    setWorkId,
+    createNewSession,
+    loadSession,
+    saveCurrentSession,
+  } = useDualTabChat();
+
+  const currentSessionId =
+    activeTab === "chat"
+      ? chatCurrentSession?.id ?? ""
+      : activeTab === "faq"
+        ? faqCurrentSession?.id ?? ""
+        : "";
+
+  const chatHeaderRef = useRef<ChatHeaderRef>(null);
+  const insCanvasRef = useRef<InsCanvasApi | null>(null);
+  const [, setCanvasReadyKey] = useState(0);
+  const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
+
+  // editor 相关
   const workInfo = useEditorStore((s) => s.workInfo);
   const serverData = useEditorStore((s) => s.serverData);
   const currentEditingId = useEditorStore((s) => s.currentEditingId);
@@ -68,6 +150,9 @@ const MarkdownEditorPage = () => {
 
   const [leftPanelWidthRem, setLeftPanelWidthRem] = useState(LEFT_DEFAULT_REM);
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
+  const [rightPanelWidthRem, setRightPanelWidthRem] = useState(RIGHT_DEFAULT_REM);
+  const dragStartRightRem = useRef(RIGHT_DEFAULT_REM);
+  const resizeContainerRef = useRef<HTMLDivElement>(null);
   const [showAssociationSelector, setShowAssociationSelector] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
 
@@ -156,6 +241,28 @@ const MarkdownEditorPage = () => {
     setLeftPanelWidthRem(newWidth);
   }, []);
 
+  const onRightResizeStart = useCallback(() => {
+    dragStartRightRem.current = rightPanelWidthRem;
+  }, [rightPanelWidthRem]);
+
+  const onRightResize = useCallback((adjustedDeltaX: number) => {
+    // position="right" 时组件传入 -deltaX；右栏上限=内容区宽-左栏-把手，扣除容器 padding 避免出现横向滚动条
+    const deltaRem = pxToRem(adjustedDeltaX);
+    const el = resizeContainerRef.current;
+    const contentWidthPx = el ? el.clientWidth - CONTAINER_PADDING_PX : 0;
+    const totalRem = contentWidthPx > 0 ? contentWidthPx / REM_BASE : 0;
+    const maxRight =
+      totalRem > 0
+        ? totalRem - leftPanelWidthRem - HANDLES_WIDTH_REM
+        : Number.POSITIVE_INFINITY;
+    const raw = dragStartRightRem.current + deltaRem;
+    const newWidth = Math.max(
+      RIGHT_MIN_REM,
+      Math.min(maxRight, raw)
+    );
+    setRightPanelWidthRem(newWidth);
+  }, [leftPanelWidthRem]);
+
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
   // 仅当 serverData 的 key 列表变化时重建树，避免每次输入都跑 serverDataToTree
   const serverDataKeysSig = useMemo(
@@ -231,7 +338,7 @@ const MarkdownEditorPage = () => {
   }, [currentEditingId]);
 
   return (
-    <div className="flex h-screen w-full flex-col bg-[var(--bg-primary)]">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--bg-primary)]">
       <EditorTopToolbar
         onBackClick={handleBackClick}
         onSaveClick={handleSaveClick}
@@ -240,7 +347,10 @@ const MarkdownEditorPage = () => {
         updatedTime={workInfo.updatedTime}
       />
 
-      <div className="flex flex-1 min-h-0 px-2.5 pb-2.5 pt-0 bg-(--bg-editor)">
+      <div
+        ref={resizeContainerRef}
+        className="flex flex-1 min-h-0 min-w-0 overflow-hidden px-2.5 pb-2.5 pt-0 bg-(--bg-editor)"
+      >
         {/* 左侧面板 */}
         <div
           className="shrink-0 h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] p-2"
@@ -375,120 +485,157 @@ const MarkdownEditorPage = () => {
 
         <EditorResizeHandle
           position="right"
-          onDragStart={() => {}}
-          onDrag={() => {}}
+          onDragStart={onRightResizeStart}
+          onDrag={onRightResize}
           className="shrink-0"
         />
 
         {/* 右侧聊天面板：与 NuxtUIProChatContainer 一致，chat-dashboard-panel + chat-panel-body 结构 */}
         <div
           className="shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)]"
-          style={{ width: "32.5rem" }}
+          style={{ width: `${rightPanelWidthRem}rem` }}
         >
-          <div className="flex-1 min-h-0 p-2 flex flex-col">
-            <ProChatContainer
-              workId={workId ?? undefined}
-              activeTab="chat"
-              onSendMessage={() => {}}
-              onSaveCurrentSession={() => {}}
-              isHomePage={false}
-              hideAssociationFeature={false}
-              onOpenAssociationSelector={() => setShowAssociationSelector(true)}
-              isAnswerOnly={isAnswerOnly}
-              onAnswerOnlyChange={setIsAnswerOnly}
-              slots={{
-                renderMessage: (msg: ChatMessage) => {
-                  const hasCustomMessage =
-                    msg.customMessage &&
-                    Array.isArray(msg.customMessage) &&
-                    msg.customMessage.length > 0;
-                  const hasFiles =
-                    msg.files && Array.isArray(msg.files) && msg.files.length > 0;
-                  const hasSelectedTexts =
-                    msg.selectedTexts &&
-                    Array.isArray(msg.selectedTexts) &&
-                    msg.selectedTexts.length > 0;
-                  const hasFilesOrSelected = hasFiles || hasSelectedTexts;
+          <ChatHeader
+            ref={chatHeaderRef}
+            activeTab={activeTab}
+            currentSessionId={currentSessionId}
+            workId={workId}
+            onTabChange={setActiveTab}
+            onNewChat={() => createNewSession(activeTab)}
+            onSwitchSession={(id) => loadSession(activeTab, id)}
+            onSaveCurrentSession={() => saveCurrentSession(activeTab)}
+            checkStreamingStatusAndConfirm={async () => true}
+            canvasActionsSlot={
+              activeTab === "canvas" ? (
+                <CanvasToolbar apiRef={insCanvasRef} />
+              ) : null
+            }
+          />
+          <div className="flex-1 min-h-0 p-2 flex flex-col overflow-hidden">
+            {activeTab === "canvas" ? (
+              workId ? (
+                <InsCanvas
+                  ref={insCanvasRef}
+                  workId={workId}
+                  onMessage={(type, msg) => {
+                    if (type === "success") toast.success(msg);
+                    else if (type === "error") toast.error(msg);
+                    else toast(msg);
+                  }}
+                  onCanvasReady={onCanvasReady}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  请先选择或创建作品
+                </div>
+              )
+            ) : (
+              <>
+                <ProChatContainer
+                  workId={workId ?? undefined}
+                  activeTab="chat"
+                  onSendMessage={() => {}}
+                  onSaveCurrentSession={() => {}}
+                  isHomePage={false}
+                  hideAssociationFeature={false}
+                  onOpenAssociationSelector={() => setShowAssociationSelector(true)}
+                  isAnswerOnly={isAnswerOnly}
+                  onAnswerOnlyChange={setIsAnswerOnly}
+                  slots={{
+                    renderMessage: (msg: ChatMessage) => {
+                      const hasCustomMessage =
+                        msg.customMessage &&
+                        Array.isArray(msg.customMessage) &&
+                        msg.customMessage.length > 0;
+                      const hasFiles =
+                        msg.files && Array.isArray(msg.files) && msg.files.length > 0;
+                      const hasSelectedTexts =
+                        msg.selectedTexts &&
+                        Array.isArray(msg.selectedTexts) &&
+                        msg.selectedTexts.length > 0;
+                      const hasFilesOrSelected = hasFiles || hasSelectedTexts;
 
-                  return (
-                    <div
-                      className={clsx(
-                        "rounded-lg px-3 py-2 text-sm",
-                        msg.role === "user"
-                          ? "ml-8 bg-primary text-primary-foreground"
-                          : "mr-8 bg-muted"
-                      )}
-                    >
-                      {hasCustomMessage ? (
-                        <AgentCustomMessageRenderer
-                          customMessage={msg.customMessage!}
-                          activeTab="chat"
-                          isLastMessage={false}
-                          onFileNameClick={(_fileName: string) => {
-                            // TODO: 与编辑器联动定位到文件
-                          }}
-                        />
-                      ) : (
-                        <>
-                          {hasFilesOrSelected && (
-                            <div className="message-with-files space-y-1">
-                              {hasSelectedTexts && (
-                                <SelectedTextDisplay
-                                  texts={msg.selectedTexts!}
-                                />
-                              )}
-                              {hasFiles && (
-                                <FileMessageDisplay
-                                  files={msg.files as FileItemType[]}
-                                  onFileClick={() => {}}
-                                />
-                              )}
-                              <div className="message-content-wrapper text-right">
-                                <MarkdownRenderer
-                                  content={msg.content || ""}
-                                  onFileNameClick={() => {}}
-                                />
-                              </div>
-                            </div>
+                      return (
+                        <div
+                          className={clsx(
+                            "rounded-lg px-3 py-2 text-sm",
+                            msg.role === "user"
+                              ? "ml-8 bg-primary text-primary-foreground"
+                              : "mr-8 bg-muted"
                           )}
-                          {!hasFilesOrSelected && (
-                            <div className="message-content-wrapper whitespace-pre-wrap break-words">
-                              <MarkdownRenderer
-                                content={msg.content || "(无文本)"}
-                                onFileNameClick={() => {}}
-                              />
-                            </div>
+                        >
+                          {hasCustomMessage ? (
+                            <AgentCustomMessageRenderer
+                              customMessage={msg.customMessage!}
+                              activeTab="chat"
+                              isLastMessage={false}
+                              onFileNameClick={(_fileName: string) => {
+                                // TODO: 与编辑器联动定位到文件
+                              }}
+                            />
+                          ) : (
+                            <>
+                              {hasFilesOrSelected && (
+                                <div className="message-with-files space-y-1">
+                                  {hasSelectedTexts && (
+                                    <SelectedTextDisplay
+                                      texts={msg.selectedTexts!}
+                                    />
+                                  )}
+                                  {hasFiles && (
+                                    <FileMessageDisplay
+                                      files={msg.files as FileItemType[]}
+                                      onFileClick={() => {}}
+                                    />
+                                  )}
+                                  <div className="message-content-wrapper text-right">
+                                    <MarkdownRenderer
+                                      content={msg.content || ""}
+                                      onFileNameClick={() => {}}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                              {!hasFilesOrSelected && (
+                                <div className="message-content-wrapper whitespace-pre-wrap break-words">
+                                  <MarkdownRenderer
+                                    content={msg.content || "(无文本)"}
+                                    onFileNameClick={() => {}}
+                                  />
+                                </div>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </div>
-                  );
-                },
-                footer: (
-                  <div className="text-center py-2 px-4 text-[11px] text-[#ccc] w-full">
-                    AI 生成内容仅供参考
-                  </div>
-                ),
-              }}
-            >
-              <ProChatPanel />
-            </ProChatContainer>
-            <AssociationSelectorDialog
-              open={showAssociationSelector}
-              onOpenChange={setShowAssociationSelector}
-              treeData={sidebarTreeData}
-              selectedIds={associationTags}
-              onConfirm={(ids) => {
-                const filtered = ids.filter(
-                  (id) =>
-                    !ids.some(
-                      (other) =>
-                        other !== id && (id.startsWith(`${other}/`) || id === `${other}/`)
-                    )
-                );
-                setAssociationTags(filtered);
-              }}
-            />
+                        </div>
+                      );
+                    },
+                    footer: (
+                      <div className="text-center py-2 px-4 text-[11px] text-[#ccc] w-full">
+                        AI 生成内容仅供参考
+                      </div>
+                    ),
+                  }}
+                >
+                  <ProChatPanel />
+                </ProChatContainer>
+                <AssociationSelectorDialog
+                  open={showAssociationSelector}
+                  onOpenChange={setShowAssociationSelector}
+                  treeData={sidebarTreeData}
+                  selectedIds={associationTags}
+                  onConfirm={(ids) => {
+                    const filtered = ids.filter(
+                      (id) =>
+                        !ids.some(
+                          (other) =>
+                            other !== id && (id.startsWith(`${other}/`) || id === `${other}/`)
+                        )
+                    );
+                    setAssociationTags(filtered);
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
       </div>

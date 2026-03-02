@@ -285,16 +285,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
     try {
       const response = await fetch(fullUrl, requestConfig);
       if (!response.ok) {
-        if (response.status === 401) {
-          handleTokenExpired();
-          throw new Error("TOKEN_EXPIRED");
-        }
         let errorMessage = `HTTP error! status: ${response.status} ${response.statusText}`;
         try {
-          const errorData = await response.clone().json();
-          if (isTokenExpiredData(errorData)) return;
+          const errorData = await response.json();
+           // 与 Vue 版行为对齐：401 或 TOKEN_EXPIRED 时统一做登录过期处理
+           if (response.status === 401) {
+            handleTokenExpired();
+            throw new Error("TOKEN_EXPIRED");
+          }
+          if (isTokenExpiredData(errorData)) {
+            // isTokenExpiredData 内部已调用 handleTokenExpired
+            return;
+          }
           errorMessage = extractErrorMessage(errorData, errorMessage);
-        } catch {
+        } catch (parseError: any)  {
+          // 上面手动抛出的 TOKEN_EXPIRED，直接透传
+          if (parseError instanceof Error && parseError.message === "TOKEN_EXPIRED") {
+            throw parseError;
+          }
+
           try {
             const txt = await response.clone().text();
             if (txt) errorMessage = txt;

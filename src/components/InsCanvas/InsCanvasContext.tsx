@@ -16,6 +16,7 @@ export interface InsCanvasHandlers {
   handleOutlineDelete: (nodeId: string) => void;
   handleOutlineUpdate: (nodeId: string, content: string) => void;
   handleOutlineExpand: (nodeId: string) => void;
+  msg: (type: "success" | "error" | "warning", msg: string) => void;
 }
 
 const defaultValue: InsCanvasHandlers = {
@@ -34,6 +35,7 @@ const defaultValue: InsCanvasHandlers = {
   handleOutlineDelete: () => {},
   handleOutlineUpdate: () => {},
   handleOutlineExpand: () => {},
+  msg: () => {},
 };
 
 export const InsCanvasContext = React.createContext<InsCanvasHandlers>(defaultValue);

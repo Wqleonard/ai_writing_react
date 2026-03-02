@@ -1,20 +1,23 @@
-import {
+import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
 } from "react";
-  import {
-    ReactFlow,
-    ReactFlowProvider,
-    useReactFlow,
-    useNodesState,
-    useEdgesState,
-    Controls,
-    MiniMap,
-    Background,
-  } from "@xyflow/react";
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  useNodesState,
+  useEdgesState,
+  Controls,
+  MiniMap,
+  Background,
+  MarkerType,
+  ControlButton,
+} from "@xyflow/react";
   import "@xyflow/react/dist/style.css";
   import { Button } from "@/components/ui/Button";
   import { Textarea } from "@/components/ui/Textarea";
@@ -36,6 +39,7 @@ import {
     InspirationVersion,
   } from "./types";
 import { Iconfont } from "../IconFont";
+import { saveInspirationCanvasReq } from "@/api/works";
   
   const nodeTypes = {
     mainCard: MainCardNode,
@@ -44,6 +48,14 @@ import { Iconfont } from "../IconFont";
     outlineCard: OutlineCardNode,
   };
   
+  export interface InsCanvasApi {
+    addNewCanvas: () => void;
+    openHistory: () => void;
+    saveCanvas: () => void;
+    inspirationDrawId: string;
+    isLoading: boolean;
+  }
+
   interface InsCanvasProps {
     workId: string;
     nodes?: CustomNode[];
@@ -52,6 +64,11 @@ import { Iconfont } from "../IconFont";
     onCreateHere?: (files: Record<string, string>, chain: ParentNode | null) => void;
     onCreateNew?: (files: Record<string, string>, chain: ParentNode | null) => void;
     onMessage?: (type: "success" | "error" | "warning", msg: string) => void;
+    onCanvasReady?: () => void;
+  }
+
+  interface InsCanvasInnerProps extends InsCanvasProps {
+    canvasRef?: React.RefObject<InsCanvasApi | null>;
   }
   
   function convertToTreeStructure(
@@ -152,9 +169,11 @@ import { Iconfont } from "../IconFont";
     onCreateHere,
     onCreateNew,
     onMessage,
-  }: InsCanvasProps) {
+    onCanvasReady,
+    canvasRef,
+  }: InsCanvasInnerProps) {
     const CARD_MIN_HEIGHT = 200;
-    const CARD_V_GAP = 80;
+    const CARD_V_GAP = 100; // 节点间垂直间隙，避免重叠
     const V_SPACING = CARD_MIN_HEIGHT + CARD_V_GAP; // 保证多节点生成时不会上下重叠
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -172,7 +191,14 @@ import { Iconfont } from "../IconFont";
     const [historyDialogShow, setHistoryDialogShow] = useState(false);
     const [currentChain, setCurrentChain] = useState<ParentNode | null>(null);
     // 是否在画布中
-    const [canvasReady, setCanvasReady] = useState(false)
+    const [canvasReady, setCanvasReady] = useState(false);
+
+    // 一次“生成”流程内的错误提示去重（跨多个卡片）
+    const errorBatchRef = useRef<{ startedAt: number; messages: Set<string> } | null>(null);
+    // 当前缩放百分比（用于右下角 UI 展示）
+    const [zoomPercent, setZoomPercent] = useState(100);
+    // 是否处于“手型拖动画布”模式
+    const [panMode, setPanMode] = useState(false);
   
     const tree = useMemo(() => convertToTreeStructure(nodes, edges), [nodes, edges]);
   
@@ -184,15 +210,26 @@ import { Iconfont } from "../IconFont";
     // 是否可以交互(canvas: 比如拖拽 滑动)
     const canInteract = hasIdea && canvasReady;
   
-    const { zoomIn, zoomOut } = useReactFlow();
+    const { zoomIn, zoomOut, getNode } = useReactFlow();
     const { layout: dagreLayout } = useDagreLayout();
   
     const msg = useCallback(
       (type: "success" | "error" | "warning", text: string) => {
-        onMessage?.(type, text);
-        if (typeof (window as any).ElMessage !== "undefined") {
-          (window as any).ElMessage[type](text);
+        if (type === "error") {
+          const now = Date.now();
+          const windowMs = 1000;
+          let batch = errorBatchRef.current;
+          if (!batch || now - batch.startedAt > windowMs) {
+            batch = { startedAt: now, messages: new Set<string>() };
+            errorBatchRef.current = batch;
+          }
+          if (batch.messages.has(text)) {
+            return;
+          }
+          batch.messages.add(text);
         }
+        onMessage?.(type, text);
+
       },
       [onMessage]
     );
@@ -373,25 +410,80 @@ import { Iconfont } from "../IconFont";
       [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout, V_SPACING]
     );
   
+    /** 平移下方兄弟及其子树，为新节点腾出空间 */
+    const shiftSiblingsDown = useCallback(
+      (
+        sourceNodeId: string,
+        parentId: string,
+        newNode: CustomNode,
+        edgesArr: CustomEdge[]
+      ) => {
+        const source = nodes.find((n) => n.id === sourceNodeId);
+        if (!source) return;
+        const siblingIds = edgesArr
+          .filter((e) => e.source === parentId)
+          .map((e) => e.target)
+          .filter((id) => id !== sourceNodeId);
+        const siblingsBelow = nodes.filter(
+          (n) => siblingIds.includes(n.id) && n.position.y > source.position.y
+        );
+        const newNodeHeight = CARD_MIN_HEIGHT + 80;
+        const offset = newNodeHeight + CARD_V_GAP; // 新节点高度 + 与下方节点的间隙，避免覆盖
+        const collectSubtree = (rootId: string, acc = new Set<string>()) => {
+          acc.add(rootId);
+          edgesArr
+            .filter((e) => e.source === rootId)
+            .forEach((e) => collectSubtree(e.target, acc));
+          return acc;
+        };
+        const nodesToShift = new Set<string>();
+        siblingsBelow.forEach((sib) =>
+          collectSubtree(sib.id).forEach((id) => nodesToShift.add(id))
+        );
+        setNodes((nds) => [
+          ...nds.map((n) =>
+            nodesToShift.has(n.id)
+              ? { ...n, position: { ...n.position, y: n.position.y + offset } }
+              : n
+          ),
+          newNode,
+        ]);
+      },
+      [nodes, setNodes]
+    );
+
     const addSummaryCard = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
-        console.log('addSummaryCard', {
-          nodes,
-          source,
-          sourceNodeId,
-        })
         if (!source) return;
+
         const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
+
+        const sourceHeight =
+          getNode(sourceNodeId)?.measured?.height ??
+          (source as CustomNode).dimensions?.height ??
+          CARD_MIN_HEIGHT;
+        const newY = source.position.y + sourceHeight + CARD_V_GAP;
+
         const newNodeId = `summaryCard-${Date.now()}`;
         const newNode: CustomNode = {
           id: newNodeId,
           type: "summaryCard",
-          position: { x: source.position.x, y: source.position.y + 200 },
+          position: { x: source.position.x, y: newY },
           draggable: hasIdea,
-          data: { label: "故事梗概", content: "", isStreaming: true },
+          data: {
+            label: "故事梗概",
+            content: "",
+            isStreaming: true,
+            inspirationWord: source.data?.inspirationWord,
+            inspirationTheme: source.data?.inspirationTheme,
+            shortSummary: source.data?.shortSummary,
+            storySetting: source.data?.storySetting,
+            inspirationDrawId: source.data?.inspirationDrawId ?? inspirationDrawId,
+          },
         };
+
         const newEdge: CustomEdge = {
           id: `e${parentId}-${newNodeId}`,
           source: parentId,
@@ -401,11 +493,11 @@ import { Iconfont } from "../IconFont";
           sourceHandle: "right-handle",
           targetHandle: "left-handle",
         };
-        setNodes((nds) => [...nds, newNode]);
+
+        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
         setEdges((eds) => [...eds, newEdge]);
-        setTimeout(autoLayout, 50);
       },
-      [nodes, edges, hasIdea, setNodes, setEdges, autoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
     );
   
     const handleMainCardCreate = useCallback(
@@ -499,12 +591,27 @@ import { Iconfont } from "../IconFont";
         const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
         const nid = `story-setting-${Date.now()}`;
+        const sourceHeight =
+          getNode(sourceNodeId)?.measured?.height ??
+          (source as CustomNode).dimensions?.height ??
+          CARD_MIN_HEIGHT;
+        const newY = source.position.y + sourceHeight + CARD_V_GAP;
         const newNode: CustomNode = {
           id: nid,
           type: "settingCard",
-          position: { x: source.position.x, y: source.position.y + 200 },
+          position: { x: source.position.x, y: newY },
           draggable: hasIdea,
-          data: { label: "故事设定", content: "", isStreaming: true, expandable: true },
+          data: {
+            label: "故事设定",
+            content: "",
+            isStreaming: true,
+            expandable: true,
+            inspirationWord: source.data?.inspirationWord,
+            inspirationTheme: source.data?.inspirationTheme,
+            shortSummary: source.data?.shortSummary,
+            storySetting: source.data?.storySetting,
+            inspirationDrawId: source.data?.inspirationDrawId ?? inspirationDrawId,
+          },
         };
         const newEdge: CustomEdge = {
           id: `e${parentId}-${nid}`,
@@ -515,11 +622,10 @@ import { Iconfont } from "../IconFont";
           sourceHandle: "right-handle",
           targetHandle: "left-handle",
         };
-        setNodes((nds) => [...nds, newNode]);
+        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
         setEdges((eds) => [...eds, newEdge]);
-        setTimeout(autoLayout, 50);
       },
-      [nodes, edges, hasIdea, setNodes, setEdges, autoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
     );
   
     const generateOutlineNodes = useCallback(
@@ -571,18 +677,32 @@ import { Iconfont } from "../IconFont";
   
     const addOutlineCard = useCallback(
       (sourceNodeId: string) => {
-        console.log('addOutlineCard', sourceNodeId)
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
         const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
         const nid = `outline-${Date.now()}`;
+        const sourceHeight =
+          getNode(sourceNodeId)?.measured?.height ??
+          (source as CustomNode).dimensions?.height ??
+          CARD_MIN_HEIGHT + 80;
+        const newY = source.position.y + sourceHeight + CARD_V_GAP;
         const newNode: CustomNode = {
           id: nid,
           type: "outlineCard",
-          position: { x: source.position.x, y: source.position.y + 295 },
+          position: { x: source.position.x, y: newY },
           draggable: hasIdea,
-          data: { label: "故事大纲", content: "", isStreaming: true, expandable: true },
+          data: {
+            label: "故事大纲",
+            content: "",
+            isStreaming: true,
+            expandable: true,
+            inspirationWord: source.data?.inspirationWord,
+            inspirationTheme: source.data?.inspirationTheme,
+            shortSummary: source.data?.shortSummary,
+            storySetting: source.data?.storySetting,
+            inspirationDrawId: source.data?.inspirationDrawId ?? inspirationDrawId,
+          },
         };
         const newEdge: CustomEdge = {
           id: `e${parentId}-${nid}`,
@@ -593,11 +713,10 @@ import { Iconfont } from "../IconFont";
           sourceHandle: "right-handle",
           targetHandle: "left-handle",
         };
-        setNodes((nds) => [...nds, newNode]);
+        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
         setEdges((eds) => [...eds, newEdge]);
-        setTimeout(autoLayout, 50);
       },
-      [nodes, edges, hasIdea, setNodes, setEdges, autoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
     );
   
     const buildParentChain = useCallback(
@@ -721,8 +840,8 @@ import { Iconfont } from "../IconFont";
         } else {
           msg("warning", "返回数据格式不正确，请重试");
         }
-      } catch (e) {
-        msg("error", "操作失败，请稍后重试");
+      } catch (e: any) {
+        msg("error", e.message);
       } finally {
         setIsLoading(false);
       }
@@ -789,11 +908,48 @@ import { Iconfont } from "../IconFont";
     );
   
     const addNewCanvas = useCallback(() => {
+      setIsLoading(false);
       setNodes([]);
       setEdges([]);
       setInspirationDrawId("");
     }, [setNodes, setEdges]);
-  
+
+    const handleSaveCanvas = useCallback(async () => {
+      if (!inspirationDrawId) {
+        msg("warning", "请先创建画布");
+        return;
+      }
+      try {
+        await saveInspirationCanvasReq(inspirationDrawId, {
+          nodes: nodes as unknown[],
+          edges: edges as unknown[],
+        });
+        msg("success", "保存成功");
+      } catch {
+        msg("error", "保存失败，请稍后重试");
+      }
+    }, [inspirationDrawId, nodes, edges, msg]);
+
+    const openHistory = useCallback(() => setHistoryDialogShow(true), []);
+
+    useImperativeHandle(
+      canvasRef,
+      () => ({
+        addNewCanvas,
+        openHistory,
+        saveCanvas: handleSaveCanvas,
+        inspirationDrawId,
+        isLoading,
+      }),
+      [addNewCanvas, openHistory, handleSaveCanvas, inspirationDrawId, isLoading]
+    );
+
+    const onCanvasReadyRef = useRef(onCanvasReady);
+    onCanvasReadyRef.current = onCanvasReady;
+    useEffect(() => {
+      onCanvasReadyRef.current?.();
+    }, [inspirationDrawId, isLoading]);
+
     const handleRestoreVersion = useCallback(
       (version: InspirationVersion) => {
         try {
@@ -826,14 +982,14 @@ import { Iconfont } from "../IconFont";
         handleSummaryDelete: deleteNode,
         handleSummaryUpdate: (id: string, c: string) => {
           updateNodeContent(id, c);
-          setTimeout(autoLayout, 100);
+          // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
         handleSettingGenerate: generateOutlineNodes,
         handleSettingAdd: addSettingCard,
         handleSettingDelete: deleteNode,
         handleSettingUpdate: (id: string, c: string) => {
           updateNodeContent(id, c);
-          setTimeout(autoLayout, 150);
+          // 不触发 autoLayout，与 addSummaryCard 一致，避免流式输出时新节点被 dagre 排到顶部
         },
         handleSettingExpand: () => setTimeout(autoLayout, 100),
         handleOutlineGenerate,
@@ -841,9 +997,10 @@ import { Iconfont } from "../IconFont";
         handleOutlineDelete: deleteNode,
         handleOutlineUpdate: (id: string, c: string) => {
           updateNodeContent(id, c);
-          setTimeout(autoLayout, 100);
+          // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
         handleOutlineExpand: () => setTimeout(autoLayout, 100),
+        msg,
       }),
       [
         handleMainCardCreate,
@@ -856,6 +1013,7 @@ import { Iconfont } from "../IconFont";
         addSettingCard,
         handleOutlineGenerate,
         addOutlineCard,
+        msg
       ]
     );
   
@@ -868,16 +1026,18 @@ import { Iconfont } from "../IconFont";
           className="relative flex h-full w-full min-w-[400px] flex-col bg-muted/30"
         >
           {showInit ? (
+            <>
             <div className="relative flex flex-1 flex-col items-center justify-start overflow-hidden px-4">
               <BubblesContainer isAnimate={isLoading} />
               <h1 className="-mt-[90px] z-10 text-center text-[26px] font-semibold text-foreground">
                 {isLoading
-                  ? "爆文猫写作正在生成随机选题..."
+                  ? `爆文猫写作正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
                   : "与爆文猫写作一起脑洞大开地创作"}
               </h1>
               <div className="relative z-10 mt-8 w-[308px] rounded-xl border-2 border-dashed border-orange-200 bg-background p-4 pb-12 shadow-sm">
                 <Textarea
-                  className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
+                  className="min-h-0 w-full"
+                  areaClassName="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none outline-none focus:border-0 focus:outline-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
                   value={ideaContent}
                   onChange={(e) => setIdeaContent(e.target.value)}
                   placeholder="输入一个想法,或点随机选题开始创作"
@@ -886,17 +1046,23 @@ import { Iconfont } from "../IconFont";
                 />
                 <Button
                   type="button"
-                  className="absolute bottom-3 right-3"
+                  className="absolute bottom-3 right-3 shrink-0"
                   disabled={isLoading}
                   onClick={handleGenerateIns}
                 >
                   {ideaContent === "" ? (
-                    <span className="mr-3 text-white">随机选题</span>
-                  ) : null}
-                  {/* <Iconfont unicode="&#xe7a1;" className="text-white" /> */}
+                    <span className="flex items-center gap-2 text-white">
+                      <span>随机选题</span>
+                      <Iconfont unicode="&#xe7e2;" className="text-white shrink-0 !text-sm" />
+                    </span>
+                  ) : (
+                    <Iconfont unicode="&#xe7e2;" className="text-white shrink-0 !text-sm" />
+                  )}
                 </Button>
               </div>
             </div>
+            </>
+            
           ) : (
             <div className="relative flex-1 min-h-[200px]">
               <ReactFlow
@@ -906,13 +1072,26 @@ import { Iconfont } from "../IconFont";
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
+                proOptions={{ hideAttribution: true }}
+                onMove={(_, viewport) => {
+                  if (!viewport) return;
+                  setZoomPercent(Math.round((viewport.zoom || 1) * 100));
+                }}
                 defaultEdgeOptions={{
                   type: "smoothstep",
                   style: {
-                    stroke: "#1D6BFF",
-                    strokeWidth: 4,
+                    // 基础连线样式：细一点、浅灰色、圆角
+                    stroke: "#DEDEDE",
+                    strokeWidth: 2,
                     strokeLinecap: "round",
                     strokeLinejoin: "round",
+                  },
+                  // 在目标节点一侧显示与线条同色的开放箭头
+                  markerEnd: {
+                    type: MarkerType.Arrow,
+                    color: "#DEDEDE",
+                    width: 18,
+                    height: 18,
                   },
                 }}
                 defaultViewport={{ x: 0, y: 0, zoom: 1 }}
@@ -920,7 +1099,13 @@ import { Iconfont } from "../IconFont";
                 zoomOnPinch={canInteract}
                 // 避免左键拖动画布吞掉节点内部点击（按钮/输入框等）
                 // 仅允许中键/右键拖动平移画布
-                panOnDrag={canInteract ? [1, 2] : false}
+                panOnDrag={
+                  canInteract
+                    ? panMode
+                      ? true // 手型模式下允许任意按键拖动画布
+                      : [1, 2] // 默认只允许中键/右键拖动画布
+                    : false
+                }
                 panOnScroll={canInteract}
                 panActivationKeyCode={canInteract ? 'Space' : null}
                 nodesDraggable={canInteract}
@@ -930,11 +1115,65 @@ import { Iconfont } from "../IconFont";
                 maxZoom={canInteract ? 2 : 1}
                 className={`h-full w-full bg-muted/30 ${!hasIdea ? "no-idea" : ""}`}
               >
-                {hasIdea && <Controls />}
-                <MiniMap />
+                {hasIdea && (
+                  <Controls
+                    showZoom={false}
+                    showFitView={true}
+                    showInteractive={false}
+                    position="top-left"
+                    orientation="vertical"
+                    style={{
+                      left: 16,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                    }}
+                    className="bg-background/90 !rounded-full shadow-sm border px-1 py-2 flex flex-col items-stretch gap-2"
+                  >
+                    <ControlButton
+                      aria-label="Toggle pan mode"
+                      onClick={() => setPanMode((v) => !v)}
+                      className={panMode ? "!bg-primary !text-white !rounded-full" : "!rounded-full"}
+                    >
+                      {/* 简单手型图标：可以替换成你们自己的 iconfont */}
+                      <span className="iconfont">&#xe86c;</span>
+                    </ControlButton>
+                  </Controls>
+                )}
+                <MiniMap
+                  pannable={canInteract}
+                  zoomable={canInteract}
+                  // 上移一点，避免和右下角缩放按钮重叠
+                  style={{ bottom: 48 }}
+                />
+                <div className="pointer-events-auto absolute bottom-5 right-5 z-50 flex items-center rounded-full border bg-background px-2 py-1 text-xs shadow-sm">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={!hasIdea}
+                    onClick={() => hasIdea && zoomOut()}
+                    aria-label="Zoom out"
+                  >
+                    −
+                  </Button>
+                  <span className="mx-1 min-w-[3rem] text-center tabular-nums">
+                    {zoomPercent}%
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={!hasIdea}
+                    onClick={() => hasIdea && zoomIn()}
+                    aria-label="Zoom in"
+                  >
+                    +
+                  </Button>
+                </div>
+
                 <Background />
               </ReactFlow>
-              <div className="pointer-events-auto absolute bottom-5 right-5 z-50 flex items-center gap-2 rounded-md border bg-background/80 p-1 shadow-sm backdrop-blur">
+              {/* <div className="pointer-events-auto absolute bottom-5 right-5 z-50 flex items-center gap-2 rounded-md border bg-background/80 p-1 shadow-sm backdrop-blur">
                 <Button
                   type="button"
                   variant="outline"
@@ -955,9 +1194,14 @@ import { Iconfont } from "../IconFont";
                 >
                   +
                 </Button>
-              </div>
+              </div> */}
               {!hasIdea && (
-                <div className="pointer-events-auto absolute left-1/2 top-1/2 z-50 isolate flex -translate-x-1/2 -translate-y-1/2 translate-y-[150px] flex-col items-center">
+                <div
+                className="
+                  pointer-events-auto absolute left-1/2 z-50 isolate flex -translate-x-1/2 flex-col items-center
+                  top-[320px] sm:top-[360px] md:top-[400px] lg:top-[440px] xl:top-[480px]
+                "
+              >
                   <Button
                     type="button"
                     className="h-[42px] bg-foreground px-4 text-base text-background hover:bg-foreground/90"
@@ -967,10 +1211,11 @@ import { Iconfont } from "../IconFont";
                     <span className="refresh-icon">⟳</span>
                     <span className="refresh-text">换一批</span>
                   </Button>
-                  <div className="relative mt-8 w-full max-w-[600px]">
+                  <div className="relative z-10 mt-8 w-[308px] rounded-xl border-2 border-dashed border-orange-200 bg-background p-4 pb-12 shadow-sm">
                     <Textarea
-                      className="resize-none rounded-xl border-2 border-dashed border-orange-400 p-4 text-base shadow-sm md:text-base"
+                      className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0 disabled:opacity-60 md:text-base"
                       value={ideaContent}
+                      disabled={isLoading}
                       onChange={(e) => setIdeaContent(e.target.value)}
                       placeholder="输入一个想法，或点随机选题开始创作"
                       rows={4}
@@ -983,40 +1228,13 @@ import { Iconfont } from "../IconFont";
                     >
                       {!ideaContent ? (
                         <span className="mr-3 text-white">随机选题</span>
-                      ) : null}
+                      ) : <Iconfont unicode="&#xe7e2;" className="text-white shrink-0 !text-sm" />}
                       {/* <span className="dropdown-icon iconfont">&#xe7a1;</span> */}
                     </Button>
                   </div>
                 </div>
               )}
-              {hasIdea && (
-                <div className="pointer-events-auto absolute right-5 top-5 z-50 flex gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={addNewCanvas}
-                    aria-label="New canvas"
-                  >
-                    <span className="iconfont">&#xea7f;</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      if (!inspirationDrawId) {
-                        msg("warning", "请先创建画布");
-                        return;
-                      }
-                      setHistoryDialogShow(true);
-                    }}
-                    aria-label="History"
-                  >
-                    <span className="iconfont">&#xead4;</span>
-                  </Button>
-                </div>
-              )}
+
             </div>
           )}
           <InitWorkDialog
@@ -1034,13 +1252,63 @@ import { Iconfont } from "../IconFont";
           />
         </div>
         <style>{`
-          /* 兜底：统一连接线蓝色样式（包括已有 edges） */
+          /* 统一连接线样式：细灰色圆角，和 Vue 版保持一致风格 */
           #main-canvas-flow .react-flow__edge-path {
-            stroke: #1D6BFF;
-            stroke-width: 4px;
+            stroke: #DEDEDE;
+            stroke-width: 2px;
             stroke-linecap: round;
             stroke-linejoin: round;
           }
+            /* 流式/高亮连线：虚线 + 流动动画 */
+          #main-canvas-flow .react-flow__edge.animated .react-flow__edge-path {
+            stroke-dasharray: 5;
+            animation: rf-dashdraw 0.6s linear infinite;
+          }
+
+          @keyframes rf-dashdraw {
+            to {
+              stroke-dashoffset: -10;
+            }
+          }
+
+          /* 左侧 Controls 工具栏：按钮统一圆角背景 */
+          #main-canvas-flow .react-flow__controls {
+            border-radius: 9999px;
+            overflow: hidden;
+          }
+
+          #main-canvas-flow .react-flow__controls-button {
+            border-radius: 9999px;
+          }
+
+          /* 主卡片骨架屏左到右高亮动画 */
+          .ins-skeleton {
+            position: relative;
+            overflow: hidden;
+            background-color: #e5e7eb;
+          }
+
+          .ins-skeleton::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background-image: linear-gradient(
+              90deg,
+              rgba(255,255,255,0) 0%,
+              rgba(255,255,255,0.9) 50%,
+              rgba(255,255,255,0) 100%
+            );
+            opacity: 0.9;
+            animation: ins-skeleton-shimmer 1.4s ease-in-out infinite;
+          }
+
+          @keyframes ins-skeleton-shimmer {
+            100% {
+              transform: translateX(100%);
+            }
+          }
+
           /* 主卡片（card-1 / card-3）倾斜效果：仅在选择前（!hasIdea）生效，点击立即创作后取消 */
           #main-canvas-flow.no-idea .react-flow__node[data-id="card-1"] .main-card,
           #main-canvas-flow.no-idea .vue-flow__node[data-id="card-1"] .main-card {
@@ -1057,8 +1325,8 @@ import { Iconfont } from "../IconFont";
     );
   }
   
-  export default function InsCanvas(props: InsCanvasProps) {
-    return (
+  const InsCanvas = React.forwardRef<InsCanvasApi, InsCanvasProps>(
+    (props, ref) => (
       <ReactFlowProvider>
         <InsCanvasInner
           workId={props.workId}
@@ -1068,8 +1336,12 @@ import { Iconfont } from "../IconFont";
           onCreateHere={props.onCreateHere}
           onCreateNew={props.onCreateNew}
           onMessage={props.onMessage}
+          onCanvasReady={props.onCanvasReady}
+          canvasRef={ref as React.RefObject<InsCanvasApi | null>}
         />
       </ReactFlowProvider>
-    );
-  }
+    )
+  );
+  InsCanvas.displayName = "InsCanvas";
+  export default InsCanvas;
   
