@@ -115,13 +115,13 @@ const BookAnalysisPage = () => {
       const nextPage = templatePage + 1
       const res: any = await getWritingTemplatesListReq(nextPage, TEMPLATE_PAGE_SIZE)
       const content = Array.isArray(res?.content) ? res.content : []
-      const newItems: TemplateCardData[] = content.map((item: any) => ({
-        id: String(item.id),
+      const newItems: TemplateCardData[] = content.map((item: any, itemIndex: number) => ({
+        id: String(item.id || `template-${templatePage}-${itemIndex}`),
         title: item.title || '',
         description: item.content || '',
         usageCount: item.numberOfUses || 0,
-        tags: item.tags?.map((t: any) => ({
-          id: t?.id ?? '',
+        tags: item.tags?.map((t: any, tagIndex: number) => ({
+          id: String(t?.id || `tag-${itemIndex}-${tagIndex}`),
           name: t?.name ?? '',
           category: t?.category ?? '',
         })) ?? [],

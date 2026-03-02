@@ -19,12 +19,13 @@ interface NewbieTourProps {
   customSteps?: Step[]
 }
 
-
 const CustomTooltip = (props: any) => {
+  console.log(props)
   const { step, index, size } = props
-  const { title, content, isLast, onNext, onPrev,onClose } = step
+  const { title, content, onNext, onPrev, onClose } = step
 
   const showPrev = index !== 0
+  const isLast = index == (size - 1)
 
   const progress = useMemo(() => {
     return ((index + 1) / size) * 100
@@ -47,7 +48,7 @@ const CustomTooltip = (props: any) => {
           aria-label="关闭引导"
           onClick={onClose}
         >
-          <Iconfont unicode="&#xe633;" />
+          <Iconfont unicode="&#xe633;"/>
         </Button>
       </div>
 
@@ -86,24 +87,13 @@ const CustomTooltip = (props: any) => {
 export function NewbieTour({
                              open,
                              onOpenChange,
-                             config = {},
                              callbacks = {},
                              customSteps,
                            }: NewbieTourProps) {
   const navigate = useNavigate()
   const [stepIndex, setStepIndex] = useState(0)
   const joyrideRef = useRef<any>(null)
-  const hasShownRef = useRef(false)
-
-  const DEFAULT_STORAGE_KEY = 'hasOpenNewbieTour'
   const TOTAL_STEPS = 7
-
-  const {
-    autoShowOnFirstVisit = false,
-    storageKey = DEFAULT_STORAGE_KEY,
-    allowEscClose = false,
-    allowOverlayClose = false,
-  } = config
 
   const {
     onStart,
@@ -129,21 +119,18 @@ export function NewbieTour({
     if (stepIndex === TOTAL_STEPS - 1) {
       onFinish?.()
       onOpenChange(false)
-      // 标记用户已完成引导
-      localStorage.setItem(storageKey, 'true')
     } else {
       const newIndex = Math.min(TOTAL_STEPS - 1, stepIndex + 1)
       setStepIndex(newIndex)
       onStepChange?.(newIndex)
     }
-  }, [stepIndex, onOpenChange, onFinish, onStepChange, storageKey])
+  }, [stepIndex, onOpenChange, onFinish, onStepChange])
 
   // 处理跳过
   const handleSkip = useCallback(() => {
     onSkip?.()
     onOpenChange(false)
-    localStorage.setItem(storageKey, 'true')
-  }, [onOpenChange, onSkip, storageKey])
+  }, [onOpenChange, onSkip])
 
   const defaultSteps: Step[] = useMemo(() => [
     {
@@ -162,7 +149,7 @@ export function NewbieTour({
     },
     {
       target: '#newbiew-tour-step-2',
-      title:'快捷写作命令',
+      title: '快捷写作命令',
       content: (
         <>
           取消勾选仅回答，点击上方"我想写"，可使用<span className="text-[#f3a901]">快捷提示词</span>发送。
@@ -172,9 +159,11 @@ export function NewbieTour({
       onNext: handleNext,
       onPrev: handlePrev,
       placement: 'right-start',
+      disableBeacon: true,
     },
     {
       target: '#newbiew-tour-step-3',
+      title: '使用热点创作',
       content: (
         <>
           使用<span className="text-[#f3a901]">当前热点</span>进行创作，可直接填充提示词到对话框中。
@@ -184,9 +173,11 @@ export function NewbieTour({
       onNext: handleNext,
       onPrev: handlePrev,
       placement: 'left',
+      disableBeacon: true,
     },
     {
-      target: '.el-menu-item.workspace-menu-item',
+      target: '.workspace-layout-sidebar .workspace-layout-sidebar-item.trending-list',
+      title: '了解热门榜单',
       content: (
         <>
           查看创作热榜，了解当前小说<span className="text-[#f3a901]">热门主题</span>，进行仿写
@@ -197,10 +188,10 @@ export function NewbieTour({
       onClose: handleSkip,
       onNext: handleNext,
       onPrev: handlePrev,
-      showPrev: true,
     },
     {
-      target: '.el-menu-item.book-analysis-menu-item',
+      target: '.workspace-layout-sidebar .workspace-layout-sidebar-item-child.book-analysis',
+      title: '拆书仿写',
       content: (
         <>
           上传文本进行分析，快速
@@ -213,10 +204,11 @@ export function NewbieTour({
       onClose: handleSkip,
       onNext: handleNext,
       onPrev: handlePrev,
-      showPrev: true,
+
     },
     {
-      target: '.el-menu-item.writing-styles-menu-item',
+      target: '.workspace-layout-sidebar .workspace-layout-sidebar-item-child.writing-styles',
+      title: '文风提炼',
       content: (
         <>
           对您上传的文本进行分析提炼，方便总结<span className="text-[#f3a901]">个人创作文风</span>直接用于AI创作
@@ -227,10 +219,11 @@ export function NewbieTour({
       onClose: handleSkip,
       onNext: handleNext,
       onPrev: handlePrev,
-      showPrev: true,
+
     },
     {
-      target: '.el-menu-item.course-menu-item',
+      target: '.workspace-layout-sidebar .workspace-layout-sidebar-item-child.course',
+      title: '灵感工坊',
       content: (
         <>
           加入社区，了解更多<span className="text-[#f3a901]">写作技巧</span>，创建专属自己的写作工具。
@@ -241,7 +234,7 @@ export function NewbieTour({
       onClose: handleSkip,
       onNext: handleNext,
       onPrev: handlePrev,
-      showPrev: true,
+
     },
   ], [handleSkip, handleNext, handlePrev])
 
@@ -250,76 +243,61 @@ export function NewbieTour({
 
   // 处理引导回调
   const handleJoyrideCallback = useCallback(async (data: CallBackProps) => {
-    const { action, index, status, type, lifecycle } = data
+    const { action, index, status, type } = data
 
     // 处理关闭
     if (status === STATUS.FINISHED) {
       onFinish?.()
       onOpenChange(false)
-      localStorage.setItem(storageKey, 'true')
       return
     }
 
     if (status === STATUS.SKIPPED) {
       onSkip?.()
       onOpenChange(false)
-      localStorage.setItem(storageKey, 'skipped')
       return
     }
 
-    // 处理步骤变化 - 在步骤完成后进行导航
-    if (type === EVENTS.STEP_AFTER && lifecycle === 'complete') {
+    // 处理步骤变化 - 在步骤开始前进行导航，确保目标元素已挂载
+    if (type === EVENTS.STEP_BEFORE) {
       // 处理需要导航的步骤（下一步）
       if (action === ACTIONS.NEXT) {
         switch (index) {
-          case 3:
-            await navigate('/book-analysis')
-            break
           case 4:
-            await navigate('/writing-styles')
+            await navigate('/workspace/ai-expert/book-analysis')
             break
           case 5:
-            await navigate('/course')
+            await navigate('/workspace/ai-expert/writing-styles')
+            break
+          case 6:
+            await navigate('/workspace/creation-community/course')
             break
         }
       }
       // 处理需要导航的步骤（上一步）
       else if (action === ACTIONS.PREV) {
         switch (index) {
+          case 3:
+            await navigate('/workspace/my-place')
+            break
           case 4:
-            await navigate('/workspace')
+            await navigate('/workspace/ai-expert/book-analysis')
             break
           case 5:
-            await navigate('/book-analysis')
-            break
-          case 6:
-            await navigate('/writing-styles')
+            await navigate('/workspace/ai-expert/writing-styles')
             break
         }
       }
     }
-  }, [navigate, onOpenChange, onFinish, onSkip, storageKey])
+  }, [navigate, onOpenChange, onFinish, onSkip])
 
   // 监听 open 变化
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStepIndex(0)
-      hasShownRef.current = true
-      onStart?.()
     }
   }, [open, onStart])
-
-  // 首次访问自动显示
-  useEffect(() => {
-    if (autoShowOnFirstVisit && !hasShownRef.current) {
-      const hasSeenTour = localStorage.getItem(storageKey)
-      if (!hasSeenTour) {
-        onStart?.()
-      }
-    }
-  }, [autoShowOnFirstVisit, storageKey, onStart])
-
-  if (!open) return null
 
   return (
     <Joyride
@@ -328,8 +306,8 @@ export function NewbieTour({
       ref={joyrideRef}
       stepIndex={stepIndex}
       continuous
-      disableCloseOnEsc={!allowEscClose}
-      disableOverlayClose={!allowOverlayClose}
+      disableCloseOnEsc={true}
+      disableOverlayClose={true}
       callback={handleJoyrideCallback}
       tooltipComponent={CustomTooltip}
       styles={{

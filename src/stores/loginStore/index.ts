@@ -472,3 +472,4 @@ export const selectUserInfo = (s: LoginStore) => s.userInfo
 export const selectAvatarDataUrl = (s: LoginStore) => getAvatarDataUrl(s.userInfo)
 export const selectHasUnreadMessages = (s: LoginStore) =>
   s.messages.some((m) => !m.isReaded)
+export const hasNewbieTourShowed = (s:LoginStore) => s.hasNewbieTourShowed
