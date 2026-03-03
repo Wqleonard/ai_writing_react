@@ -1,5 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLoginStore } from '@/stores/loginStore'
 import MRoleCarousel from './MRoleCarousel'
@@ -48,7 +47,6 @@ const QA_LIST = [
 export default function MLandingPage() {
   const navigate = useNavigate()
   const { requireLogin } = useLoginStore()
-  const [currentRoleIndex, setCurrentRoleIndex] = useState(0)
   const isSendingRef = useRef(false)
 
   // 生成协议链接
@@ -90,13 +88,6 @@ export default function MLandingPage() {
       mtoast.error("复制失败")
     }
   }, [])
-
-  // 角色轮播变化回调
-  const handleRoleChange = useCallback((index: number) => {
-    setCurrentRoleIndex(index)
-  }, [])
-
-  const currentRole = ROLE_DATA[currentRoleIndex]
 
   return (
     <div className="overflow-y-auto h-screen overflow-x-hidden hide-scrollbar bg-[#f7f7f4]">
@@ -293,40 +284,7 @@ export default function MLandingPage() {
 
         {/* 角色轮播图 */}
         <section className="mt-20 w-full px-25">
-          <MRoleCarousel roles={ROLE_DATA} onRoleChange={handleRoleChange}/>
-
-          {/* 角色描述信息 */}
-          <div className="mt-6 flex flex-col items-center gap-2 min-h-[120px]">
-            <motion.div
-              key={currentRoleIndex}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col items-center gap-2"
-            >
-              <div className="text-[32px] font-bold text-[#464646]">
-                {currentRole?.name}
-              </div>
-              <div className="text-[24px] text-[#999999] w-55 text-center">
-                {currentRole?.description}
-              </div>
-            </motion.div>
-          </div>
-
-          {/* 进度指示器 */}
-          <div
-            className="h-13 px-9 mx-auto rounded-full w-fit bg-[#efefef] mt-6 flex items-center justify-center gap-2">
-            {ROLE_DATA.map((_, index) => (
-              <div
-                key={index}
-                className={`indicator-dot ${index === currentRoleIndex ? 'active' : ''}`}
-                onClick={() => {
-                  // 点击指示器切换角色
-                }}
-              />
-            ))}
-          </div>
+          <MRoleCarousel roles={ROLE_DATA} />
         </section>
 
         {/* 常见问题 */}
@@ -381,7 +339,7 @@ export default function MLandingPage() {
 
         {/* 底部版权信息 */}
         <div className="mt-22 flex flex-col gap-2 items-center text-[#999999] text-2xl pb-40">
-          <div className="w-150 h-[1px] bg-[#999999]"/>
+          <div className="w-150 h-px bg-[#999999]"/>
           <div className="mt-18">
             © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
           </div>
