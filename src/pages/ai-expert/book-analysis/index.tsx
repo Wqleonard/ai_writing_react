@@ -128,7 +128,18 @@ const BookAnalysisPage = () => {
         })) ?? [],
       }))
       if (newItems.length > 0) {
-        setTemplates((prev) => [...prev, ...newItems])
+        setTemplates((prev) => {
+          const seen = new Set<string>()
+          return [...prev, ...newItems].filter((item, index) => {
+            // Backend may return duplicate IDs across pages; dedupe before render.
+            const dedupeKey = item.id
+              ? `id:${item.id}`
+              : `fallback:${item.title}-${item.description}-${index}`
+            if (seen.has(dedupeKey)) return false
+            seen.add(dedupeKey)
+            return true
+          })
+        })
         setTemplatePage(nextPage)
       }
       if (res?.last === true) setTemplateHasMore(false)
@@ -375,9 +386,9 @@ const BookAnalysisPage = () => {
                 <div key="hot">
                   {templates.length > 0 ? (
                     <div className="grid w-full grid-cols-3 gap-2 pb-4">
-                      {templates.map((t) => (
+                      {templates.map((t, index) => (
                         <TemplateCard
-                          key={t.id}
+                          key={t.id ? `template-${t.id}` : `template-fallback-${index}-${t.title}`}
                           data={t}
                           showCreate
                           onCreate={handleTemplateClick}
