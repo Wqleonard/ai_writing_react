@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from "sonner";
-import { useLoginStore } from '@/stores/loginStore'
 import { useMobileChat, type ChatMessage } from '@/hooks/useMobileChat'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import {
@@ -34,18 +33,19 @@ interface ChatHistoryGroup {
 }
 
 export default function MChatPage() {
-  const { requireLogin } = useLoginStore()
-
   const [showChat, setShowChat] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [chatHistoryList, setChatHistoryList] = useState<ChatHistory[]>([])
   const [currentWorkId, setCurrentWorkId] = useState<string | number>('')
-  const [currentSessionId, setCurrentSessionId] = useState<string>('')
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
-  const [isNewSession, setIsNewSession] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isSendingRef = useRef(false)
+
+  // 生成 sessionId
+  const generateSessionId = useCallback(() => {
+    return crypto.randomUUID?.().replace(/-/g, '') || Date.now().toString(36)
+  }, [])
 
   // 使用聊天 hook
   const {
@@ -53,18 +53,18 @@ export default function MChatPage() {
     isSending,
     streamLoading,
     currentStreamingMessageId,
+    trendingTopics,
+    updateTrendingTopics,
     sendMessage,
     stopStream,
     clearMessages,
+    replaceMessages,
+    setSessionId,
+    resetSessionId,
   } = useMobileChat({
     workId: currentWorkId || '',
-    sessionId: currentSessionId,
+    generateSessionId,
   })
-
-  // 生成 sessionId
-  const generateSessionId = useCallback(() => {
-    return crypto.randomUUID?.().replace(/-/g, '') || Date.now().toString(36)
-  }, [])
 
   // 获取或创建 workId
   const getOrCreateWorkId = useCallback(async () => {
@@ -119,6 +119,9 @@ export default function MChatPage() {
 
   // 初始化
   useEffect(() => {
+    // 每次页面初始化都创建一个新的会话 ID
+    setSessionId(generateSessionId())
+
     const init = async () => {
       try {
         await getOrCreateWorkId()
@@ -127,7 +130,7 @@ export default function MChatPage() {
       }
     }
     init()
-  }, [])
+  }, [generateSessionId, getOrCreateWorkId, setSessionId])
 
   // 获取到 workId 后加载历史
   useEffect(() => {
@@ -151,19 +154,12 @@ export default function MChatPage() {
   const handleSend = useCallback(async () => {
     if (isSendingRef.current || !inputValue.trim()) return
 
-    // 如果是新对话，生成新的 sessionId
-    if (messages.length === 0 || !currentSessionId) {
-      const newSessionId = generateSessionId()
-      setCurrentSessionId(newSessionId)
-      setIsNewSession(true)
-    }
-
     const query = inputValue
     setInputValue('')
     setShowChat(true)
 
     await sendMessage(query)
-  }, [inputValue, messages.length, currentSessionId, generateSessionId, sendMessage])
+  }, [inputValue, sendMessage])
 
   // 创建新聊天
   const handleCreateNewChat = useCallback(() => {
@@ -172,39 +168,61 @@ export default function MChatPage() {
     setHistoryDrawerOpen(false)
     setInputValue('')
     clearMessages()
-    setCurrentSessionId(generateSessionId())
-    setIsNewSession(true)
-  }, [stopStream, clearMessages, generateSessionId])
+    resetSessionId()
+  }, [stopStream, clearMessages, resetSessionId])
+
+  useEffect(() => {
+    (async() => {
+      await updateTrendingTopics()
+    })()
+  }, [])
 
   // 加载历史会话
   const handleHistoryItemClick = useCallback(
     async (item: ChatHistory) => {
       try {
+        stopStream()
         const res: any = await getMobileChatHistoryById(String(currentWorkId), item.sessionId)
 
-        setCurrentSessionId(item.sessionId)
+        setSessionId(item.sessionId)
 
         if (Array.isArray(res)) {
-          // 转换历史消息
-          const convertedMessages: ChatMessage[] = res.map((msg: any) => ({
-            role: msg.role,
-            content: msg.role === 'human' ? msg.content : JSON.parse(msg.content) || '',
-            messageId: msg.id || '',
-            attachments: msg.attachments || [],
-            updatedTime: msg.updatedTime || new Date().toISOString(),
-          }))
+          const historyMessages = res
+            .map<ChatMessage>((msg: any) => {
+              const role = msg?.role === 'human' ? 'human' : 'ai'
+              let content: any = msg?.content ?? ''
 
-          // 这里需要更新 messages，但由于 hook 限制，需要通过其他方式
-          // 简单处理：重新设置 session 并让 hook 处理
+              if (role === 'ai' && typeof content === 'string') {
+                try {
+                  content = JSON.parse(content)
+                } catch {
+                  // fallback to plain text content
+                }
+              }
+
+              return {
+                role: role as 'human' | 'ai',
+                content,
+                messageId: String(msg?.id || msg?.messageId || ''),
+                attachments: Array.isArray(msg?.attachments) ? msg.attachments : [],
+                updatedTime: msg?.updatedTime || msg?.createdTime || new Date().toISOString(),
+              }
+            })
+            .filter((msg) => Boolean(msg.messageId))
+
+          replaceMessages(historyMessages)
+        } else {
+          replaceMessages([])
         }
 
         setShowChat(true)
         setHistoryDrawerOpen(false)
       } catch (e) {
         console.error('加载会话历史失败:', e)
+        toast.error('加载会话历史失败，请稍后重试')
       }
     },
-    [currentWorkId]
+    [currentWorkId, replaceMessages, setSessionId, stopStream]
   )
 
   // 添加到笔记
@@ -332,9 +350,9 @@ export default function MChatPage() {
               <div className="text-[28px] font-semibold text-[#464646]">创作热点</div>
             </div>
             <div className="flex flex-col">
-              {[1, 2, 3, 4, 5].map((_, index) => (
+              {trendingTopics.map((topic, index) => (
                 <div
-                  key={index}
+                  key={topic.name + index}
                   className="flex items-center  py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
                 >
                   <div className="leading-12 text-gray-500">
@@ -351,7 +369,7 @@ export default function MChatPage() {
                     >
                       {index + 1}
                     </span>
-                    <span className="text-gray-500">热门话题 {index + 1}</span>
+                    <span className="text-gray-500">{topic.name}</span>
                   </div>
                 </div>
               ))}

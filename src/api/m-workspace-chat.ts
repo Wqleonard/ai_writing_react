@@ -52,9 +52,14 @@ const getMobileChatHistoryById = (workId: string, sessionId: string) => {
   return apiClient.get(`/api/works/${workId}/session/${sessionId}/history`);
 };
 
+const getKeywordsRankReq = () => {
+  return apiClient.get("/api/rank/keywords-rank");
+}
+
 export {
   createNewMobileWork,
   getMobileChatHistory,
   postChatStream,
   getMobileChatHistoryById,
+  getKeywordsRankReq
 };
