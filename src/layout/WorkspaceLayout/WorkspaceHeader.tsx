@@ -26,7 +26,7 @@ export function WorkspaceHeader() {
   const location = useLocation()
   const { selectedNotes, removeNote, addNote, clearSelectedNotes } = useChatInputStore()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [showUserCenterDialog, setShowUserCenterDialog] = useState(false)
+  // const [showUserCenterDialog, setShowUserCenterDialog] = useState(false)
 
   const isLoggedIn = useLoginStore(selectIsLoggedIn)
   const logout = useLoginStore((s) => s.logout)
@@ -35,12 +35,12 @@ export function WorkspaceHeader() {
   const handleAccountMenuClick = useCallback(() => {
     setUserMenuOpen(false)
     openAccountDialog()
-  }, [openAccountDialog])
+  }, [])
 
   const handleQuotaMenuClick = useCallback(() => {
     setUserMenuOpen(false)
     openQuotaDialog()
-  }, [openQuotaDialog])
+  }, [])
 
   const handleNotesClick = useCallback(async () => {
     try {
@@ -127,11 +127,11 @@ export function WorkspaceHeader() {
                 <img src={avatarData} alt="用户头像" className="h-full w-full object-cover" />
               </div>
             </PopoverTrigger>
-            <PopoverContent align="end" side="bottom" className="w-[120px] rounded-md border border-[#e5e5e5] bg-white p-0 py-2 shadow-md">
+            <PopoverContent align="end" side="bottom" className="w-[120px] rounded-md border border-[#e5e5e5] bg-white p-2 shadow-md">
               <div className="flex flex-col">
                 <div
                   role="button"
-                  className="cursor-pointer outline-none px-4 py-2 text-sm transition-colors hover:bg-[#f5f5f5]"
+                  className="rounded-sm cursor-pointer outline-none px-4 py-2 text-sm transition-colors hover:bg-[#f5f5f5]"
                   onClick={handleAccountMenuClick}
                   onKeyDown={(e) => e.key === 'Enter' && handleAccountMenuClick()}
                 >
@@ -139,7 +139,7 @@ export function WorkspaceHeader() {
                 </div>
                 <div
                   role="button"
-                  className="cursor-pointer outline-none px-4 py-2 text-sm transition-colors hover:bg-[#f5f5f5]"
+                  className="rounded-sm cursor-pointer outline-none px-4 py-2 text-sm transition-colors hover:bg-[#f5f5f5]"
                   onClick={handleQuotaMenuClick}
                   onKeyDown={(e) => e.key === 'Enter' && handleQuotaMenuClick()}
                 >
@@ -147,7 +147,7 @@ export function WorkspaceHeader() {
                 </div>
                 <div
                   role="button"
-                  className="cursor-pointer outline-none px-4 py-2 text-sm transition-colors text-red-500 hover:bg-red-50"
+                  className="rounded-sm cursor-pointer outline-none px-4 py-2 text-sm transition-colors text-red-500 hover:bg-red-50"
                   onClick={handleLogoutMenuClick}
                   onKeyDown={(e) => e.key === 'Enter' && handleLogoutMenuClick()}
                 >

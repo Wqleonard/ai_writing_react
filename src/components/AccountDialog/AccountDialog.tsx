@@ -8,6 +8,7 @@ import { getUserInfoReq, updateUserInfo } from '@/api/users'
 import type { UserInfo } from '@/stores/loginStore'
 import { toast } from 'sonner'
 import { openDialog } from '@/lib/openDialog'
+import { Button } from "@/components/ui/Button.tsx";
 
 const MAX_NICKNAME_LENGTH = 20
 
@@ -152,22 +153,20 @@ export const AccountDialog = ({ open, onOpenChange }: AccountDialogProps) => {
                     </span>
                   </div>
                   <div className="flex items-center shrink-0 gap-2">
-                    <div
-                      role="button"
-                      className="cursor-pointer rounded-[10px] border border-[#dcdfe6] bg-white px-2.5 py-1.5 text-sm text-[#606266] hover:border-(--el-color-primary) hover:text-(--el-color-primary)"
+                    <Button
+                      variant="outline"
                       onClick={cancelEditNickname}
                       onKeyDown={(e) => e.key === 'Enter' && cancelEditNickname()}
                     >
                       取消
-                    </div>
-                    <div
-                      role="button"
-                      className="cursor-pointer rounded-[10px] bg-(--el-color-primary) px-2.5 py-1.5 text-sm text-white"
+                    </Button>
+                    <Button
+                      variant="default"
                       onClick={confirmEditNickname}
                       onKeyDown={(e) => e.key === 'Enter' && confirmEditNickname()}
                     >
                       确定
-                    </div>
+                    </Button>
                   </div>
                 </div>
               )}

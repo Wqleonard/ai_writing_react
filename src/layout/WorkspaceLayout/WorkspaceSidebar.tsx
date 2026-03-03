@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import LOGO from '@/assets/images/logo.webp'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip'
 import {
@@ -167,10 +167,10 @@ function AboutUsContent({ onClose }: { onClose: () => void }) {
 
 /** 加入社群 Popover 内容 */
 const JoinGroupContent = ({
-  onClose,
-  qrCode,
-  desc,
-}: {
+                            onClose,
+                            qrCode,
+                            desc,
+                          }: {
   onClose: () => void
   qrCode?: string
   desc?: string
@@ -244,14 +244,22 @@ export function WorkspaceSidebar() {
     navigate(item.route)
   }
 
+  const goLanding = useCallback(() => {
+    navigate('/')
+  }, [navigate])
+
   return (
-    <aside className="flex h-full w-[210px] bg-(--bg-secondary) shrink-0 flex-col justify-between rounded-tr-[20px] rounded-br-[20px] px-3 py-5">
+    <aside
+      className="flex h-full w-[210px] bg-(--bg-secondary) shrink-0 flex-col justify-between rounded-tr-[20px] rounded-br-[20px] px-3 py-5">
       {/* 顶部区域 */}
       <div>
         {/* Logo */}
-        <div className="flex w-full cursor-pointer items-center">
+        <div
+          className="flex w-full cursor-pointer items-center"
+          onClick={goLanding}
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-full">
-            <img src={LOGO} alt="" className="h-7 w-7" />
+            <img src={LOGO} alt="" className="h-7 w-7"/>
           </div>
           <span className="font-bold text-black">爆文猫写作</span>
           <span className="ml-[5px] rounded-full bg-[#9ca3af] px-[7px] text-[11px] font-medium leading-5 text-white">
@@ -266,7 +274,8 @@ export function WorkspaceSidebar() {
           offset={2}
           placement="bottom-end"
         >
-          <div className="mt-3 flex h-10 w-full bg-[#EFAF00] cursor-pointer items-center justify-center gap-2 rounded-lg text-base font-semibold text-black">
+          <div
+            className="mt-3 flex h-10 w-full bg-[#EFAF00] cursor-pointer items-center justify-center gap-2 rounded-lg text-base font-semibold text-black">
             <span>创建新作品</span>
             <span>+</span>
           </div>
@@ -299,7 +308,7 @@ export function WorkspaceSidebar() {
                           isExpanded && 'rotate-180'
                         )}
                       >
-                        <Iconfont unicode="&#xeaa1;" className="text-xs" />
+                        <Iconfont unicode="&#xeaa1;" className="text-xs"/>
                       </span>
                     </div>
 
@@ -308,7 +317,8 @@ export function WorkspaceSidebar() {
                       style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
                     >
                       <div className="min-h-0 overflow-hidden">
-                        <div className="relative ml-8 flex flex-col before:absolute before:left-[-4px] before:top-[-8px] before:h-[95%] before:w-px before:bg-[#d9d9d9]">
+                        <div
+                          className="relative ml-8 flex flex-col before:absolute before:left-[-4px] before:top-[-8px] before:h-[95%] before:w-px before:bg-[#d9d9d9]">
                           {item.children.map(child => {
                             const isChildActive = child.route === activeRoute
                             return (
@@ -368,7 +378,7 @@ export function WorkspaceSidebar() {
             <TooltipContent side="top">关于我们</TooltipContent>
           </Tooltip>
           <PopoverContent side="right" align="end" sideOffset={8} className="w-[260px] p-0">
-            <AboutUsContent onClose={() => setAboutOpen(false)} />
+            <AboutUsContent onClose={() => setAboutOpen(false)}/>
           </PopoverContent>
         </Popover>
 

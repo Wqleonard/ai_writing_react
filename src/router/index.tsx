@@ -1,34 +1,38 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom'
-import { WorkspaceLayout } from '@/layout'
-import MarkdownEditorPage from '@/pages/editor'
-import TrendingListPage from '@/pages/trending-list'
-import CoursePage from '@/pages/creation-community/course'
-import CourseDetailsPage from '@/pages/creation-community/course-details'
-import SharePage from '@/pages/creation-community/share'
-import ShareDetailsPage from '@/pages/creation-community/share-details'
-import ShareCreatePage from '@/pages/creation-community/share-create'
-import PromptPage from '@/pages/creation-community/prompt'
-import BookAnalysisPage from '@/pages/ai-expert/book-analysis'
-import WritingStylesPage from '@/pages/ai-expert/writing-styles'
-import MyPlacePage from '@/pages/my-place'
-import NotFoundPage from '@/pages/not-found'
+import { lazy } from 'react'
 
+// 首屏关键组件保持同步导入
 import LandingPage from '@/pages/landing'
+import { WorkspaceLayout } from '@/layout'
+
+// 懒加载页面组件
+const MarkdownEditorPage = lazy(() => import('@/pages/editor'))
+const TrendingListPage = lazy(() => import('@/pages/trending-list'))
+const CoursePage = lazy(() => import('@/pages/creation-community/course'))
+const CourseDetailsPage = lazy(() => import('@/pages/creation-community/course-details'))
+const SharePage = lazy(() => import('@/pages/creation-community/share'))
+const ShareDetailsPage = lazy(() => import('@/pages/creation-community/share-details'))
+const ShareCreatePage = lazy(() => import('@/pages/creation-community/share-create'))
+const PromptPage = lazy(() => import('@/pages/creation-community/prompt'))
+const BookAnalysisPage = lazy(() => import('@/pages/ai-expert/book-analysis'))
+const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
+const MyPlacePage = lazy(() => import('@/pages/my-place'))
+const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts
-import MLayout from '@/layout/MLayout/MLayout.tsx'
-import MWorkSpace from '@/layout/MWorkSpace'
+const MLayout = lazy(() => import('@/layout/MLayout/MLayout.tsx'))
+const MWorkSpace = lazy(() => import('@/layout/MWorkSpace'))
 
 // Mobile pages
-import MLandingPage from '@/pages/m-landing'
-import MChatPage from '@/pages/m-workspace/chat'
-import MNotesPage from '@/pages/m-workspace/notes'
-import MNotesDetailPage from '@/pages/m-workspace/notes-detail'
-import MMinePage from '@/pages/m-workspace/mine'
-import MRulesPage from '@/pages/m-rules'
-import MFeedbackIssuePage from '@/pages/m-feedback-issue'
-import MUserAgreementPage from '@/pages/m-user-agreement'
-import MPrivacyPolicyPage from '@/pages/m-privacy-policy'
+const MLandingPage = lazy(() => import('@/pages/m-landing'))
+const MChatPage = lazy(() => import('@/pages/m-workspace/chat'))
+const MNotesPage = lazy(() => import('@/pages/m-workspace/notes'))
+const MNotesDetailPage = lazy(() => import('@/pages/m-workspace/notes-detail'))
+const MMinePage = lazy(() => import('@/pages/m-workspace/mine'))
+const MRulesPage = lazy(() => import('@/pages/m-rules'))
+const MFeedbackIssuePage = lazy(() => import('@/pages/m-feedback-issue'))
+const MUserAgreementPage = lazy(() => import('@/pages/m-user-agreement'))
+const MPrivacyPolicyPage = lazy(() => import('@/pages/m-privacy-policy'))
 
 const routes: RouteObject[] = [
   {
