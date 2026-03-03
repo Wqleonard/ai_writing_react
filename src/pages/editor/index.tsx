@@ -6,7 +6,13 @@ import mermaid from "mermaid";
 import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MarkdownEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import IconFont from "@/components/IconFont/Iconfont";
-import { EditorTopToolbar, EditorTreeSidebar, EditorResizeHandle } from "./components";
+import {
+  EditorTopToolbar,
+  EditorTreeSidebar,
+  EditorResizeHandle,
+  EditChangesPanel,
+  type EditorChangeItem,
+} from "./components";
 import { ProChatContainer, ProChatPanel } from "@/components/ProChatContainer";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { FileMessageDisplay } from "@/components/FileMessageDisplay";
@@ -18,7 +24,7 @@ import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
 import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
 import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
-import { useLangGraphStream } from "@/hooks/useLangGraphStream";
+import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
 import { useLLM } from "@/hooks/useLLM";
 import type {
   ChatMessage,
@@ -107,6 +113,8 @@ type WorkVersion = {
   updatedTime?: string;
 };
 
+type FileChangesMap = Record<string, EditorChangeItem[]>;
+
 const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   fontSize: 22,
   lineHeight: 1.3,
@@ -118,6 +126,36 @@ const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
 const getWordCount = (text: string): number => {
   if (!text || typeof text !== "string") return 0;
   return text.replace(/\s/g, "").length;
+};
+
+const WHITESPACE_RE = /\s/;
+
+const toWhitespaceInsensitive = (input: string) => {
+  const compactChars: string[] = [];
+  const indexMap: number[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i] ?? "";
+    if (WHITESPACE_RE.test(ch)) continue;
+    compactChars.push(ch);
+    indexMap.push(i);
+  }
+  return {
+    compact: compactChars.join(""),
+    indexMap,
+  };
+};
+
+const findRangeIgnoringWhitespace = (source: string, target: string) => {
+  const sourcePacked = toWhitespaceInsensitive(source);
+  const targetPacked = toWhitespaceInsensitive(target);
+  if (!targetPacked.compact) return null;
+  const packedStart = sourcePacked.compact.indexOf(targetPacked.compact);
+  if (packedStart < 0) return null;
+  const packedEnd = packedStart + targetPacked.compact.length - 1;
+  const start = sourcePacked.indexMap[packedStart];
+  const end = sourcePacked.indexMap[packedEnd];
+  if (start === undefined || end === undefined) return null;
+  return { start, endExclusive: end + 1 };
 };
 
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
@@ -300,7 +338,8 @@ const MarkdownEditorPage = () => {
         return msg;
       });
     },
-    onUpdateFiles: (files, fileId) => {
+    onUpdateFiles: (files, fileId, editInfoList) => {
+      console.log(editInfoList, 'editInfoList')
       const mergedFiles = { ...useEditorStore.getState().serverData, ...files };
       setServerData(mergedFiles);
       const targetFileId =
@@ -311,6 +350,29 @@ const MarkdownEditorPage = () => {
             : "";
       if (targetFileId) {
         setServerDataFile(targetFileId, mergedFiles[targetFileId] ?? "");
+      }
+      if (Array.isArray(editInfoList) && editInfoList.length > 0) {
+        const grouped = editInfoList.reduce<Record<string, EditFileArgsType[]>>((acc, item) => {
+          const path = item.file_path;
+          if (!path) return acc;
+          if (!acc[path]) acc[path] = [];
+          acc[path].push(item);
+          return acc;
+        }, {});
+        setFileChangesMap((prev) => {
+          const next = { ...prev };
+          Object.keys(grouped).forEach((path) => {
+            const existing = next[path] ?? [];
+            const appended: EditorChangeItem[] = grouped[path].map((item, idx) => ({
+              index: Date.now() + idx + Math.floor(Math.random() * 1000),
+              oldString: item.old_string ?? "",
+              newString: item.new_string ?? "",
+              status: "pending",
+            }));
+            next[path] = [...existing, ...appended];
+          });
+          return next;
+        });
       }
     },
     onComplete: async () => {
@@ -405,7 +467,6 @@ const MarkdownEditorPage = () => {
       streamingMessageIdRef.current = "";
     },
   });
-
   const finalizeStreamingMessageWithSuffix = useCallback(
     (suffix: string) => {
       const finalized = streamingMessageRef.current;
@@ -443,10 +504,14 @@ const MarkdownEditorPage = () => {
     if (langGraphStream.isStreaming) return "streaming";
     return "ready";
   }, [langGraphStream.error, langGraphStream.isStreaming]);
-  const isEditorEditable = chatInputStatus !== "streaming";
+  const isStreamingOverlayVisible = chatInputStatus === "streaming";
 
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
+  const editorMainScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeRemarkHighlightRef = useRef<HTMLElement | null>(null);
+  const [activeChangeIndex, setActiveChangeIndex] = useState<number | null>(null);
+  const [changesPanelHeight, setChangesPanelHeight] = useState(0);
   const insCanvasRef = useRef<InsCanvasApi | null>(null);
   const [, setCanvasReadyKey] = useState(0);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
@@ -477,6 +542,8 @@ const MarkdownEditorPage = () => {
   const [workVersionList, setWorkVersionList] = useState<WorkVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [restoringVersionId, setRestoringVersionId] = useState<string>("");
+  const [isChangesPanelVisible, setIsChangesPanelVisible] = useState(false);
+  const [fileChangesMap, setFileChangesMap] = useState<FileChangesMap>({});
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
     try {
       const raw = localStorage.getItem(EDITOR_SETTINGS_STORAGE_KEY);
@@ -562,7 +629,6 @@ const MarkdownEditorPage = () => {
     customStyle.textContent = `
       .page-editor-panel .editor-content-layout {
         padding-left: ${settings.margin}px;
-        padding-right: ${settings.margin}px;
       }
 
       .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror {
@@ -587,20 +653,20 @@ const MarkdownEditorPage = () => {
   }, [applyEditorStyles, editorSettings]);
 
   const handleUndo = useCallback(() => {
-    if (!isEditorEditable) {
+    if (chatInputStatus === "streaming") {
       toast.info("AI 生成中，暂不可撤销");
       return;
     }
     markdownEditorRef.current?.undo();
-  }, [isEditorEditable]);
+  }, [chatInputStatus]);
 
   const handleRedo = useCallback(() => {
-    if (!isEditorEditable) {
+    if (chatInputStatus === "streaming") {
       toast.info("AI 生成中，暂不可反撤销");
       return;
     }
     markdownEditorRef.current?.redo();
-  }, [isEditorEditable]);
+  }, [chatInputStatus]);
 
   const handleSearchReplace = useCallback(() => {
     setShowSearchReplaceDialog(true);
@@ -730,6 +796,260 @@ const MarkdownEditorPage = () => {
   }, [leftPanelWidthRem]);
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
+  const currentFileChanges = useMemo(
+    () => fileChangesMap[fileKey] ?? [],
+    [fileChangesMap, fileKey]
+  );
+  const currentFilePendingChanges = useMemo(
+    () => currentFileChanges.filter((c) => c.status === "pending"),
+    [currentFileChanges]
+  );
+  const currentFilePendingCount = useMemo(
+    () => currentFilePendingChanges.length,
+    [currentFilePendingChanges]
+  );
+  const shouldShowRemarkOverlay = currentFilePendingCount > 0;
+  const isEditorEditable = chatInputStatus !== "streaming" && !shouldShowRemarkOverlay;
+
+  const clearRemarkHighlight = useCallback(() => {
+    const active = activeRemarkHighlightRef.current;
+    if (!active) return;
+    active.classList.remove("remark-highlight-paragraph");
+    activeRemarkHighlightRef.current = null;
+  }, []);
+
+  const highlightChangeInEditor = useCallback(
+    (oldText: string, newText?: string) => {
+      clearRemarkHighlight();
+      const editorRoot = (markdownEditorRef.current?.editor as { view?: { dom?: HTMLElement } } | null)?.view?.dom;
+      if (!editorRoot) return;
+      const normalize = (input: string) =>
+        input
+          .replace(/[`*_#>\-\[\]\(\)!~]/g, " ")
+          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】\[\]{}]/g, " ")
+          .replace(/\s+/g, "")
+          .trim();
+      const buildTargets = (input: string) => {
+        const normalized = normalize(input);
+        const lines = input
+          .split("\n")
+          .map((line) => normalize(line))
+          .filter((line) => line.length >= 4);
+        return [normalized, ...lines].filter(Boolean);
+      };
+      const targets = [...buildTargets(newText ?? ""), ...buildTargets(oldText)]
+        .sort((a, b) => b.length - a.length)
+        .slice(0, 14);
+      if (targets.length === 0) return;
+      const blocks = Array.from(
+        editorRoot.querySelectorAll("p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th")
+      ) as HTMLElement[];
+      let matchedBlock: HTMLElement | null = null;
+      let bestScore = 0;
+      for (const block of blocks) {
+        const blockText = normalize(block.textContent ?? "");
+        if (!blockText) continue;
+        for (const target of targets) {
+          const hit = blockText.includes(target) || target.includes(blockText);
+          if (!hit) continue;
+            const score = Math.min(blockText.length, target.length) + (target.length > 18 ? 8 : 0);
+          if (score > bestScore) {
+            bestScore = score;
+            matchedBlock = block;
+          }
+        }
+      }
+      if (!matchedBlock) return;
+      matchedBlock.classList.add("remark-highlight-paragraph");
+      activeRemarkHighlightRef.current = matchedBlock;
+      try {
+        matchedBlock.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {
+        // ignore smooth scroll failure
+      }
+    },
+    [clearRemarkHighlight]
+  );
+
+  const handleEditorMaskWheel = useCallback((e: React.WheelEvent) => {
+    const el = editorMainScrollRef.current;
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.scrollTop += e.deltaY;
+    el.scrollLeft += e.deltaX;
+  }, []);
+
+  const applyChangeToFile = useCallback(
+    (targetFileKey: string, oldString: string, newString: string): boolean => {
+      const current = useEditorStore.getState().serverData[targetFileKey] ?? "";
+      if (!oldString) return false;
+      const exactIndex = current.indexOf(oldString);
+      if (exactIndex >= 0) {
+        const updated =
+          current.slice(0, exactIndex) +
+          newString +
+          current.slice(exactIndex + oldString.length);
+        setServerDataFile(targetFileKey, updated);
+        return true;
+      }
+
+      const looseRange = findRangeIgnoringWhitespace(current, oldString);
+      if (looseRange) {
+        const updated =
+          current.slice(0, looseRange.start) +
+          newString +
+          current.slice(looseRange.endExclusive);
+        setServerDataFile(targetFileKey, updated);
+        return true;
+      }
+
+      // 当后端已先行写入新内容时，不再误报“找不到原文片段”
+      if (!newString) return false;
+      if (current.includes(newString)) return true;
+      const alreadyApplied = findRangeIgnoringWhitespace(current, newString);
+      return alreadyApplied !== null;
+    },
+    [setServerDataFile]
+  );
+
+  const updateChangeStatus = useCallback(
+    (targetFileKey: string, changeIndex: number, status: "accepted" | "rejected") => {
+      setFileChangesMap((prev) => {
+        const list = prev[targetFileKey] ?? [];
+        const nextList = list.map((item) =>
+          item.index === changeIndex ? { ...item, status } : item
+        );
+        return { ...prev, [targetFileKey]: nextList };
+      });
+    },
+    []
+  );
+
+  const handleAcceptChange = useCallback(
+    (changeIndex: number) => {
+      const target = (fileChangesMap[fileKey] ?? []).find((c) => c.index === changeIndex);
+      if (!target || target.status !== "pending") return;
+      const applied = applyChangeToFile(fileKey, target.oldString, target.newString);
+      if (!applied) {
+        toast.warning("未找到可替换的原文片段，无法应用该修改");
+        return;
+      }
+      updateChangeStatus(fileKey, changeIndex, "accepted");
+    },
+    [applyChangeToFile, fileChangesMap, fileKey, updateChangeStatus]
+  );
+
+  const handleRejectChange = useCallback(
+    (changeIndex: number) => {
+      const target = (fileChangesMap[fileKey] ?? []).find((c) => c.index === changeIndex);
+      if (!target || target.status !== "pending") return;
+      updateChangeStatus(fileKey, changeIndex, "rejected");
+    },
+    [fileChangesMap, fileKey, updateChangeStatus]
+  );
+
+  const handleCurrentPageAcceptAll = useCallback(() => {
+    const list = fileChangesMap[fileKey] ?? [];
+    let appliedCount = 0;
+    for (const item of list) {
+      if (item.status !== "pending") continue;
+      const applied = applyChangeToFile(fileKey, item.oldString, item.newString);
+      if (!applied) continue;
+      updateChangeStatus(fileKey, item.index, "accepted");
+      appliedCount += 1;
+    }
+    if (appliedCount > 0) toast.success(`已接受 ${appliedCount} 处修改`);
+    else toast.warning("当前页面没有可接受的修改");
+    clearRemarkHighlight();
+  }, [applyChangeToFile, fileChangesMap, fileKey, updateChangeStatus, clearRemarkHighlight]);
+
+  const handleCurrentPageRejectAll = useCallback(() => {
+    const list = fileChangesMap[fileKey] ?? [];
+    const pending = list.filter((item) => item.status === "pending");
+    pending.forEach((item) => updateChangeStatus(fileKey, item.index, "rejected"));
+    if (pending.length > 0) toast.success(`已撤销 ${pending.length} 处修改`);
+    else toast.warning("当前页面没有可撤销的修改");
+    clearRemarkHighlight();
+  }, [fileChangesMap, fileKey, updateChangeStatus, clearRemarkHighlight]);
+
+  useEffect(() => {
+    setIsChangesPanelVisible(currentFilePendingCount > 0);
+  }, [currentFilePendingCount]);
+
+  useEffect(() => {
+    const hasActive = currentFilePendingChanges.some((item) => item.index === activeChangeIndex);
+    if (hasActive) return;
+    setActiveChangeIndex(currentFilePendingChanges[0]?.index ?? null);
+  }, [currentFilePendingChanges, activeChangeIndex]);
+
+  useEffect(() => {
+    if (isChangesPanelVisible) return;
+    clearRemarkHighlight();
+  }, [isChangesPanelVisible, clearRemarkHighlight]);
+
+  useEffect(() => {
+    clearRemarkHighlight();
+  }, [fileKey, clearRemarkHighlight]);
+
+  useEffect(() => {
+    const el = editorMainScrollRef.current;
+    if (!el) return;
+    const updateHeight = () => {
+      const contentEl = el.querySelector(".markdown-editor-content") as HTMLElement | null;
+      const proseMirrorEl = contentEl?.querySelector(".ProseMirror") as HTMLElement | null;
+      const next = Math.max(
+        proseMirrorEl?.scrollHeight ?? 0,
+        contentEl?.scrollHeight ?? 0,
+        el.scrollHeight,
+        el.clientHeight
+      );
+      setChangesPanelHeight((prev) => (prev === next ? prev : next));
+    };
+    updateHeight();
+    const ro = new ResizeObserver(updateHeight);
+    ro.observe(el);
+    const contentEl = el.querySelector(".markdown-editor-content") as HTMLElement | null;
+    const proseMirrorEl = contentEl?.querySelector(".ProseMirror") as HTMLElement | null;
+    if (contentEl) ro.observe(contentEl);
+    if (proseMirrorEl) ro.observe(proseMirrorEl);
+    const mo = new MutationObserver(updateHeight);
+    if (proseMirrorEl) {
+      mo.observe(proseMirrorEl, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    }
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [fileKey, relationViewMode, currentFilePendingCount]);
+
+  useEffect(() => {
+    if (!shouldShowRemarkOverlay) {
+      clearRemarkHighlight();
+      return;
+    }
+    const activeChange =
+      currentFilePendingChanges.find((item) => item.index === activeChangeIndex) ??
+      currentFilePendingChanges[0];
+    if (!activeChange) {
+      clearRemarkHighlight();
+      return;
+    }
+    highlightChangeInEditor(activeChange.oldString, activeChange.newString);
+  }, [
+    shouldShowRemarkOverlay,
+    currentFilePendingChanges,
+    activeChangeIndex,
+    clearRemarkHighlight,
+    highlightChangeInEditor,
+  ]);
+
   // 仅当 serverData 的 key 列表变化时重建树，避免每次输入都跑 serverDataToTree
   const serverDataKeysSig = useMemo(
     () => Object.keys(serverData ?? {}).sort().join(","),
@@ -1108,112 +1428,189 @@ const MarkdownEditorPage = () => {
             </div>
 
             {/* 编辑区主体 */}
-            <div className="flex-1 min-h-0 flex flex-col relative overflow-y-auto">
-              <div className="editor-content-layout flex flex-col flex-1 min-h-0 relative">
-                <div className="flex flex-col flex-1 min-h-0">
-                  <div className="flex flex-col flex-1 min-h-0">
-                    {currentEditingId ? (
-                      isEditingLabel ? (
-                        <input
-                          ref={labelInputRef}
-                          type="text"
-                          disabled={!isEditorEditable}
-                          className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
-                          value={editingLabelValue}
-                          onChange={(e) => setEditingLabelValue(e.target.value)}
-                          onBlur={saveLabelEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              saveLabelEdit();
-                            } else if (e.key === "Escape") {
-                              e.preventDefault();
-                              cancelLabelEdit();
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
-                          onClick={() => {
-                            if (!isEditorEditable) return;
-                            startEditingLabel(currentLabel);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              if (!isEditorEditable) return;
-                              startEditingLabel(currentLabel);
-                            }
-                          }}
-                        >
-                          {currentLabel}
+            <div className="flex flex-1 min-h-0 min-w-0 relative">
+              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col">
+                <div
+                  ref={editorMainScrollRef}
+                  className={clsx(
+                    "h-full min-h-0 flex flex-col relative overflow-y-auto",
+                    isStreamingOverlayVisible && "cursor-not-allowed"
+                  )}
+                >
+                  <div className="editor-content-layout flex flex-1 min-h-0 relative">
+                    <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
+                      <div className="flex flex-col flex-1 min-h-0">
+                        {currentEditingId ? (
+                          isEditingLabel ? (
+                            <input
+                              ref={labelInputRef}
+                              type="text"
+                              disabled={!isEditorEditable}
+                              className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
+                              value={editingLabelValue}
+                              onChange={(e) => setEditingLabelValue(e.target.value)}
+                              onBlur={saveLabelEdit}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  saveLabelEdit();
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelLabelEdit();
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
+                              onClick={() => {
+                                if (!isEditorEditable) return;
+                                startEditingLabel(currentLabel);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (!isEditorEditable) return;
+                                  startEditingLabel(currentLabel);
+                                }
+                              }}
+                            >
+                              {currentLabel}
+                            </div>
+                          )
+                        ) : (
+                          <div className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0">
+                            {currentLabel}
+                          </div>
+                        )}
+                        <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
+                          {isRoleSettingPreviewFile && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <button
+                                type="button"
+                                className={clsx(
+                                  "px-2 py-1 rounded border transition-colors",
+                                  relationViewMode === "edit"
+                                    ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                    : "bg-background text-muted-foreground border-border"
+                                )}
+                                onClick={() => setRelationViewMode("edit")}
+                              >
+                                编辑
+                              </button>
+                              <button
+                                type="button"
+                                className={clsx(
+                                  "px-2 py-1 rounded border transition-colors",
+                                  relationViewMode === "preview"
+                                    ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                    : "bg-background text-muted-foreground border-border"
+                                )}
+                                onClick={() => setRelationViewMode("preview")}
+                              >
+                                {isRoleRelationFile ? "关系图预览" : "表格预览"}
+                              </button>
+                            </div>
+                          )}
+                          {relationViewMode === "preview" && isRoleRelationFile ? (
+                            <div className="flex-1 min-h-0">
+                              <MermaidRelationPreview markdown={currentContent} />
+                            </div>
+                          ) : relationViewMode === "preview" && isRoleTableFile ? (
+                            <div className="flex-1 min-h-0">
+                              <RoleTablePreview markdown={currentContent} />
+                            </div>
+                          ) : (
+                            <MarkdownEditor
+                              ref={markdownEditorRef}
+                              key={fileKey}
+                              className="editor-outer-scroll-mode"
+                              value={currentContent}
+                              onChange={(markdown) => setServerDataFile(fileKey, markdown)}
+                              placeholder={EDITOR_PLACEHOLDER}
+                              readonly={!isEditorEditable}
+                            />
+                          )}
                         </div>
-                      )
-                    ) : (
-                      <div className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0">
-                        {currentLabel}
                       </div>
-                    )}
-                    <div className="flex-1 min-h-[200px] flex flex-col gap-2">
-                      {isRoleSettingPreviewFile && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <button
-                            type="button"
-                            className={clsx(
-                              "px-2 py-1 rounded border transition-colors",
-                              relationViewMode === "edit"
-                                ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
-                                : "bg-background text-muted-foreground border-border"
-                            )}
-                            onClick={() => setRelationViewMode("edit")}
-                          >
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            className={clsx(
-                              "px-2 py-1 rounded border transition-colors",
-                              relationViewMode === "preview"
-                                ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
-                                : "bg-background text-muted-foreground border-border"
-                            )}
-                            onClick={() => setRelationViewMode("preview")}
-                          >
-                            {isRoleRelationFile ? "关系图预览" : "表格预览"}
-                          </button>
-                        </div>
-                      )}
-                      {relationViewMode === "preview" && isRoleRelationFile ? (
-                        <div className="flex-1 min-h-0">
-                          <MermaidRelationPreview markdown={currentContent} />
-                        </div>
-                      ) : relationViewMode === "preview" && isRoleTableFile ? (
-                        <div className="flex-1 min-h-0">
-                          <RoleTablePreview markdown={currentContent} />
-                        </div>
-                      ) : (
-                        <MarkdownEditor
-                          ref={markdownEditorRef}
-                          key={fileKey}
-                          className="editor-outer-scroll-mode"
-                          value={currentContent}
-                          onChange={(markdown) => setServerDataFile(fileKey, markdown)}
-                          placeholder={EDITOR_PLACEHOLDER}
-                          readonly={!isEditorEditable}
-                        />
-                      )}
+                      <StepWorkflow
+                        ref={stepWorkflowRef}
+                        totalMdContentLength={wordCount}
+                        currentEditingId={currentEditingId}
+                      />
                     </div>
                   </div>
-                  <StepWorkflow
-                    ref={stepWorkflowRef}
-                    totalMdContentLength={wordCount}
-                    currentEditingId={currentEditingId}
+                </div>
+                {!isEditorEditable && (
+                  <div
+                    aria-hidden
+                    className="absolute inset-x-0 bottom-0 top-0 z-20 bg-white/35 cursor-not-allowed pointer-events-auto"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    onWheel={handleEditorMaskWheel}
+                  />
+                )}
+                {shouldShowRemarkOverlay && (
+                  <div className="pointer-events-none absolute bottom-3 left-2 z-40">
+                    <div className="pointer-events-auto flex w-fit items-center gap-2 rounded-md bg-[rgba(255,255,255,0.92)] px-2 py-1 shadow-sm">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCurrentPageAcceptAll}
+                      >
+                        当前页面全部接受
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCurrentPageRejectAll}
+                      >
+                        当前页面全部撤销
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsChangesPanelVisible((v) => !v)}
+                      >
+                        修改详情({currentFilePendingCount})
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {isChangesPanelVisible && (
+                <div className="h-full w-[20rem] shrink-0 min-h-0 overflow-hidden border-l border-[var(--border-color)] bg-[var(--bg-primary)]">
+                  <EditChangesPanel
+                    changes={currentFileChanges}
+                    onAccept={handleAcceptChange}
+                    onReject={handleRejectChange}
+                    activeChangeIndex={activeChangeIndex}
+                    onActiveChangeIndexChange={setActiveChangeIndex}
+                    panelHeight={changesPanelHeight}
+                    onSelectChange={(change) => {
+                      if (!change) {
+                        clearRemarkHighlight();
+                        return;
+                      }
+                      highlightChangeInEditor(change.oldString, change.newString);
+                    }}
                   />
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

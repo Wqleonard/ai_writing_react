@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState, useEffect, useRef } from "react"
 import clsx from "clsx"
 import { toast } from "sonner"
 import IconFont from "@/components/IconFont/Iconfont"
-import { TriangleAlert } from "lucide-react"
+import { ChevronRight, TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
 import {
   Dialog,
@@ -18,7 +18,7 @@ import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
 import { updateWorkInfoReq } from "@/api/works"
 import { serverDataToTree } from "@/stores/editorStore/utils"
-import type { FileTreeNode } from "@/stores/editorStore/types"
+import type { FileTreeNode, ServerData } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
 
@@ -48,6 +48,101 @@ const generateUniqueName = (
   return name
 }
 
+type DropPosition = "above" | "below"
+
+function findParentAndIndex(
+  nodes: FileTreeNode[],
+  nodeId: string,
+  parentId: string | null = null
+): { parentId: string | null; index: number } {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]
+    if (node.id === nodeId) return { parentId, index: i }
+    if (node.children?.length) {
+      const found = findParentAndIndex(node.children, nodeId, node.id)
+      if (found.index !== -1) return found
+    }
+  }
+  return { parentId: null, index: -1 }
+}
+
+function reorderInSameLevel(
+  nodes: FileTreeNode[],
+  draggedId: string,
+  targetId: string,
+  position: DropPosition
+): FileTreeNode[] {
+  const next = structuredClone(nodes) as FileTreeNode[]
+
+  const getChildrenByParentId = (list: FileTreeNode[], parentId: string | null): FileTreeNode[] => {
+    if (parentId == null) return list
+    const stack = [...list]
+    while (stack.length > 0) {
+      const current = stack.pop()
+      if (!current) break
+      if (current.id === parentId) return current.children
+      if (current.children?.length) stack.push(...current.children)
+    }
+    return list
+  }
+
+  const draggedLoc = findParentAndIndex(next, draggedId)
+  const targetLoc = findParentAndIndex(next, targetId)
+  if (draggedLoc.index < 0 || targetLoc.index < 0) return next
+  if (draggedLoc.parentId !== targetLoc.parentId) return next
+
+  const siblings = getChildrenByParentId(next, draggedLoc.parentId)
+  const [moved] = siblings.splice(draggedLoc.index, 1)
+  if (!moved) return next
+
+  let insertIndex = position === "above" ? targetLoc.index : targetLoc.index + 1
+  if (draggedLoc.index < targetLoc.index) insertIndex -= 1
+  insertIndex = Math.max(0, Math.min(insertIndex, siblings.length))
+  siblings.splice(insertIndex, 0, moved)
+
+  return next
+}
+
+function buildServerDataByTreeOrder(
+  nodes: FileTreeNode[],
+  prevServerData: ServerData
+): ServerData {
+  const ordered: ServerData = {}
+  const usedKeys = new Set<string>()
+
+  const walk = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      if (node.isDirectory) {
+        const dirKey = `${node.id}/`
+        if (Object.prototype.hasOwnProperty.call(prevServerData, dirKey)) {
+          ordered[dirKey] = prevServerData[dirKey] ?? ""
+          usedKeys.add(dirKey)
+        }
+        if (!node.children?.length) {
+          ordered[dirKey] = prevServerData[dirKey] ?? ""
+          usedKeys.add(dirKey)
+        }
+        walk(node.children ?? [])
+      } else {
+        const fileKey = node.id
+        ordered[fileKey] = prevServerData[fileKey] ?? node.content ?? ""
+        usedKeys.add(fileKey)
+      }
+    }
+  }
+
+  walk(nodes)
+
+  // 兜底保留未出现在树中的键，避免意外数据丢失
+  Object.keys(prevServerData).forEach((k) => {
+    if (!usedKeys.has(k)) {
+      ordered[k] = prevServerData[k]
+    }
+  })
+
+  return ordered
+}
+
 interface TreeNodeRowProps {
   node: FileTreeNode
   level: number
@@ -57,6 +152,16 @@ interface TreeNodeRowProps {
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
   expandedIds: Set<string>
   onToggleExpand: (id: string) => void
+  dragState: {
+    draggedId: string | null
+    dropTargetId: string | null
+    dropPosition: DropPosition
+  }
+  onDragStart: (e: React.DragEvent, node: FileTreeNode) => void
+  onDragOver: (e: React.DragEvent, node: FileTreeNode) => void
+  onDragLeave: (e: React.DragEvent, node: FileTreeNode) => void
+  onDrop: (e: React.DragEvent, node: FileTreeNode) => void
+  onDragEnd: () => void
 }
 
 const TreeNodeRow = ({
@@ -68,12 +173,20 @@ const TreeNodeRow = ({
   onContextMenu,
   expandedIds,
   onToggleExpand,
+  dragState,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
   const isSelected = currentKey === node.id
   const isMd = !isDir && node.fileType === "md"
   const expanded = expandedIds.has(node.id)
-  const hasChildren = node.children && node.children.length > 0
+  const hasChildren = !!(node.children && node.children.length > 0)
+  const isDragged = dragState.draggedId === node.id
+  const showDropLine = dragState.dropTargetId === node.id
 
   const handleClick = useCallback(() => {
     if (isMd) onSelect(node)
@@ -85,12 +198,20 @@ const TreeNodeRow = ({
       <div
         role="button"
         tabIndex={0}
+        draggable
         className={clsx(
-          "flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-all duration-200",
+          "relative flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-all duration-200",
           "min-h-[32px] rounded-[4px]",
           isSelected && "bg-[#fffef9] text-[var(--text-primary)]",
           !isSelected && "hover:bg-[#fffef9]",
-          isDir && "cursor-pointer"
+          isDir && "cursor-pointer",
+          isDragged && "opacity-50 scale-[0.98]",
+          showDropLine &&
+            dragState.dropPosition === "above" &&
+            "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-[var(--theme-color)] before:content-['']",
+          showDropLine &&
+            dragState.dropPosition === "below" &&
+            "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-[var(--theme-color)] after:content-['']"
         )}
         style={{ paddingLeft: 8 + level * 16 }}
         onClick={handleClick}
@@ -101,12 +222,17 @@ const TreeNodeRow = ({
           }
         }}
         onContextMenu={(e) => onContextMenu(e, node)}
+        onDragStart={(e) => onDragStart(e, node)}
+        onDragOver={(e) => onDragOver(e, node)}
+        onDragLeave={(e) => onDragLeave(e, node)}
+        onDrop={(e) => onDrop(e, node)}
+        onDragEnd={onDragEnd}
       >
-        {/* 展开/折叠：仅目录节点显示，悬浮时可见 */}
+        {/* 展开/折叠：目录节点显示旋转箭头 */}
         <div
           className={clsx(
-            "flex shrink-0 items-center justify-center w-5 h-5 cursor-pointer transition-opacity duration-200",
-            isDir ? "opacity-0 group-hover/node:opacity-100" : "opacity-0"
+            "mr-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-all duration-200",
+            isDir ? "opacity-100 text-[var(--text-secondary)] hover:text-[var(--theme-color)]" : "opacity-0"
           )}
           style={!isDir ? { width: 20, minWidth: 20 } : undefined}
           onClick={(e) => {
@@ -117,9 +243,12 @@ const TreeNodeRow = ({
           }}
         >
           {isDir ? (
-            <span className="text-[var(--text-secondary)] text-xs select-none hover:text-[var(--theme-color)]">
-              {expanded ? "▼" : "▶"}
-            </span>
+            <ChevronRight
+              className={clsx(
+                "size-3.5 select-none transition-transform duration-200",
+                expanded && "rotate-90"
+              )}
+            />
           ) : (
             <span className="w-2" />
           )}
@@ -166,6 +295,12 @@ const TreeNodeRow = ({
               onContextMenu={onContextMenu}
               expandedIds={expandedIds}
               onToggleExpand={onToggleExpand}
+              dragState={dragState}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </div>
@@ -190,6 +325,7 @@ export const EditorTreeSidebar = ({
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
+  const setServerData = useEditorStore((s) => s.setServerData)
   const addServerDataPath = useEditorStore((s) => s.addServerDataPath)
   const deleteServerDataPath = useEditorStore((s) => s.deleteServerDataPath)
   const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath)
@@ -209,6 +345,23 @@ export const EditorTreeSidebar = ({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [exportPopoverOpen, setExportPopoverOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
+  const [dragState, setDragState] = useState<{
+    draggedId: string | null
+    draggedParentId: string | null
+    draggedIndex: number
+    dropTargetId: string | null
+    dropTargetParentId: string | null
+    dropTargetIndex: number
+    dropPosition: DropPosition
+  }>({
+    draggedId: null,
+    draggedParentId: null,
+    draggedIndex: -1,
+    dropTargetId: null,
+    dropTargetParentId: null,
+    dropTargetIndex: -1,
+    dropPosition: "above",
+  })
   const tagsGroupRef = useRef<HTMLDivElement>(null)
   const [tagsDragging, setTagsDragging] = useState(false)
   const dragStart = useRef({ x: 0, scrollLeft: 0 })
@@ -381,6 +534,116 @@ export const EditorTreeSidebar = ({
     setExpandedIds((prev) => new Set(prev))
   }, [treeData, addServerDataPath])
 
+  const resetDragState = useCallback(() => {
+    setDragState({
+      draggedId: null,
+      draggedParentId: null,
+      draggedIndex: -1,
+      dropTargetId: null,
+      dropTargetParentId: null,
+      dropTargetIndex: -1,
+      dropPosition: "above",
+    })
+  }, [])
+
+  const canDropInSameLevel = useCallback(
+    (targetId: string): boolean => {
+      if (!dragState.draggedId) return false
+      if (dragState.draggedId === targetId) return false
+      const targetLoc = findParentAndIndex(treeData, targetId)
+      if (targetLoc.index < 0) return false
+      return targetLoc.parentId === dragState.draggedParentId
+    },
+    [dragState.draggedId, dragState.draggedParentId, treeData]
+  )
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, node: FileTreeNode) => {
+      const loc = findParentAndIndex(treeData, node.id)
+      if (loc.index < 0) return
+      e.stopPropagation()
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.setData("text/plain", node.id)
+      }
+      setDragState((prev) => ({
+        ...prev,
+        draggedId: node.id,
+        draggedParentId: loc.parentId,
+        draggedIndex: loc.index,
+      }))
+    },
+    [treeData]
+  )
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, node: FileTreeNode) => {
+      if (!dragState.draggedId) return
+      e.preventDefault()
+      if (!canDropInSameLevel(node.id)) {
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "none"
+        return
+      }
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move"
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const nextPos: DropPosition =
+        e.clientY < rect.top + rect.height / 2 ? "above" : "below"
+      const targetLoc = findParentAndIndex(treeData, node.id)
+      setDragState((prev) => ({
+        ...prev,
+        dropTargetId: node.id,
+        dropTargetParentId: targetLoc.parentId,
+        dropTargetIndex: targetLoc.index,
+        dropPosition: nextPos,
+      }))
+    },
+    [canDropInSameLevel, dragState.draggedId, treeData]
+  )
+
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent, node: FileTreeNode) => {
+      const current = e.currentTarget as HTMLElement
+      const related = e.relatedTarget as Node | null
+      if (related && current.contains(related)) return
+      setDragState((prev) =>
+        prev.dropTargetId === node.id
+          ? { ...prev, dropTargetId: null, dropTargetParentId: null, dropTargetIndex: -1 }
+          : prev
+      )
+    },
+    []
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, node: FileTreeNode) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!dragState.draggedId || !canDropInSameLevel(node.id)) {
+        resetDragState()
+        return
+      }
+
+      const reordered = reorderInSameLevel(
+        treeData,
+        dragState.draggedId,
+        node.id,
+        dragState.dropPosition
+      )
+      const nextServerData = buildServerDataByTreeOrder(reordered, serverData)
+      setServerData(nextServerData)
+      resetDragState()
+    },
+    [
+      canDropInSameLevel,
+      dragState.draggedId,
+      dragState.dropPosition,
+      resetDragState,
+      serverData,
+      setServerData,
+      treeData,
+    ]
+  )
+
   return (
     <div
       className={clsx(
@@ -475,6 +738,16 @@ export const EditorTreeSidebar = ({
               }}
               expandedIds={expandedIds}
               onToggleExpand={toggleExpand}
+              dragState={{
+                draggedId: dragState.draggedId,
+                dropTargetId: dragState.dropTargetId,
+                dropPosition: dragState.dropPosition,
+              }}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onDragEnd={resetDragState}
             />
           ))}
         </div>

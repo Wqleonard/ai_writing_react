@@ -35,6 +35,13 @@ export interface AgentCustomMessage {
   response_metadata: ResponseMetadata;
   type: "ai" | "tool" | "human";
   resultType?: "input" | "output";
+  /** 人在回路状态 */
+  hiltStatus?: "in_progress" | "approved" | "rejected";
+  /** 人在回路待办列表 */
+  hiltTodos?: Array<{
+    content?: string;
+    status?: "pending" | "in_progress" | "completed";
+  }>;
   name: string | null;
   id: string;
   example: boolean;
