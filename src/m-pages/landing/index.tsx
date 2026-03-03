@@ -68,7 +68,7 @@ export default function MLandingPage() {
 
     try {
       await requireLogin(() => {
-        navigate('/m/m-workspace-chat')
+        navigate('/m/workspace/chat')
       })
     } catch (e) {
       console.error(e)

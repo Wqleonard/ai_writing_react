@@ -128,7 +128,7 @@ const routes: RouteObject[] = [
                 element: <MNotesDetailPage/>,
               },
               {
-                path: '-mine',
+                path: 'mine',
                 element: <MMinePage/>,
               },
             ],
