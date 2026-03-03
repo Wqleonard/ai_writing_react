@@ -19,10 +19,12 @@ export const openLoginDialog = (): Promise<LoginResult> => {
 
     let resolved = false
 
+    const setOpenRef: { current: ((open: boolean) => void) | null } = { current: null }
+
     const onLoginSuccess = () => {
       if (resolved) return
       resolved = true
-      setOpen(false)
+      setOpenRef.current?.(false)
       toast.success('登录成功')
       setTimeout(() => {
         root.unmount()
@@ -36,7 +38,7 @@ export const openLoginDialog = (): Promise<LoginResult> => {
     }
 
     const handleOpenChange = (open: boolean) => {
-      setOpen(open)
+      setOpenRef.current?.(open)
       if (!open && !resolved) {
         resolved = true
         setTimeout(() => {
@@ -47,11 +49,14 @@ export const openLoginDialog = (): Promise<LoginResult> => {
       }
     }
 
-    let setOpen: (open: boolean) => void
-
     const App = () => {
       const [open, setOpenState] = React.useState(true)
-      setOpen = setOpenState
+      React.useEffect(() => {
+        setOpenRef.current = setOpenState
+        return () => {
+          setOpenRef.current = null
+        }
+      }, [setOpenState])
       return (
         <LoginDialog
           open={open}

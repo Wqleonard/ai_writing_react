@@ -51,6 +51,7 @@ const BookAnalysisPage = () => {
   const [templateLoading, setTemplateLoading] = useState(false)
   const [historyList, setHistoryList] = useState<HistoryItem[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const historyInitializedRef = useRef(false)
 
   const handleFileChange = useCallback(() => {
     setMarkdownContent('')
@@ -151,13 +152,14 @@ const BookAnalysisPage = () => {
   }, [templatePage, templateHasMore, templateLoading])
 
   const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+  const requireLogin = useLoginStore((s) => s.requireLogin)
 
   useEffect(() => {
     (async () => {
       loadMoreTemplates()
       await completeNewbieMissionByCode('USE_BOOK_ANALYSIS')
     })()
-  }, [])
+  }, [completeNewbieMissionByCode, loadMoreTemplates])
 
   const fetchHistoryList = useCallback(async () => {
     try {
@@ -173,15 +175,32 @@ const BookAnalysisPage = () => {
             updatedAt: item?.createdTime ?? item?.updatedAt ?? '',
           }))
         )
+        historyInitializedRef.current = true
+        return true
       }
+      return false
     } catch {
-      // ignore
+      return false
     }
   }, [])
 
-  useEffect(() => {
-    fetchHistoryList()
-  }, [fetchHistoryList])
+  const handleHistoryTabClick = useCallback(
+    async (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      try {
+        await requireLogin(async () => {
+          setCardsType('history')
+          if (!historyInitializedRef.current) {
+            await fetchHistoryList()
+          }
+        })
+      } catch {
+        // 用户取消登录时保持当前 tab，不做额外处理
+      }
+    },
+    [fetchHistoryList, requireLogin]
+  )
 
   const handleDoBookAnalysis = useCallback(async () => {
     if (!uploadedFile?.response) return
@@ -372,11 +391,7 @@ const BookAnalysisPage = () => {
                     role="tab"
                     aria-selected={cardsType === 'history'}
                     className={`leading-8 cursor-pointer ${cardsType === 'history' ? 'font-bold' : ''}`}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setCardsType('history')
-                    }}
+                    onClick={handleHistoryTabClick}
                   >
                     历史记录
                   </div>
