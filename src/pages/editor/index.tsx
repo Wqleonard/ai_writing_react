@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
 import mermaid from "mermaid";
-import MarkdownEditor from "@/components/MarkdownEditor";
+import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MarkdownEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import IconFont from "@/components/IconFont/Iconfont";
 import { EditorTopToolbar, EditorTreeSidebar, EditorResizeHandle } from "./components";
@@ -27,6 +27,8 @@ import type {
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
 import {
+  getWorksByIdReq,
+  getWorksByIdAndVersionReq,
   updateWorkInfoReq,
   generateGuideReq,
   createWorkReq,
@@ -37,6 +39,25 @@ import {
   DEFAULT_EDITING_FILE_KEY,
 } from "@/stores/editorStore";
 import { serverDataToTree, findNodeLabelById } from "@/stores/editorStore/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover";
+import { Slider } from "@/components/ui/Slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { CircleAlert } from "lucide-react";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
 const getNewPathFromLabel = (currentPath: string, newLabel: string): string => {
@@ -68,6 +89,31 @@ const EDITOR_PLACEHOLDER = `请输入内容或在右侧对话区指导AI创作..
 tips:
 ·AI创作时将锁定该区域，读取最新内容创作。
 ·选中部分内容，可使用AI划词进行局部修改。`;
+
+const EDITOR_SETTINGS_STYLE_ID = "react-editor-custom-styles";
+const EDITOR_SETTINGS_STORAGE_KEY = "editorSettings";
+
+type EditorSettings = {
+  fontSize: number;
+  lineHeight: number;
+  fontWeight: number;
+  margin: number;
+  textIndentEnabled: boolean;
+};
+
+type WorkVersion = {
+  versionId: string;
+  isAutoSaved?: string;
+  updatedTime?: string;
+};
+
+const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+  fontSize: 22,
+  lineHeight: 1.3,
+  fontWeight: 400,
+  margin: 40,
+  textIndentEnabled: false,
+};
 
 const getWordCount = (text: string): number => {
   if (!text || typeof text !== "string") return 0;
@@ -400,6 +446,7 @@ const MarkdownEditorPage = () => {
   const isEditorEditable = chatInputStatus !== "streaming";
 
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
+  const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
   const insCanvasRef = useRef<InsCanvasApi | null>(null);
   const [, setCanvasReadyKey] = useState(0);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
@@ -423,6 +470,22 @@ const MarkdownEditorPage = () => {
   const [showAssociationSelector, setShowAssociationSelector] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
   const [relationViewMode, setRelationViewMode] = useState<"edit" | "preview">("edit");
+  const [showSearchReplaceDialog, setShowSearchReplaceDialog] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [showTimeMachineDialog, setShowTimeMachineDialog] = useState(false);
+  const [workVersionList, setWorkVersionList] = useState<WorkVersion[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [restoringVersionId, setRestoringVersionId] = useState<string>("");
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
+    try {
+      const raw = localStorage.getItem(EDITOR_SETTINGS_STORAGE_KEY);
+      if (!raw) return DEFAULT_EDITOR_SETTINGS;
+      return { ...DEFAULT_EDITOR_SETTINGS, ...(JSON.parse(raw) as Partial<EditorSettings>) };
+    } catch {
+      return DEFAULT_EDITOR_SETTINGS;
+    }
+  });
 
   const associationTags = useChatInputStore((s) => s.associationTags);
   const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
@@ -488,9 +551,144 @@ const MarkdownEditorPage = () => {
     [workId, setWorkInfo]
   );
 
-  const notAbleClick = useCallback(() => {
-    toast.info("暂未开放，敬请期待");
+  const applyEditorStyles = useCallback((settings: EditorSettings) => {
+    const remFontSize = Number((settings.fontSize / 16).toFixed(4));
+    let customStyle = document.getElementById(EDITOR_SETTINGS_STYLE_ID) as HTMLStyleElement | null;
+    if (!customStyle) {
+      customStyle = document.createElement("style");
+      customStyle.id = EDITOR_SETTINGS_STYLE_ID;
+      document.head.appendChild(customStyle);
+    }
+    customStyle.textContent = `
+      .page-editor-panel .editor-content-layout {
+        padding-left: ${settings.margin}px;
+        padding-right: ${settings.margin}px;
+      }
+
+      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror {
+        --tiptap-prosemirror-font-size: ${remFontSize}rem !important;
+        --tiptap-prosemirror-line-height: ${settings.lineHeight} !important;
+        font-weight: ${settings.fontWeight} !important;
+      }
+
+      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror p:not(.mermaid-container):not(.mermaid-container *) {
+        text-indent: ${settings.textIndentEnabled ? "2em" : "0"};
+      }
+    `;
   }, []);
+
+  useEffect(() => {
+    applyEditorStyles(editorSettings);
+    try {
+      localStorage.setItem(EDITOR_SETTINGS_STORAGE_KEY, JSON.stringify(editorSettings));
+    } catch {
+      // ignore localStorage write error
+    }
+  }, [applyEditorStyles, editorSettings]);
+
+  const handleUndo = useCallback(() => {
+    if (!isEditorEditable) {
+      toast.info("AI 生成中，暂不可撤销");
+      return;
+    }
+    markdownEditorRef.current?.undo();
+  }, [isEditorEditable]);
+
+  const handleRedo = useCallback(() => {
+    if (!isEditorEditable) {
+      toast.info("AI 生成中，暂不可反撤销");
+      return;
+    }
+    markdownEditorRef.current?.redo();
+  }, [isEditorEditable]);
+
+  const handleSearchReplace = useCallback(() => {
+    setShowSearchReplaceDialog(true);
+  }, []);
+
+  const searchMatches = useMemo(() => {
+    if (!searchText.trim()) return [];
+    const source = serverData[currentEditingId || DEFAULT_EDITING_FILE_KEY] || "";
+    const target = searchText.toLowerCase();
+    const sourceLower = source.toLowerCase();
+    const list: Array<{ actualIndex: number; preview: string }> = [];
+    let idx = 0;
+    while ((idx = sourceLower.indexOf(target, idx)) !== -1) {
+      const start = Math.max(0, idx - 20);
+      const end = Math.min(source.length, idx + target.length + 20);
+      list.push({
+        actualIndex: idx,
+        preview: source.slice(start, end),
+      });
+      idx += 1;
+    }
+    return list;
+  }, [serverData, currentEditingId, searchText]);
+
+  const closeSearchReplaceDialog = useCallback(() => {
+    setShowSearchReplaceDialog(false);
+    setSearchText("");
+    setReplaceText("");
+  }, []);
+
+  const handleReplaceAll = useCallback(() => {
+    if (!searchText.trim()) {
+      toast.warning("请输入要查找的内容");
+      return;
+    }
+    if (searchMatches.length === 0) {
+      toast.warning("未找到匹配的内容");
+      return;
+    }
+    const targetFileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
+    let nextContent = serverData[targetFileKey] || "";
+    const sorted = [...searchMatches].sort((a, b) => b.actualIndex - a.actualIndex);
+    for (const match of sorted) {
+      const before = nextContent.slice(0, match.actualIndex);
+      const after = nextContent.slice(match.actualIndex + searchText.length);
+      nextContent = before + replaceText + after;
+    }
+    setServerDataFile(targetFileKey, nextContent);
+    toast.success(`已替换 ${sorted.length} 处内容`);
+  }, [searchText, searchMatches, replaceText, setServerDataFile, currentEditingId, serverData]);
+
+  const openTimeMachine = useCallback(async () => {
+    if (!workId) return;
+    setLoadingVersions(true);
+    try {
+      const req = (await getWorksByIdReq(workId)) as { workVersionIds?: WorkVersion[] } | undefined;
+      setWorkVersionList(Array.isArray(req?.workVersionIds) ? req!.workVersionIds! : []);
+      setShowTimeMachineDialog(true);
+    } catch {
+      toast.error("获取版本列表失败");
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [workId]);
+
+  const restoreVersion = useCallback(async (versionId: string) => {
+    if (!workId || !versionId) return;
+    setRestoringVersionId(versionId);
+    try {
+      const req = (await getWorksByIdAndVersionReq(workId, versionId)) as { content?: string } | undefined;
+      if (!req?.content) {
+        toast.error("版本内容为空");
+        return;
+      }
+      const parsed = JSON.parse(req.content) as Record<string, string>;
+      setServerData(parsed);
+      const allMdKeys = Object.keys(parsed).filter((k) => k.endsWith(".md")).sort();
+      if (allMdKeys.length > 0) {
+        useEditorStore.getState().setCurrentEditingId(allMdKeys[0]);
+      }
+      toast.success("版本恢复成功");
+      setShowTimeMachineDialog(false);
+    } catch {
+      toast.error("恢复版本失败");
+    } finally {
+      setRestoringVersionId("");
+    }
+  }, [workId, setServerData]);
 
   const helpWriteClick = useCallback(() => {
     stepWorkflowRef.current?.openStepCreateDialog();
@@ -724,7 +922,7 @@ const MarkdownEditorPage = () => {
   }, [currentEditingId]);
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--bg-primary)]">
+    <div className="page-editor-panel flex h-screen w-full flex-col overflow-hidden bg-[var(--bg-primary)]">
       <EditorTopToolbar
         onBackClick={handleBackClick}
         onSaveClick={handleSaveClick}
@@ -760,58 +958,158 @@ const MarkdownEditorPage = () => {
               <div className="flex h-full items-center gap-0">
                 <span className="text-sm text-(--text-primary)">字数: {wordCount}</span>
                 <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5" />
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="p-0 text-base hover:bg-[#d0d0d0] rounded flex items-center justify-center w-8 h-8"
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   title="撤销 (Ctrl+Z)"
-                  onClick={notAbleClick}
+                  onClick={handleUndo}
                 >
                   <IconFont unicode="\ue61b" className="text-base" />
-                </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="p-0 text-base hover:bg-[#d0d0d0] rounded flex items-center justify-center w-8 h-8"
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   title="反撤销 (Ctrl+Y)"
-                  onClick={notAbleClick}
+                  onClick={handleRedo}
                 >
                   <IconFont unicode="\ue61c" className="text-base" />
-                </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="p-0 text-base hover:bg-[#d0d0d0] rounded flex items-center justify-center w-8 h-8"
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   title="查找替换"
-                  onClick={notAbleClick}
+                  onClick={handleSearchReplace}
                 >
                   <IconFont unicode="\ue61e" className="text-base" />
-                </div>
+                </Button>
                 <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5" />
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="p-0 text-base hover:bg-[#d0d0d0] rounded flex items-center justify-center w-8 h-8"
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   title="时光机"
-                  onClick={notAbleClick}
+                  onClick={() => void openTimeMachine()}
                 >
-                  <IconFont unicode="\ue61d" className="text-base" />
-                </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="p-0 text-base hover:bg-[#d0d0d0] rounded flex items-center justify-center w-8 h-8"
-                  title="设置"
-                  onClick={notAbleClick}
-                >
-                  <IconFont unicode="\ue61a" className="text-base" />
-                </div>
+                  <IconFont unicode="\ue61f" className="text-base" />
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="字体设置"
+                    >
+                      <IconFont unicode="\ue61d" className="text-base" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 p-0">
+                    <div className="px-5 py-4 border-b border-[var(--el-border-color-lighter)] text-sm font-semibold text-center">
+                      编辑器设置
+                    </div>
+                    <div className="p-5 space-y-5">
+                      <div className="space-y-2">
+                        <div className="text-sm">字号</div>
+                        <div className="flex items-center gap-3">
+                          <Slider
+                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            value={[editorSettings.fontSize]}
+                            min={12}
+                            max={48}
+                            step={1}
+                            onValueChange={(v) =>
+                              setEditorSettings((prev) => ({ ...prev, fontSize: v[0] ?? prev.fontSize }))
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground min-w-[40px] text-right">
+                            {editorSettings.fontSize}px
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm">行间距</div>
+                        <div className="flex items-center gap-3">
+                          <Slider
+                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            value={[editorSettings.lineHeight]}
+                            min={1}
+                            max={3}
+                            step={0.1}
+                            onValueChange={(v) =>
+                              setEditorSettings((prev) => ({ ...prev, lineHeight: v[0] ?? prev.lineHeight }))
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground min-w-[40px] text-right">
+                            {editorSettings.lineHeight.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm">字重</div>
+                        <Select
+                          value={String(editorSettings.fontWeight)}
+                          onValueChange={(value) =>
+                            setEditorSettings((prev) => ({ ...prev, fontWeight: Number(value) }))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="请选择字重" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="100">极细 (100)</SelectItem>
+                            <SelectItem value="300">细体 (300)</SelectItem>
+                            <SelectItem value="400">常规 (400)</SelectItem>
+                            <SelectItem value="500">中等 (500)</SelectItem>
+                            <SelectItem value="600">中粗 (600)</SelectItem>
+                            <SelectItem value="700">粗体 (700)</SelectItem>
+                            <SelectItem value="900">特粗 (900)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm">左右边距</div>
+                        <div className="flex items-center gap-3">
+                          <Slider
+                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            value={[editorSettings.margin]}
+                            min={0}
+                            max={200}
+                            step={10}
+                            onValueChange={(v) =>
+                              setEditorSettings((prev) => ({ ...prev, margin: v[0] ?? prev.margin }))
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground min-w-[40px] text-right">
+                            {editorSettings.margin}px
+                          </span>
+                        </div>
+                      </div>
+                      <label className="flex items-center justify-between">
+                        <span className="text-sm">首行缩进</span>
+                        <Checkbox
+                          checked={editorSettings.textIndentEnabled}
+                          onCheckedChange={(checked) =>
+                            setEditorSettings((prev) => ({ ...prev, textIndentEnabled: checked === true }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
             {/* 编辑区主体 */}
             <div className="flex-1 min-h-0 flex flex-col relative overflow-y-auto">
-              <div className="flex flex-col flex-1 min-h-0 relative px-[40px]">
+              <div className="editor-content-layout flex flex-col flex-1 min-h-0 relative">
                 <div className="flex flex-col flex-1 min-h-0">
                   <div className="flex flex-col flex-1 min-h-0">
                     {currentEditingId ? (
@@ -898,6 +1196,7 @@ const MarkdownEditorPage = () => {
                         </div>
                       ) : (
                         <MarkdownEditor
+                          ref={markdownEditorRef}
                           key={fileKey}
                           className="editor-outer-scroll-mode"
                           value={currentContent}
@@ -1265,6 +1564,104 @@ const MarkdownEditorPage = () => {
           </div>
         </div>
       </div>
+      <Dialog open={showSearchReplaceDialog} onOpenChange={setShowSearchReplaceDialog}>
+        <DialogContent className="sm:max-w-[520px] overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle>查找与替换</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 w-full min-w-0">
+            <div className="space-y-2 w-full min-w-0">
+              <div className="text-sm font-medium">查找</div>
+              <Input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="请输入要查找的内容"
+              />
+            </div>
+            <div className="space-y-2 w-full min-w-0">
+              <div className="text-sm font-medium">替换</div>
+              <Input
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                placeholder="请输入要替换的内容"
+              />
+            </div>
+            {searchText.trim() && searchMatches.length > 0 && (
+              <div className="w-full min-w-0 rounded-md border border-[var(--el-border-color-lighter)] overflow-hidden">
+                <div className="px-3 py-2 text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)] border-b border-[var(--el-border-color-lighter)]">
+                  找到 {searchMatches.length} 个匹配项
+                </div>
+                <div className="max-h-[200px] overflow-y-auto overflow-x-hidden">
+                  {searchMatches.slice(0, 10).map((m, idx) => (
+                    <div
+                      key={`${m.actualIndex}-${idx}`}
+                      className="px-3 py-2  cursor-pointer text-xs border-b border-[var(--el-border-color-lighter)] last:border-b-0 cursor-default transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                      <div className="text-[var(--text-secondary)] truncate">{m.preview}</div>
+                    </div>
+                  ))}
+                  {searchMatches.length > 10 && (
+                    <div className="px-3 py-2 text-xs text-center text-muted-foreground">
+                      还有 {searchMatches.length - 10} 个匹配项...
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {searchText.trim() && searchMatches.length === 0 && (
+              <div className="w-full flex items-center align-middle justify-center gap-2 min-w-0 rounded-md px-3 py-4 text-xs text-center text-muted-foreground">
+                <CircleAlert size={12} strokeWidth={1.25} />
+                <span className="text-xs text-muted-foreground">未找到匹配的内容</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="w-full min-w-0">
+            <Button variant="outline" onClick={closeSearchReplaceDialog}>取消</Button>
+            <Button onClick={handleReplaceAll} disabled={searchMatches.length === 0}>替换</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showTimeMachineDialog} onOpenChange={setShowTimeMachineDialog}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>时光机</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[460px] overflow-y-auto">
+            {loadingVersions ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">正在加载版本...</div>
+            ) : workVersionList.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">暂无版本记录</div>
+            ) : (
+              workVersionList.map((version, idx) => (
+                <div
+                  key={version.versionId}
+                  className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2"
+                >
+                  <div>
+                    <div className="text-sm font-medium">
+                      {version.isAutoSaved === "1" ? "自动保存" : "手动保存"}
+                      {idx === 0 ? <span className="ml-2 text-xs text-green-600">最新</span> : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {version.updatedTime ? new Date(version.updatedTime).toLocaleString("zh-CN") : "-"}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => void restoreVersion(version.versionId)}
+                    disabled={restoringVersionId === version.versionId}
+                  >
+                    {restoringVersionId === version.versionId ? "恢复中..." : "恢复"}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTimeMachineDialog(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
