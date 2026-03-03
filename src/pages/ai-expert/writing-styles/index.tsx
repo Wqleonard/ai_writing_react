@@ -36,6 +36,7 @@ import clsx from 'clsx'
 import EMPTY_IMG from '@/assets/images/empty.webp'
 import './writing-styles.css'
 import { Iconfont } from "@/components/IconFont";
+import { useLoginStore } from '@/stores/loginStore'
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
 
@@ -121,9 +122,15 @@ const WritingStylesPage = () => {
     }
   }, [])
 
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
   useEffect(() => {
-    fetchHistoryList()
-  }, [fetchHistoryList])
+    (async () => {
+      fetchHistoryList()
+      await completeNewbieMissionByCode('USE_WRITING_STYLE')
+    })()
+  }, [])
+
 
   const onStreamData = useCallback((data: PostStreamData) => {
     switch (data.event) {
