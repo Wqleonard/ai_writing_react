@@ -1,5 +1,6 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 
 interface Role {
   img: string
@@ -9,15 +10,14 @@ interface Role {
 
 interface RoleCarouselProps {
   roles: Role[]
-  onRoleChange?: (index: number) => void
 }
 
 const ITEM_WIDTH_REM = 12.5
 const ITEM_SPACING_REM = 5
-const VISIBLE_ITEMS = 3 // 中间 + 两侧
+const ROLE_COPIES = 3
 
-export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps) {
-  const [virtualIndex, setVirtualIndex] = useState(1) // 从第二个位置开始
+export default function MRoleCarousel({ roles }: RoleCarouselProps) {
+  const [virtualIndex, setVirtualIndex] = useState(roles.length)
   const [isDragging, setIsDragging] = useState(false)
   const [offset, setOffset] = useState(0)
   const startX = useRef(0)
@@ -26,7 +26,7 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
   const isUserInteracting = useRef(false)
 
   const rolesCount = roles.length
-  const extendedRoles = [...roles, ...roles]
+  const extendedRoles = Array.from({ length: ROLE_COPIES }, () => roles).flat()
 
   // 获取 rem 基准值
   const getRemBase = useCallback(() => {
@@ -43,35 +43,49 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
   const totalItemWidth = itemWidthPx + itemSpacingPx
 
   // 当前实际索引（循环后）
-  const currentIndex = virtualIndex % rolesCount
+  const currentIndex = rolesCount > 0 ? ((virtualIndex % rolesCount) + rolesCount) % rolesCount : 0
 
-  // 通知父组件索引变化
-  useEffect(() => {
-    onRoleChange?.(currentIndex)
-  }, [currentIndex, onRoleChange])
+  const updateVirtualIndex = useCallback((targetIndex: number) => {
+    if (rolesCount <= 0) return
 
-  // 自动播放
-  const autoPlayNext = useCallback(() => {
-    if (isUserInteracting.current) return
-
+    const normalizedTarget = ((targetIndex % rolesCount) + rolesCount) % rolesCount
     setVirtualIndex((prev) => {
-      const newIndex = prev + 1
-      // 如果超出范围，重置到对应位置
-      if (newIndex >= rolesCount * 2) {
-        return newIndex - rolesCount
-      }
-      return newIndex
+      const candidates = [
+        normalizedTarget,
+        normalizedTarget + rolesCount,
+        normalizedTarget + rolesCount * 2,
+      ]
+      return candidates.reduce((closest, current) => {
+        return Math.abs(current - prev) < Math.abs(closest - prev) ? current : closest
+      }, candidates[0])
     })
   }, [rolesCount])
 
+  const currentRole = roles[currentIndex]
+
+  // 自动播放
+  const autoPlayNext = useCallback(() => {
+    if (rolesCount <= 1 || isUserInteracting.current) return
+
+    setVirtualIndex((prev) => {
+      const newIndex = prev + 1
+      // 如果超出范围，重置到中间组对应位置
+      if (newIndex >= extendedRoles.length) {
+        return rolesCount
+      }
+      return newIndex
+    })
+  }, [extendedRoles.length, rolesCount])
+
   const startAutoPlay = useCallback(() => {
+    if (rolesCount <= 1) return
     if (autoPlayTimer.current) {
       clearInterval(autoPlayTimer.current)
     }
     autoPlayTimer.current = window.setInterval(() => {
       autoPlayNext()
     }, 3000)
-  }, [autoPlayNext])
+  }, [autoPlayNext, rolesCount])
 
   const pauseAutoPlay = useCallback(() => {
     if (autoPlayTimer.current) {
@@ -123,11 +137,11 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
         newVirtualIndex++
       }
 
-      // 处理循环
+      // 处理循环，始终保持在扩展数组范围内
       if (newVirtualIndex < 0) {
-        newVirtualIndex = newVirtualIndex + rolesCount * 2
-      } else if (newVirtualIndex >= rolesCount * 2) {
-        newVirtualIndex = newVirtualIndex - rolesCount * 2
+        newVirtualIndex = extendedRoles.length - 1
+      } else if (newVirtualIndex >= extendedRoles.length) {
+        newVirtualIndex = 0
       }
 
       setVirtualIndex(newVirtualIndex)
@@ -141,7 +155,7 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
       isUserInteracting.current = false
       startAutoPlay()
     }, 2000)
-  }, [offset, virtualIndex, rolesCount, totalItemWidth])
+  }, [isDragging, offset, virtualIndex, extendedRoles.length, totalItemWidth, startAutoPlay])
 
   // 触摸事件
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -175,8 +189,26 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
     }
   }, [isDragging, handleEnd])
 
+  const shouldHide = useCallback((index: number) => {
+    const totalLength = extendedRoles.length
+    const hideIndex1 = (virtualIndex + 3) % totalLength
+    const hideIndex2 = (virtualIndex + 4) % totalLength
+    const hideIndex3 = (virtualIndex + 5) % totalLength
+    return index === hideIndex1 || index === hideIndex2 || index === hideIndex3
+  }, [extendedRoles.length, virtualIndex])
+
   // 计算角色样式
   const getRoleStyle = (index: number) => {
+    if (shouldHide(index)) {
+      return {
+        opacity: 0,
+        visibility: 'hidden' as const,
+        pointerEvents: 'none' as const,
+        transform: 'translateX(0) scale(0)',
+        transition: 'opacity 0.3s ease, transform 0.3s ease',
+      }
+    }
+
     let diff = index - virtualIndex
 
     // 处理循环距离
@@ -229,54 +261,72 @@ export default function MRoleCarousel({ roles, onRoleChange }: RoleCarouselProps
   }
 
   return (
-    <div
-      className="relative w-full h-[400px] overflow-hidden select-none touch-pan-x cursor-grab active:cursor-grabbing"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div className="relative w-full h-full flex items-center justify-center">
-        {extendedRoles.map((role, index) => {
-          const style = getRoleStyle(index)
-          // 只显示中间和两侧的角色
-          const absDiff = Math.abs(index - virtualIndex)
-          const shouldShow = absDiff <= 1 || Math.abs(index - virtualIndex) >= rolesCount - 1
+    <div>
+      <div
+        className="relative h-[400px] w-full select-none overflow-hidden touch-pan-x cursor-grab active:cursor-grabbing"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="relative flex h-full w-full items-center justify-center">
+          {extendedRoles.map((role, index) => {
+            const style = getRoleStyle(index)
 
-          if (!shouldShow && index !== virtualIndex) {
-            return null
-          }
+            return (
+              <div
+                key={index}
+                className="absolute h-[320px] w-[240px] transform-origin-center-bottom will-change-transform"
+                style={style}
+              >
+                <img
+                  src={role.img}
+                  alt={`角色${(index % rolesCount) + 1}`}
+                  className="pointer-events-auto h-full w-full cursor-pointer object-contain filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                  loading="lazy"
+                  onClick={() => {
+                    updateVirtualIndex(index % rolesCount)
+                  }}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-          return (
-            <div
-              key={index}
-              className="absolute w-[240px] h-[320px] transform-origin-center-bottom will-change-transform"
-              style={style}
-            >
-              <img
-                src={role.img}
-                alt={`角色${(index % rolesCount) + 1}`}
-                className="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.15)] pointer-events-auto cursor-pointer"
-                loading="lazy"
-                onClick={() => {
-                  // 点击切换到对应角色
-                  const targetIndex = index % rolesCount
-                  const dist1 = Math.abs(targetIndex - currentIndex)
-                  const dist2 = rolesCount - dist1
+      {/* 角色描述信息 */}
+      <div className="mt-6 flex min-h-[120px] flex-col items-center gap-2">
+        <motion.div
+          key={currentIndex}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col items-center gap-2"
+        >
+          <div className="text-[32px] font-bold text-[#464646]">
+            {currentRole?.name}
+          </div>
+          <div className="w-55 text-center text-[24px] text-[#999999]">
+            {currentRole?.description}
+          </div>
+        </motion.div>
+      </div>
 
-                  if (dist1 <= dist2) {
-                    setVirtualIndex(virtualIndex + (targetIndex - currentIndex))
-                  } else {
-                    setVirtualIndex(virtualIndex + (targetIndex - currentIndex > 0 ? -dist2 : dist2))
-                  }
-                }}
-              />
-            </div>
-          )
-        })}
+      {/* 进度指示器 */}
+      <div className="mx-auto mt-6 flex h-13 w-fit items-center justify-center gap-2 rounded-full bg-[#efefef] px-9">
+        {roles.map((_, index) => (
+          <div
+            key={index}
+            className={`h-2 cursor-pointer bg-[#ccc] transition-all duration-300 ease-in-out ${
+              index === currentIndex ? 'w-6 rounded-[4px] bg-[#EFAF00]!' : 'w-2 rounded-full'
+            }`}
+            onClick={() => updateVirtualIndex(index)}
+          />
+        ))}
       </div>
     </div>
   )
