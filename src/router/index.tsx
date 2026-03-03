@@ -1,9 +1,10 @@
-import { createBrowserRouter, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import { lazy } from 'react'
 
 // 首屏关键组件保持同步导入
 import LandingPage from '@/pages/landing'
 import { WorkspaceLayout } from '@/layout'
+import { MobileRedirectGuard } from '@/router/guards/MobileRedirect'
 
 // 懒加载页面组件
 const MarkdownEditorPage = lazy(() => import('@/pages/editor'))
@@ -17,7 +18,7 @@ const PromptPage = lazy(() => import('@/pages/creation-community/prompt'))
 const BookAnalysisPage = lazy(() => import('@/pages/ai-expert/book-analysis'))
 const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
 const MyPlacePage = lazy(() => import('@/pages/my-place'))
-const NotFoundPage = lazy(() => import('@/pages/not-found'))
+// const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts
 const MLayout = lazy(() => import('@/layout/MLayout/MLayout.tsx'))
@@ -37,121 +38,123 @@ const MPrivacyPolicyPage = lazy(() => import('@/pages/m-privacy-policy'))
 const routes: RouteObject[] = [
   {
     path: '/',
-    element: <LandingPage/>,
-  },
-  {
-    path: 'workspace',
-    element: <WorkspaceLayout/>,
+    element: <MobileRedirectGuard />,
     children: [
       {
         index: true,
-        element: <MyPlacePage/>
+        element: <LandingPage/>,
       },
       {
-        path: 'my-place',
-        element: <MyPlacePage/>
-      },
-      {
-        path: 'trending-list',
-        element: <TrendingListPage/>
-      },
-      {
-        path: 'creation-community/course',
-        element: <CoursePage/>
-      },
-      {
-        path: 'creation-community/course/details/:id',
-        element: <CourseDetailsPage/>
-      },
-      {
-        path: 'creation-community/share',
-        element: <SharePage/>
-      },
-      {
-        path: 'creation-community/share/details/:id',
-        element: <ShareDetailsPage/>
-      },
-      {
-        path: 'creation-community/share/create/:id',
-        element: <ShareCreatePage/>
-      },
-      {
-        path: 'creation-community/prompt',
-        element: <PromptPage/>
-      },
-      {
-        path: 'ai-expert/book-analysis',
-        element: <BookAnalysisPage/>
-      },
-      {
-        path: 'ai-expert/writing-styles',
-        element: <WritingStylesPage/>
-      },
-    ],
-  },
-  {
-    path: '/editor/:workId',
-    element: <MarkdownEditorPage/>,
-  },
-  {
-    path: '/m',
-    element: <MLayout/>,
-    children: [
-      {
-        index: true,
-        element: <MLandingPage/>,
-      },
-      {
-        path: 'm-landing',
-        element: <MLandingPage/>,
-      },
-      {
-        path: 'm-workspace',
-        element: <MWorkSpace/>,
+        path: 'workspace',
+        element: <WorkspaceLayout/>,
         children: [
           {
             index: true,
-            element: <MChatPage/>,
+            element: <Navigate to="/workspace/my-place" replace />
           },
           {
-            path: 'm-workspace-chat',
-            element: <MChatPage/>,
+            path: 'my-place',
+            element: <MyPlacePage/>
           },
           {
-            path: 'm-workspace-notes',
-            element: <MNotesPage/>,
+            path: 'trending-list',
+            element: <TrendingListPage/>
           },
           {
-            path: 'm-workspace-notes-detail',
-            element: <MNotesDetailPage/>,
+            path: 'creation-community/course',
+            element: <CoursePage/>
           },
           {
-            path: 'm-workspace-mine',
-            element: <MMinePage/>,
+            path: 'creation-community/course/details/:id',
+            element: <CourseDetailsPage/>
+          },
+          {
+            path: 'creation-community/share',
+            element: <SharePage/>
+          },
+          {
+            path: 'creation-community/share/details/:id',
+            element: <ShareDetailsPage/>
+          },
+          {
+            path: 'creation-community/share/create/:id',
+            element: <ShareCreatePage/>
+          },
+          {
+            path: 'creation-community/prompt',
+            element: <PromptPage/>
+          },
+          {
+            path: 'ai-expert/book-analysis',
+            element: <BookAnalysisPage/>
+          },
+          {
+            path: 'ai-expert/writing-styles',
+            element: <WritingStylesPage/>
           },
         ],
       },
       {
-        path: 'm-rules',
-        element: <MRulesPage/>,
+        path: '/editor/:workId',
+        element: <MarkdownEditorPage/>,
       },
       {
-        path: 'm-feedback-issue',
-        element: <MFeedbackIssuePage/>,
+        path: '/m',
+        element: <MLayout/>,
+        children: [
+          {
+            index: true,
+            element: <MLandingPage/>,
+          },
+          {
+            path: 'workspace',
+            element: <MWorkSpace/>,
+            children: [
+              {
+                index: true,
+                element: <MChatPage/>,
+              },
+              {
+                path: 'chat',
+                element: <MChatPage/>,
+              },
+              {
+                path: 'notes',
+                element: <MNotesPage/>,
+              },
+              {
+                path: 'notes/detail',
+                element: <MNotesDetailPage/>,
+              },
+              {
+                path: '-mine',
+                element: <MMinePage/>,
+              },
+            ],
+          },
+          {
+            path: 'rules',
+            element: <MRulesPage/>,
+          },
+          {
+            path: 'feedback-issue',
+            element: <MFeedbackIssuePage/>,
+          },
+          {
+            path: 'user-agreement',
+            element: <MUserAgreementPage/>,
+          },
+          {
+            path: 'privacy-policy',
+            element: <MPrivacyPolicyPage/>,
+          },
+        ],
       },
       {
-        path: 'm-user-agreement',
-        element: <MUserAgreementPage/>,
-      },
-      {
-        path: 'm-privacy-policy',
-        element: <MPrivacyPolicyPage/>,
+        path: '*',
+        element: <Navigate to="/workspace/my-place" replace />,
       },
     ],
-  },
-  {
-    path: '*',
-    element: <NotFoundPage/>,
   },
 ]
 
