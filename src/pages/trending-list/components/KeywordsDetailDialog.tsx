@@ -18,12 +18,12 @@ const requireLogin = (callback: () => void) => {
 }
 
 export const KeywordsDetailDialog = ({
-  open,
-  onOpenChange,
-  detailData,
-  onDetailDataChange,
-  title = '收稿风向',
-}: KeywordsDetailDialogProps) => {
+                                       open,
+                                       onOpenChange,
+                                       detailData,
+                                       onDetailDataChange,
+                                       title = '收稿风向',
+                                     }: KeywordsDetailDialogProps) => {
   const navigate = useNavigate()
   const [workReference, setWorkReference] = useState(detailData?.workReference ?? '')
   const [description, setDescription] = useState(detailData.description ?? '')
@@ -78,11 +78,11 @@ export const KeywordsDetailDialog = ({
   }
 
   useEffect(() => {
-    if (detailData) {
+    if (open && detailData) {
       setWorkReference(detailData.workReference ?? '')
       setDescription(detailData.description ?? '')
     }
-  }, [detailData.workReference, detailData.description, detailData])
+  }, [open, detailData])
 
   return (
     <Dialog

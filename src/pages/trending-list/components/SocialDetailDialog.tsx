@@ -83,12 +83,12 @@ export const SocialDetailDialog = ({
   }
 
   useEffect(() => {
-    if (detailData) {
+    if (open && detailData) {
       setMainSubject(detailData.mainSubject ?? '')
       setTags(detailData.tags ?? '')
       setMoreSettings(detailData.moreSettings ?? '')
     }
-  }, [detailData.mainSubject, detailData.tags, detailData.moreSettings, detailData])
+  }, [open, detailData])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
