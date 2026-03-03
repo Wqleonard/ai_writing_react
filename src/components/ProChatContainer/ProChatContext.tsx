@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useMemo } from "react"
 import type { ChatMessage, ChatTabType } from "@/stores/chatStore"
+import type { QuillChatInputStatus } from "@/components/QuillChatInput"
 
 export interface ProChatContainerContextValue {
   /** 当前输入框内容 */
@@ -10,6 +11,10 @@ export interface ProChatContainerContextValue {
   setInputValue: (value: string | ((prev: string) => string)) => void
   /** 提交（发送）回调 */
   onSubmit: () => void | Promise<void>
+  /** 输入框状态：ready | error | submitted | streaming，用于发送按钮展示 */
+  inputStatus?: QuillChatInputStatus
+  /** 流式请求中点击发送按钮时调用，用于取消流式接口 */
+  onStopStreaming?: () => void
   /** 是否仅回答模式 */
   isAnswerOnly: boolean
   /** 切换仅回答 */
@@ -41,6 +46,8 @@ export interface ProChatContainerContextValue {
       options?: { isLastMessage?: boolean }
     ) => React.ReactNode
     beforeMessages?: React.ReactNode
+    /** 输入框上方展示（如任务列表 Todos，参照 Vue NuxtUIProChatContainer #todos） */
+    todos?: React.ReactNode
     afterInput?: React.ReactNode
     footer?: React.ReactNode
   }

@@ -24,6 +24,8 @@ export const ProChatPanel = () => {
     inputValue,
     setInputValue,
     onSubmit,
+    inputStatus,
+    onStopStreaming,
     hasMessages,
     displayMessages,
     handleDrop,
@@ -60,6 +62,7 @@ export const ProChatPanel = () => {
             </div>
           </div>
         </div>
+        {slots?.todos}
         <div
           className="relative w-[95%] max-w-[500px] rounded-[10px] transition-opacity duration-200"
           onDragOver={(e) => e.preventDefault()}
@@ -69,8 +72,9 @@ export const ProChatPanel = () => {
             value={inputValue}
             onChange={setInputValue}
             onSubmit={onSubmit}
+            onStopStreaming={onStopStreaming}
             placeholder="输入您的消息... (Shift+Enter 换行，Enter 发送)"
-            status="ready"
+            status={inputStatus ?? "ready"}
             hideAssistUI={false}
             clearOnSubmit={true}
             hasMessages={false}
@@ -97,9 +101,7 @@ export const ProChatPanel = () => {
       <div
         className={clsx(
           "rounded-lg px-3 py-2 max-w-[85%]",
-          msg.role === "user"
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted"
+          "bg-primary text-primary-foreground"
         )}
       >
         <div className="whitespace-pre-wrap break-words">
@@ -119,8 +121,9 @@ export const ProChatPanel = () => {
         value={inputValue}
         onChange={setInputValue}
         onSubmit={onSubmit}
+        onStopStreaming={onStopStreaming}
         placeholder="输入消息... (Enter 发送)"
-        status="ready"
+        status={inputStatus ?? "ready"}
         hideAssistUI={false}
         clearOnSubmit={true}
         hasMessages={true}
@@ -178,6 +181,7 @@ export const ProChatPanel = () => {
               </div>
             </AutoScrollArea>
             <div className="shrink-0 w-[95%] self-center rounded-[10px] py-2 px-0 mb-1.5 chat-panel-footer">
+              {slots?.todos}
               {inputBlock}
             </div>
           </>

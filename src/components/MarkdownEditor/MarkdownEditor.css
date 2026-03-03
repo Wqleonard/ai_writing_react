@@ -19,6 +19,13 @@
   overflow-y: auto;
 }
 
+/* editor 页面外层承载滚动：关闭内部滚动，让内容高度自然撑开 */
+.markdown-editor.editor-outer-scroll-mode .editor-content,
+.markdown-editor.editor-outer-scroll-mode .markdown-editor-content {
+  height: auto;
+  overflow: visible;
+}
+
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap {
   min-height: 24px !important;
   /* padding: 12px !important; */
@@ -129,6 +136,25 @@
   border: none;
   border-top: 1px solid #ebeef5;
   margin: 1.5em 0;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap th,
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap td {
+  border: 1px solid #dcdfe6;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-editor .markdown-editor-content .ProseMirror.tiptap th {
+  background: #f5f7fa;
+  font-weight: 600;
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap p.is-editor-empty:first-child::before {

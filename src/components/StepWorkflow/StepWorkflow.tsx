@@ -102,11 +102,15 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
         onConfirm={handleStepConfirm}
       />
 
-      {showQuickStart && (
-        <div
-          className="pointer-events-none absolute inset-0 flex flex-col-reverse items-center overflow-hidden py-5"
-          style={{ contain: "layout style paint", willChange: "transform, opacity" }}
-        >
+      <div
+        className={`
+          absolute inset-0 overflow-hidden transition-all duration-300 ease-in-out
+          ${showQuickStart ? "opacity-100 max-h-[420px] translate-y-0" : "opacity-0 max-h-0 -translate-y-4 pointer-events-none"}
+        `}
+        style={{ contain: "layout style paint", willChange: "transform, opacity, max-height" }}
+        aria-hidden={!showQuickStart}
+      >
+        <div className="pointer-events-none h-full flex flex-col-reverse items-center py-5">
           <div className="flex items-center justify-center gap-4">
             {MODES.map((m) => (
               <div
@@ -132,7 +136,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
           </div>
           <div className="w-full text-center text-sm">不知道怎么开始？试试以下快捷创作流程：</div>
         </div>
-      )}
+      </div>
     </>
   )
 })

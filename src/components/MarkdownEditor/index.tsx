@@ -2,14 +2,23 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
+import CodeBlock from '@tiptap/extension-code-block'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from '@tiptap/markdown'
 import Placeholder from '@tiptap/extension-placeholder'
+import FontFamily from '@tiptap/extension-font-family'
 import EmptyParagraph from '@/extensions/EmptyParagraph'
+import Mermaid from '@/extensions/Mermaid'
 import { StreamIndicator } from '@/components/StreamIndicator'
 import './MarkdownEditor.css'
 
 export interface MarkdownEditorProps {
   className?: string
+  /** 字体 class，默认与 Vue 版一致使用楷体 */
+  fontClassName?: string
   readonly?: boolean
   placeholder?: string
   loading?: boolean
@@ -43,6 +52,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
   function MarkdownEditor(
     {
       className = '',
+      fontClassName = 'font-KaiTi',
       readonly = false,
       placeholder = '请输入内容...',
       loading = false,
@@ -67,16 +77,46 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const extensions = useMemo(
       () => [
         Markdown,
+        Mermaid,
         EmptyParagraph,
         Placeholder.configure({ placeholder }),
         StarterKit.configure({
+          codeBlock: false,
           heading: { levels: [1, 2, 3, 4, 5, 6] },
           bulletList: {},
           orderedList: {},
           blockquote: {},
-          codeBlock: {},
           horizontalRule: {},
           hardBreak: {},
+        }),
+        TableRow,
+        TableHeader,
+        TableCell,
+        FontFamily,
+        Table.configure({
+          resizable: true,
+        }),
+        CodeBlock.extend({
+          parseHTML() {
+            return [
+              {
+                tag: 'pre',
+                preserveWhitespace: 'full',
+                getAttrs: (node) => {
+                  if (typeof node === 'string') return false
+                  if (!(node instanceof HTMLElement)) return false
+                  const codeElement = node.querySelector('code')
+                  if (
+                    codeElement &&
+                    codeElement.classList.contains('language-mermaid')
+                  ) {
+                    return false
+                  }
+                  return {}
+                },
+              },
+            ]
+          },
         }),
       ],
       [placeholder]
@@ -90,7 +130,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         extensions,
         editorProps: {
           attributes: {
-            class: 'prose prose-sm max-w-none focus:outline-none',
+            class: `prose prose-sm max-w-none focus:outline-none ${fontClassName}`.trim(),
             style: `min-height: ${minHeight}px;`,
           },
           handleKeyDown: (_, event) => {
@@ -209,7 +249,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
 
     return (
       <div
-        className={`markdown-editor ${readonly ? 'is-readonly' : ''} ${className}`.trim()}
+        className={`markdown-editor ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
         style={{ width: '100%', height: '100%' }}
       >
         <EditorContent editor={editor} className="editor-content markdown-editor-content" />

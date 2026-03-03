@@ -1,0 +1,135 @@
+.mermaid-container {
+  margin: 1em 0;
+  padding: 3em 1em 1em 1em;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  background: #f8f9fa;
+  position: relative;
+  min-height: 200px;
+}
+
+.mermaid-toolbar {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  z-index: 10;
+}
+
+.mermaid-edit-btn {
+  padding: 0.4em 2em;
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mermaid-edit-btn:hover {
+  background: #357abd;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.mermaid-edit-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mermaid-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.mermaid-code-input {
+  width: 100%;
+  min-height: 450px;
+  padding: 1em;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  background: #fff;
+  color: #333;
+  transition: border-color 0.2s ease;
+}
+
+.mermaid-code-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.mermaid-code-input::placeholder {
+  color: #adb5bd;
+}
+
+.mermaid-editor-hint {
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
+  padding: 0.5em;
+}
+
+.mermaid-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100px;
+  overflow-x: auto;
+}
+
+.mermaid-content svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-loading {
+  text-align: center;
+  padding: 2em;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.mermaid-error {
+  padding: 1.5em;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  margin: 1em 0;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+}
+
+.error-message {
+  color: #856404;
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 0.8em;
+}
+
+.error-detail {
+  color: #664d03;
+  font-size: 14px;
+  margin-bottom: 0.8em;
+  padding: 0.8em;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  word-break: break-word;
+}
+
+.error-hint {
+  color: #856404;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding-top: 0.5em;
+  border-top: 1px dashed #ffc107;
+}

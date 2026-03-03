@@ -47,6 +47,8 @@ export interface QuillChatInputProps {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
+  /** 流式请求中点击发送按钮时调用，用于取消流式接口 */
+  onStopStreaming?: () => void
   placeholder?: string
   status?: QuillChatInputStatus
   disabled?: boolean
@@ -68,6 +70,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     value,
     onChange,
     onSubmit,
+    onStopStreaming,
     placeholder = "输入消息...",
     status = "ready",
     disabled = false,
@@ -132,7 +135,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const [hovered, setHovered] = useState(false)
 
   const canMove = value.trim() && !disabled
-
+  /** 流式时可点击按钮取消；非流式时仅在有内容且未禁用时可点击发送 */
+  const isButtonClickable = status === "streaming" ? !!onStopStreaming : canMove
   // 富文本容器引用（工具模式下使用 contenteditable + span + input-tag）
   const richTextRef = useRef<HTMLDivElement | null>(null)
 
@@ -625,25 +629,40 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
       <Button
         className={clsx(
           "w-8 ml-2 h-8 rounded-full flex items-center justify-center",
-          canMove
+          isButtonClickable
             ? "cursor-pointer bg-[var(--bg-editor-save)] text-white"
             : "cursor-not-allowed bg-[#e5e5e5] text-[#b7b7b7]"
         )}
         style={{
-          transform: hovered && canMove ? "translateY(-2px)" : "translateY(0px)",
+          transform: hovered && isButtonClickable ? "translateY(-2px)" : "translateY(0px)",
           transition: "transform 150ms ease-out",
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => {
-          if (canMove) {
+          if (status === "streaming") {
+            onStopStreaming?.()
+          } else if (canMove) {
             onSubmit()
             if (clearOnSubmit) onChange("")
           }
         }}
-        disabled={!canMove}
+        disabled={!isButtonClickable}
+        title={status === "streaming" ? "停止生成" : undefined}
       >
-        {isSubmitting ? (
+        {status === "streaming" ? (
+          <svg
+            className="h-4 w-4 [color:inherit]"
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+          >
+            <rect x="4" y="4" width="12" height="12" rx="0.5" fill="currentColor" />
+          </svg>
+        ) : status === "submitted" ? (
           <Loader2 className="h-4 w-4 animate-spin [color:inherit]" />
         ) : (
           <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]" />
@@ -662,83 +681,117 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
       }}
     >
       <div className="todos-input-wrapper space-y-2">
-        {/* 悬浮标签区域 - 统一用 flex 布局 */}
+        {/* 悬浮标签区域：与 Vue 对齐，按关联/笔记/文件/划词分组展示 */}
         {hasTags && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {associationTags.slice(0, 7).map((tag, index) => (
-              <span
-                key={`assoc-${tag}-${index}`}
-                className="inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-                onClick={() => removeAssociationTag(index)}
-              >
-                <FileText className="h-3 w-3 shrink-0" />
-                <span className="truncate max-w-[120px]">{tag}</span>
-              </span>
-            ))}
-            {selectedNotes.slice(0, 7).map((note) => (
-              <span
-                key={`note-${note.id}`}
-                className="inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-              >
-                <FileText className="h-3 w-3 shrink-0" />
-                <span className="truncate max-w-[120px]">
-                  {((note.title ?? note.content) || "").length > 20
-                    ? `${((note.title ?? note.content) || "").slice(0, 20)}...`
-                    : (note.title ?? note.content) || ""}
-                </span>
-                <span
-                  className="cursor-pointer hover:opacity-80"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeNote(note.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </span>
-              </span>
-            ))}
-            {selectedFiles.slice(0, 7).map((file) => (
-              <span
-                key={file.id}
-                className="inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-              >
-                <FileText className="h-3 w-3 shrink-0" />
-                <span className="truncate max-w-[120px]">{file.originalName}</span>
-                <span
-                  className="cursor-pointer hover:opacity-80"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeFile(file.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </span>
-              </span>
-            ))}
-            {selectedTexts.slice(0, 7).map((text) => (
-              <span
-                key={text.id}
-                className="inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-              >
-                <span className="truncate max-w-[120px]">
-                  {text.content.length > 20 ? `${text.content.slice(0, 20)}...` : text.content}
-                </span>
-                <span
-                  className="cursor-pointer hover:opacity-80"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeSelectedText(text.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </span>
-              </span>
-            ))}
-            {(associationTags.length > 7 ||
-              selectedNotes.length > 7 ||
-              selectedFiles.length > 7 ||
-              selectedTexts.length > 7) && (
-              <span className="text-muted-foreground text-xs">...</span>
+          <div className="floating-tags-container mb-2 space-y-1.5">
+            {associationTags.length > 0 && (
+              <div className="association-hints-inline">
+                <div className="association-hints-content flex flex-wrap gap-1.5">
+                  {associationTags.slice(0, 7).map((tag, index) => (
+                    <span
+                      key={`assoc-${tag}-${index}`}
+                      className="association-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onClick={() => removeAssociationTag(index)}
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="tag-text truncate max-w-[120px]">{tag}</span>
+                    </span>
+                  ))}
+                  {associationTags.length > 7 && (
+                    <span className="association-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedNotes.length > 0 && (
+              <div className="notes-hints-inline">
+                <div className="notes-hints-content flex flex-wrap gap-1.5">
+                  {selectedNotes.slice(0, 7).map((note) => (
+                    <span
+                      key={`note-${note.id}`}
+                      className="note-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="tag-text truncate max-w-[120px]">
+                        {((note.title ?? note.content) || "").length > 20
+                          ? `${((note.title ?? note.content) || "").slice(0, 20)}...`
+                          : (note.title ?? note.content) || ""}
+                      </span>
+                      <span
+                        className="cursor-pointer hover:opacity-80"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeNote(note.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </span>
+                    </span>
+                  ))}
+                  {selectedNotes.length > 7 && (
+                    <span className="notes-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedFiles.length > 0 && (
+              <div className="files-hints-inline">
+                <div className="files-hints-content flex flex-wrap gap-1.5">
+                  {selectedFiles.slice(0, 7).map((file) => (
+                    <span
+                      key={file.id}
+                      className="file-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="tag-text truncate max-w-[120px]">{file.originalName}</span>
+                      <span
+                        className="cursor-pointer hover:opacity-80"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeFile(file.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </span>
+                    </span>
+                  ))}
+                  {selectedFiles.length > 7 && (
+                    <span className="files-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedTexts.length > 0 && (
+              <div className="selected-texts-hints-inline">
+                <div className="selected-texts-hints-content flex flex-wrap gap-1.5">
+                  {selectedTexts.slice(0, 7).map((text) => (
+                    <span
+                      key={text.id}
+                      className="selected-text-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="tag-text truncate max-w-[120px]">
+                        {text.content.length > 20 ? `${text.content.slice(0, 20)}...` : text.content}
+                      </span>
+                      <span
+                        className="cursor-pointer hover:opacity-80"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeSelectedText(text.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </span>
+                    </span>
+                  ))}
+                  {selectedTexts.length > 7 && (
+                    <span className="selected-texts-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -18,6 +18,8 @@ export interface ProChatContainerSlots {
   renderMessage?: (message: ChatMessage) => React.ReactNode
   /** 消息列表上方插入内容（如提示、快捷入口） */
   beforeMessages?: React.ReactNode
+  /** 输入框上方展示（如任务列表 Todos，参照 Vue NuxtUIProChatContainer #todos） */
+  todos?: React.ReactNode
   /** 输入区下方插入内容 */
   afterInput?: React.ReactNode
   /** 底部固定区域（在整个输入区下方） */
@@ -50,6 +52,10 @@ export interface ProChatContainerProps {
   onFileNameClick?: (fileName: string) => void
   onSendToKnowledgeBase?: (knowledge: Record<string, unknown>) => void
   onCheckWorkStage?: () => void
+  /** 输入框状态：ready | error | submitted | streaming，用于发送按钮展示 */
+  inputStatus?: "ready" | "error" | "submitted" | "streaming"
+  /** 流式请求中点击发送按钮时调用，用于取消流式接口 */
+  onStopStreaming?: () => void
   /** 定制化插槽，通过 context 派发给子组件 */
   slots?: ProChatContainerSlots
   isHomePage?: boolean
@@ -74,6 +80,8 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     onSaveCurrentSession,
     onSubmit: customOnSubmit,
     onDrop,
+    inputStatus,
+    onStopStreaming,
     slots,
     isHomePage = false,
     hideAssociationFeature = false,
@@ -186,6 +194,8 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       inputValue,
       setInputValue,
       onSubmit: handleSubmit,
+      inputStatus,
+      onStopStreaming,
       isAnswerOnly,
       onAnswerOnlyChange: setIsAnswerOnly,
       workId,
@@ -202,6 +212,8 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     [
       inputValue,
       handleSubmit,
+      inputStatus,
+      onStopStreaming,
       isAnswerOnly,
       setIsAnswerOnly,
       workId,
