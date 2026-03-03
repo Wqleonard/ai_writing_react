@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Toast } from 'vant'
+import { toast } from "sonner";
 import { useLoginStore } from '@/stores/loginStore'
 import { useMobileChat, type ChatMessage } from '@/hooks/useMobileChat'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
@@ -32,7 +31,6 @@ interface ChatHistoryGroup {
 }
 
 export default function MChatPage() {
-  const navigate = useNavigate()
   const { requireLogin } = useLoginStore()
 
   const [showChat, setShowChat] = useState(false)
@@ -212,7 +210,7 @@ export default function MChatPage() {
       try {
         const content = getContentFromPartial(chatItem.content)
         if (!content) {
-          Toast.show({ message: '内容为空', type: 'fail' })
+          toast.error('内容为空')
           return
         }
 
@@ -222,10 +220,10 @@ export default function MChatPage() {
         const source: NoteSourceType = 'MINI_APP_CHAT'
         await addNote(title, content, source)
 
-        Toast.show({ message: '已添加到笔记', type: 'success', duration: 2000 })
+        toast.success('已添加到笔记')
       } catch (e) {
         console.error('添加到笔记失败:', e)
-        Toast.show({ message: '添加失败，请稍后重试', type: 'fail', duration: 2000 })
+        toast.error('添加失败，请稍后重试')
       }
     },
     []
@@ -325,7 +323,7 @@ export default function MChatPage() {
           </div>
 
           {/* 创作热点 */}
-          <div className="px-6 pt-6 pb-3 bg-white rounded-[24px] mb-6">
+          <div className="px-6 pt-6 pb-3 bg-white rounded-[24px] text-3xl">
             <div className="flex items-center gap-2 mb-4">
               <span className="iconfont text-[#ffcc00] text-[28px]!">&#xe637;</span>
               <div className="text-[28px] font-semibold text-[#464646]">创作热点</div>
@@ -334,7 +332,7 @@ export default function MChatPage() {
               {[1, 2, 3, 4, 5].map((_, index) => (
                 <div
                   key={index}
-                  className="flex items-center py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
+                  className="flex items-center  py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
                 >
                   <div className="leading-12 text-gray-500">
                     <span
@@ -350,7 +348,7 @@ export default function MChatPage() {
                     >
                       {index + 1}
                     </span>
-                    <span className="text-[#464646]">热门话题 {index + 1}</span>
+                    <span className="text-gray-500">热门话题 {index + 1}</span>
                   </div>
                 </div>
               ))}
@@ -381,7 +379,7 @@ export default function MChatPage() {
         </div>
       ) : (
         /* 聊天状态 */
-        <div className="h-[calc(100%-15.75rem)] flex-1 min-h-0 flex flex-col gap-9">
+        <div className="h-[calc(100%-15.75rem)] flex-1 min-h-0 flex flex-col gap-9 text-3xl">
           <div className="flex flex-col pt-14 gap-9 overflow-y-auto">
             {messages.map((chatItem, index) => (
               <div key={index}>
@@ -402,7 +400,7 @@ export default function MChatPage() {
                     <div className="mt-5 bg-white px-9 py-3 rounded-[30px] rounded-ss-md!">
                       <MarkdownRenderer content={parseMessageContent(chatItem.content)} />
                       {chatItem.messageId !== currentStreamingMessageId && (
-                        <div className="mt-3 flex items-center gap-7 text-[#8a8a8a] text-[20px]">
+                        <div className="my-3 flex items-center gap-7 text-[#8a8a8a] text-[20px]">
                           <div
                             className="active:bg-[#e5e5e5] px-2 rounded-lg cursor-pointer"
                             onClick={() => handleAddToNote(chatItem)}

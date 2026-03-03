@@ -22,7 +22,7 @@ const postChatStream = (
   config?: RequestConfig
 ) => {
   return apiClient.postStream(
-    "api/works/chat",
+    "/api/works/chat",
     {
       attachments: [],
       auto: false,

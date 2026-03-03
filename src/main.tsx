@@ -20,7 +20,7 @@ createRoot(document.getElementById('root')!).render(
         </div>}
     >
       <RouterProvider router={router}/>
-      <Toaster/>
+      <Toaster position="top-center"/>
     </Suspense>
   </StrictMode>,
 )
