@@ -7,6 +7,7 @@ import {
   ProChatContainerContext,
   type ProChatContainerContextValue,
 } from "./ProChatContext"
+import { cn } from "@/lib/utils.ts";
 
 /** 定制化扩展：不改组件源码即可插入/替换结构 */
 export interface ProChatContainerSlots {
@@ -65,6 +66,7 @@ export interface ProChatContainerProps {
   onAnswerOnlyChange?: (value: boolean) => void
   /** 子内容：workspace 可为 CreationInput，editor 可为整块聊天面板 DOM */
   children: React.ReactNode
+  className?: string
 }
 
 const ProChatContainer = (props: ProChatContainerProps) => {
@@ -230,7 +232,10 @@ const ProChatContainer = (props: ProChatContainerProps) => {
 
   return (
     <ProChatContainerContext.Provider value={contextValue}>
-      <div className="h-full flex flex-col overflow-hidden chat-content">
+      <div className={cn(
+        'h-full flex flex-col overflow-hidden chat-content',
+        props.className,
+      )}>
         {children}
       </div>
     </ProChatContainerContext.Provider>

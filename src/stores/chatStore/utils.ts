@@ -3,7 +3,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import type { ChatMessage, ChatSession, ChatTabType } from "./types";
+import type { ChatMessage, ChatSession, ChatTabType, ToolCallItemForRender } from "./types";
 
 const getTabStorageKey = (workId: string, tabType: ChatTabType) =>
   `chatSessions_${workId}_${tabType}`;
@@ -140,7 +140,7 @@ export const convertBackendHistoryToFrontend = (
                 id: `ai_${idx}_${Date.now()}`,
                 type: "ai" as const,
                 content: p.content,
-                tool_calls: p.tool_calls,
+                tool_calls: p.tool_calls as ToolCallItemForRender[] | undefined,
               }))
             : undefined,
         messageType: "normal",

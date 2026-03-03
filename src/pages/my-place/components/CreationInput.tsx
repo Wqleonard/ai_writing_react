@@ -295,7 +295,7 @@ export const CreationInput = (props: CreationInputProps) => {
   }
 
   return (
-    <div className="relative z-1 flex w-full flex-1 flex-col">
+    <div className="relative z-1 flex w-full flex-1 flex-col px-4">
       <div id="newbiew-tour-step-2" className="z-1 ">
         {/* 顶部工具标签 - 对应 Vue tool-tags-container-top / tool-tag-top */}
         {showToolTags && (

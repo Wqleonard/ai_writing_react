@@ -55,13 +55,6 @@ const convertWorkItemToMyWorkData = (item: WorkItem): MyWorkData => ({
 
 const isLoggedIn = () => !!localStorage.getItem('token')
 
-const requireLogin = (callback: () => void | Promise<void>) => {
-  if (!isLoggedIn()) {
-    toast.error('请先登录')
-    return
-  }
-  void callback()
-}
 
 export default function MyPlacePage() {
   const navigate = useNavigate()
@@ -386,7 +379,7 @@ export default function MyPlacePage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"/>
         ) : null}
         <div
-          className="workspace-container mx-auto flex h-full w-full max-w-[800px] flex-col font-['YaHei',sans-serif]">
+          className="mx-auto flex h-full w-200 flex-col font-['YaHei',sans-serif]">
           <header className="workspace-header">
             <div className="mb-17 mt-13">
               <div className="title-section relative flex flex-col items-center overflow-visible text-sm">
@@ -423,7 +416,7 @@ export default function MyPlacePage() {
             {/* 创作输入区域 */}
             <section
               className={clsx(
-                'creation-section relative flex flex-col rounded-lg',
+                'creation-section relative flex flex-col rounded-lg w-[calc(100%+2rem)] -ml-4',
                 currentTheme
               )}
             >
