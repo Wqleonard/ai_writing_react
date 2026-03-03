@@ -7,19 +7,19 @@ export default function MRulesPage() {
   const navigate = useNavigate()
 
   const handleBack = useCallback(() => {
-    navigate('/m/m-workspace-mine')
+    navigate('/m/workspace/mine')
   }, [navigate])
 
   const handleJumpToServiceAgreement = useCallback(() => {
-    navigate('/m/m-user-agreement')
+    navigate('/m/user-agreement')
   }, [navigate])
 
   const handleJumpToPrivacy = useCallback(() => {
-    navigate('/m/m-privacy-policy')
+    navigate('/m/privacy-policy')
   }, [navigate])
 
   return (
-    <div className="w-full h-[100dvh] flex flex-col bg-[#f3f3f3]">
+    <div className="w-full h-dvh flex flex-col bg-[#f3f3f3]">
       {/* 顶部栏 */}
       <div className="h-22 px-9 flex items-center justify-between">
         <div

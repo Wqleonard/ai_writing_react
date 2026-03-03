@@ -1,5 +1,3 @@
-'use client'
-
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -7,11 +5,11 @@ export default function MPrivacyPolicyPage() {
   const navigate = useNavigate()
 
   const handleBack = useCallback(() => {
-    navigate('/m/m-rules')
+    navigate('/m/rules')
   }, [navigate])
 
   return (
-    <div className="w-full h-[100dvh] flex flex-col bg-[#f3f3f3]">
+    <div className="w-full h-dvh flex flex-col bg-[#f3f3f3]">
       {/* 顶部栏 */}
       <div className="h-22 px-9 flex items-center justify-between shrink-0">
         <div

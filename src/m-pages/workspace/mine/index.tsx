@@ -1,84 +1,85 @@
-'use client'
+"use client";
 
-import { useState, useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Toast, showConfirmDialog } from 'vant'
-import { useLoginStore, selectUserInfo, selectAvatarDataUrl } from '@/stores/loginStore'
-import { getUserBalanceReq } from '@/api/users'
-import USER_INFO_BG from '@/assets/images/m-workspace-mine/mine_bg.png'
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  useLoginStore,
+  selectUserInfo,
+  selectAvatarDataUrl,
+} from "@/stores/loginStore";
+import { getUserBalanceReq } from "@/api/users";
+import USER_INFO_BG from "@/assets/images/m-workspace-mine/mine_bg.png";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { mtoast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/Button";
 
 export default function MMinePage() {
-  const navigate = useNavigate()
-  const userInfo = useLoginStore(selectUserInfo)
-  const avatarDataUrl = useLoginStore(selectAvatarDataUrl)
-  const { logout, requireLogin } = useLoginStore()
+  const navigate = useNavigate();
+  const userInfo = useLoginStore(selectUserInfo);
+  const avatarDataUrl = useLoginStore(selectAvatarDataUrl);
+  const { logout } = useLoginStore();
 
-  const [userBalance, setUserBalance] = useState('1000')
-  const [fixedToken, setFixedToken] = useState('0')
+  const [userBalance, setUserBalance] = useState("1000");
+  const [fixedToken, setFixedToken] = useState("0");
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   // 获取用户余额
   const updateToken = useCallback(async () => {
     try {
-      const req: any = await getUserBalanceReq()
+      const req: any = await getUserBalanceReq();
       if (req.dailyFreeToken) {
-        setUserBalance(parseFloat(String(req.dailyFreeToken / 1000)).toFixed(0))
+        setUserBalance(
+          parseFloat(String(req.dailyFreeToken / 1000)).toFixed(0),
+        );
       }
       if (req.token) {
-        setFixedToken(parseFloat(String(req.token / 1000)).toFixed(0))
+        setFixedToken(parseFloat(String(req.token / 1000)).toFixed(0));
       }
     } catch (e) {
-      console.error('获取余额失败:', e)
+      console.error("获取余额失败:", e);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    updateToken()
-  }, [updateToken])
+    updateToken();
+  }, [updateToken]);
 
   // 跳转到规则
   const handleJumpToRules = useCallback(() => {
-    navigate('/m/m-rules')
-  }, [navigate])
+    navigate("/m/rules");
+  }, [navigate]);
 
   // 跳转到反馈
   const handleJumpToFeedback = useCallback(() => {
-    navigate('/m/m-feedback-issue')
-  }, [navigate])
+    navigate("/m/feedback-issue");
+  }, [navigate]);
 
   // 退出登录
   const handleLogout = useCallback(() => {
-    showConfirmDialog({
-      title: '提示',
-      message: '确定要退出登录吗？',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-    })
-      .then(() => {
-        logout()
-        navigate('/m/m-landing')
-      })
-      .catch(() => {
-        // 取消操作
-      })
-  }, [logout, navigate])
+    setLogoutDialogOpen(true);
+  }, []);
+
+  const handleConfirmLogout = useCallback(() => {
+    setLogoutDialogOpen(false);
+    logout();
+    navigate("/m");
+  }, [logout, navigate]);
 
   // 充值
   const handleCharge = useCallback(() => {
-    Toast.show({
-      message: '功能暂未开放，敬请期待',
-      type: 'fail',
-      duration: 2000,
-    })
-  }, [])
+    mtoast.error("功能暂未开放，敬请期待");
+  }, []);
 
   // 兑换
   const handleExchange = useCallback(() => {
-    Toast.show({
-      message: '功能暂未开放，敬请期待',
-      type: 'fail',
-      duration: 2000,
-    })
-  }, [])
+    mtoast.error("功能暂未开放，敬请期待");
+  }, []);
 
   return (
     <div className="w-full h-full flex flex-col bg-[#f3f3f3]">
@@ -86,7 +87,9 @@ export default function MMinePage() {
       <div className="px-9 mt-30 h-105 w-full relative">
         <div className="w-160 h-75 mx-auto bg-white rounded-[20px] relative">
           <div className="absolute text-[24px] leading-8 right-5 top-2 text-[#f0ae00]">
-            <span className="iconfont text-[24px]! leading-8 mr-1">&#xea91;</span>
+            <span className="iconfont text-[24px]! leading-8 mr-1">
+              &#xea91;
+            </span>
             <span className="font-semibold">内测版</span>
           </div>
         </div>
@@ -99,7 +102,11 @@ export default function MMinePage() {
           <div className="flex gap-9 w-full">
             <div className="w-36 h-36 rounded-full border-2 border-[#fd9801] bg-white shrink-0 overflow-hidden">
               {avatarDataUrl ? (
-                <img src={avatarDataUrl} alt="" className="w-full h-full rounded-full" />
+                <img
+                  src={avatarDataUrl}
+                  alt=""
+                  className="w-full h-full rounded-full"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-[40px] text-gray-400">
                   &#xe60b;
@@ -108,9 +115,9 @@ export default function MMinePage() {
             </div>
             <div className="text-white flex-1 min-w-0 pr-30">
               <div className="mt-14 text-[32px] leading-9 font-semibold truncate">
-                {userInfo?.nickName || '用户'}
+                {userInfo?.nickName || "用户"}
               </div>
-              <div className="mt-4 text-[22px]">{userInfo?.phone || ''}</div>
+              <div className="mt-4 text-[22px]">{userInfo?.phone || ""}</div>
             </div>
           </div>
 
@@ -120,14 +127,18 @@ export default function MMinePage() {
                 <span className="text-[48px]">{userBalance}</span>
                 <span className="text-[24px]"> / 1000</span>
               </div>
-              <div className="text-center text-[24px] opacity-80">(内测每日积分)</div>
+              <div className="text-center text-[24px] opacity-80">
+                (内测每日积分)
+              </div>
             </div>
             <div className="w-0.5 h-12 bg-[#fbd07f] rounded-full" />
             <div className="flex flex-col justify-center flex-1">
               <div className="text-center">
                 <span className="text-[48px]">{fixedToken}</span>
               </div>
-              <div className="text-center text-[24px] opacity-80">(固定额度)</div>
+              <div className="text-center text-[24px] opacity-80">
+                (固定额度)
+              </div>
             </div>
           </div>
         </div>
@@ -182,6 +193,41 @@ export default function MMinePage() {
           <span className="iconfont text-[#d9d9d9] text-[44px]!">&#xeaa5;</span>
         </div>
       </div>
+
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="w-120 max-w-[calc(100%-2rem)] rounded-2xl p-0"
+        >
+          <DialogHeader className="px-8 pt-8 text-center">
+            <DialogTitle className="text-[2rem] leading-[1.2] font-semibold text-[#333]">
+              提示
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="px-8 pt-5 pb-7 text-center text-[1.625rem] leading-[1.4] text-[#666]">
+            确定要退出登录吗？
+          </div>
+
+          <DialogFooter className="flex h-20 flex-row gap-0 border-t border-[#ebebeb] p-0">
+            <Button
+              variant="ghost"
+              className="outline-0 rounded-0 h-full flex-1 text-[1.75rem] text-[#999] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-transparent focus-visible:border-transparent active:bg-[#f5f5f5]"
+              onClick={() => setLogoutDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <div className="h-full w-px bg-[#ebebeb]" />
+            <Button
+              variant="ghost"
+              className="outline-0 rounded-0 h-full flex-1 text-[1.75rem] font-semibold text-[#f0ae00] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-transparent focus-visible:border-transparent active:bg-[#fff7e6]"
+              onClick={handleConfirmLogout}
+            >
+              确定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }

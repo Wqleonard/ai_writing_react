@@ -74,7 +74,7 @@ export default function MNotesDetailPage() {
   // 返回
   const handleBack = useCallback(async () => {
     // 直接返回，不保存
-    navigate('/m/m-workspace-notes')
+    navigate('/m/workspace/notes')
   }, [navigate])
 
   // 完成保存
@@ -99,7 +99,7 @@ export default function MNotesDetailPage() {
         await updateNote(String(currentNote.id), content, title.trim())
         mtoast.success("更新成功", { position: 'top-center' })
       }
-      navigate('/m/m-workspace-notes')
+      navigate('/m/workspace/notes')
     } catch (error) {
       console.error(error)
       mtoast.error(isNewNote ? '保存失败，请稍后重试' : '更新失败，请稍后重试', { position: 'top-center' })
@@ -111,7 +111,7 @@ export default function MNotesDetailPage() {
   const canSave = title.trim() !== '' || (editor?.getHTML() || '') !== '<p></p>'
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col bg-[#f3f3f3]">
+    <div className="h-dvh w-full flex flex-col bg-[#f3f3f3]">
       {/* 顶部栏 */}
       <div className="flex h-20 items-center justify-between px-8 border-b border-[#ebebeb] bg-[#f3f3f3]">
         <Button
