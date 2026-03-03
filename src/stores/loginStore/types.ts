@@ -65,7 +65,6 @@ export interface LoginActions {
   renderAvatarFromData: (avatarData: AvatarData, pixelSize?: number, size?: number) => string
   setSendIdeaTourShow: (show: boolean) => void
   updateNewbieMission: () => Promise<void>
-  completeNewbieMission: (taskId: number) => Promise<void>
   completeNewbieMissionByCode: (code: string) => Promise<boolean>
   getNewbieMissionProgressPercent: () => string
 }

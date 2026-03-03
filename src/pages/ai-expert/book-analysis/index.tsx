@@ -31,6 +31,7 @@ import { TemplateCard } from './components/TemplateCard'
 import type { TemplateCardData, HistoryItem } from './types'
 import EMPTY_IMG from '@/assets/images/empty.webp'
 import { Iconfont } from "@/components/IconFont";
+import { useLoginStore } from '@/stores/loginStore'
 
 const SIZE_LIMIT = 8 * 1024 * 1024 // 8MB
 const TEMPLATE_PAGE_SIZE = 20
@@ -138,13 +139,19 @@ const BookAnalysisPage = () => {
     }
   }, [templatePage, templateHasMore, templateLoading])
 
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
   useEffect(() => {
-    loadMoreTemplates()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    (async () => {
+      loadMoreTemplates()
+      await completeNewbieMissionByCode('USE_BOOK_ANALYSIS')
+    })()
+  }, [])
 
   const fetchHistoryList = useCallback(async () => {
     try {
       const list = await getBookAnalysisHistoryList()
+      console.log('list', list)
       if (Array.isArray(list)) {
         setHistoryList(
           list.map((item: any) => ({

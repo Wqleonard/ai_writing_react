@@ -102,7 +102,6 @@ function renderAvatarFromData(
   ctx.clip()
   const patternSize = size * 0.7
   const patternWidth = pixelSize * 5
-  const patternHeight = pixelSize * 5
   const scale = patternSize / patternWidth
   const scaledPixelSize = pixelSize * scale
   const offsetX = Math.round((size - patternSize) / 2)
@@ -384,24 +383,15 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       }
     },
 
-    completeNewbieMission: async (taskId: number) => {
-      try {
-        if (!taskId) return
-        if (!get().isLoggedIn) return
-        if (!get().missionGroup.length) {
-          await get().updateNewbieMission()
-        }
-        await completeNewbieMissionReq(taskId)
-        await get().updateNewbieMission()
-      } catch (error) {
-        console.error(error)
-      }
-    },
-
     completeNewbieMissionByCode: async (code: string): Promise<boolean> => {
       try {
         if (!code) return false
         if (!get().isLoggedIn) return false
+
+        // 如果没有初始化任务组，则先初始化
+        if (!get().missionGroup.length) {
+          await get().updateNewbieMission()
+        }
 
         const findTaskByCode = (tasks: GuideTask[]): GuideTask | null => {
           for (const task of tasks) {
@@ -425,7 +415,8 @@ export const useLoginStore = create<LoginStore>((set, get) => {
           return true
         }
 
-        await get().completeNewbieMission(task.taskId)
+        await completeNewbieMissionReq(task.taskId)
+        await get().updateNewbieMission()
         return true
       } catch (error) {
         console.error(`完成任务 ${code} 失败:`, error)

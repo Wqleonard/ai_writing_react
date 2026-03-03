@@ -58,7 +58,7 @@ function defaultBaseURL() {
 
 function defaultGetToken() {
   try {
-    return localStorage.getItem("token") || 'eyJhbGciOiJIUzUxMiJ9.eyJqdGkiOiI0MzJhZTJmZS04ODliLTQ1YjAtYWRiMC00ZjM0MzY5NjVkOWQiLCJzdWIiOiI3NCIsInBob25lIjoiMTM2KioqKjI0MjMiLCJuaWNrTmFtZSI6IueUqOaIt19hN2Y4MiIsInJvbGUiOiJ1c2VyIiwic3RhdHVzIjoiQUNUSVZFIiwiaWF0IjoxNzcwMjc0NzQzLCJleHAiOjE3NzI4NjY3NDN9.TwV0TsulL1ntz7JecsbUJzgE5AoMBNxit2qi2FR5mtiO9ztYDbzhxap9HlECilen6K9ADLEmE_UaHk2wXRL7tA';
+    return localStorage.getItem("token") || '';
   } catch {
     return null;
   }
