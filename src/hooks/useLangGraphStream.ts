@@ -72,8 +72,13 @@ export function useLangGraphStream(
   const [error, setError] = useState<Error | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
+  const currentWriteOrEditorFilePathRef = useRef<string>("");
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const isMainAgentEvent = (event: string): boolean => {
+    return event === "updates" || !event.includes("|tools:");
+  };
 
   function extractContent(data: unknown): string {
     if (data == null) return "";
@@ -103,6 +108,7 @@ export function useLangGraphStream(
       if (isStreamingRef.current) return;
       setError(null);
       setMessages([]);
+      setTodos([]);
       setIsStreaming(true);
       isStreamingRef.current = true;
       const controller = new AbortController();
@@ -140,6 +146,9 @@ export function useLangGraphStream(
           body,
           (eventType, eventData) => {
             if ((eventType === "messages" || eventType?.startsWith("messages/")) && eventData != null) {
+              const isCompleteEvent =
+                eventType === "messages/complete" ||
+                eventType?.startsWith("messages/complete");
               const rawList = Array.isArray(eventData) ? eventData : [eventData];
               setMessages((prev) => {
                 const next = [...prev];
@@ -150,6 +159,13 @@ export function useLangGraphStream(
                   const isTool = itemType === "tool";
                   if (!isAI && !isTool) continue;
                   const content = extractContent((item as { content?: unknown }).content);
+                  // 与 Vue 行为一致：过滤掉后端内部用于更新待办的提示语和 error 状态的消息，避免展示类似 “Updated todo list to ...”
+                  if (content && typeof content === "string" && content.includes("Updated todo list to")) {
+                    continue;
+                  }
+                  if ((item as { status?: string }).status === "error") {
+                    continue;
+                  }
                   const id = (item as { id?: string }).id ?? "";
                   const idx = next.findIndex((m) => m.id === id);
                   const meta = (item as { response_metadata?: { finish_reason?: string; model_name?: string; service_tier?: string } }).response_metadata;
@@ -168,14 +184,68 @@ export function useLangGraphStream(
                       service_tier: meta?.service_tier ?? "",
                     },
                     usage_metadata: null,
-                    resultType: ((item as { resultType?: "input" | "output" }).resultType as "input" | "output" | undefined) ?? "input",
+                    // 与 Vue 对齐：messages/complete 视为 output，messages/partial 视为 input
+                    // 这样 edit_file 等工具输出（如 "Successfully updated file ..."）会走 output 展示规则，不会作为普通内容直出。
+                    // 与 Vue 对齐：messages/partial 中 type=tool 的消息按 output 处理，
+                    // 避免将工具执行结果（如 Successfully updated file ...）当作普通消息渲染。
+                    resultType:
+                      isTool || isCompleteEvent
+                        ? "output"
+                        : (((item as { resultType?: "input" | "output" }).resultType as "input" | "output" | undefined) ?? "input"),
                   };
+                  const toolCalls = (item as { tool_calls?: { name?: string; args?: { file_path?: string } }[] }).tool_calls;
+                  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+                    for (const tc of toolCalls) {
+                      const filePath = tc?.args?.file_path;
+                      if (
+                        (tc?.name === "write_file" || tc?.name === "edit_file") &&
+                        typeof filePath === "string" &&
+                        filePath.endsWith(".md")
+                      ) {
+                        currentWriteOrEditorFilePathRef.current = filePath;
+                      }
+                    }
+                  }
                   if (idx >= 0) next[idx] = msg;
                   else next.push(msg);
                 }
                 optionsRef.current.onMessagesUpdate?.(next, false);
                 return next;
               });
+            }
+            // 与 Vue 一致：处理 updates 事件中的 todos，用于 input 上方任务列表展示
+            if ((eventType === "updates" || eventType?.startsWith("updates")) && eventData != null) {
+              const isMainAgent = isMainAgentEvent(eventType);
+              const d = (eventData as { data?: Record<string, { todos?: { content?: string; status?: string }[] }> })?.data ?? eventData;
+              if (d && typeof d === "object") {
+                for (const key of Object.keys(d)) {
+                  if (key === "SummarizationMiddleware.before_model") continue;
+                  const val = d[key];
+                  if (!val || typeof val !== "object") continue;
+                  if (
+                    (val as { files?: Record<string, string> }).files &&
+                    typeof (val as { files?: Record<string, string> }).files === "object"
+                  ) {
+                    const nextFiles = {
+                      ...(val as { files: Record<string, string> }).files,
+                    };
+                    setFiles(nextFiles);
+                    optionsRef.current.onUpdateFiles?.(
+                      nextFiles,
+                      currentWriteOrEditorFilePathRef.current
+                    );
+                    currentWriteOrEditorFilePathRef.current = "";
+                  }
+                  if (isMainAgent && Array.isArray((val as { todos?: { content?: string; status?: string }[] }).todos)) {
+                    const todosData = (val as { todos: { content?: string; status?: string }[] }).todos.map((todo) => ({
+                      content: todo.content ?? "",
+                      status: todo.status ?? "pending",
+                    }));
+                    setTodos(todosData);
+                    optionsRef.current.onUpdateTodos?.(todosData);
+                  }
+                }
+              }
             }
           },
           (err) => {

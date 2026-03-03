@@ -4,6 +4,7 @@ import React, { useMemo, useEffect, useRef } from "react";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
+import "./MarkdownRenderer.css";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -70,7 +71,7 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
   return (
     <div
       ref={containerRef}
-      className="markdown-content leading-relaxed text-[var(--text-primary)] prose prose-neutral max-w-none dark:prose-invert"
+      className="markdown-content markdown-renderer leading-relaxed text-[var(--text-primary)] prose prose-neutral max-w-none dark:prose-invert"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } fro
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
+import mermaid from "mermaid";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import IconFont from "@/components/IconFont/Iconfont";
@@ -11,6 +12,7 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { FileMessageDisplay } from "@/components/FileMessageDisplay";
 import { SelectedTextDisplay } from "@/components/SelectedTextDisplay";
 import { AgentCustomMessageRenderer } from "@/components/AgentCustomMessageRenderer";
+import { TodosFixedPanel } from "@/components/TodosFixedPanel/TodosFixedPanel";
 import { AssociationSelectorDialog } from "@/components/AssociationSelectorDialog";
 import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
 import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
@@ -24,7 +26,12 @@ import type {
 } from "@/stores/chatStore";
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
-import { updateWorkInfoReq, generateGuideReq } from "@/api/works";
+import {
+  updateWorkInfoReq,
+  generateGuideReq,
+  createWorkReq,
+  updateWorkVersionReq,
+} from "@/api/works";
 import {
   useEditorStore,
   DEFAULT_EDITING_FILE_KEY,
@@ -109,6 +116,88 @@ function CanvasToolbar({ apiRef }: { apiRef: RefObject<InsCanvasApi | null> }) {
   );
 }
 
+function MermaidRelationPreview({ markdown }: { markdown: string }) {
+  const [svgs, setSvgs] = useState<string[]>([]);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    let disposed = false;
+    const fencedBlocks = Array.from(
+      markdown.matchAll(/```mermaid\s*([\s\S]*?)```/g)
+    ).map((m) => (m[1] || "").trim()).filter(Boolean);
+    const plainText = markdown.trim();
+    const looksLikeMermaid = /(^|\n)\s*(graph|flowchart|erDiagram|classDiagram|sequenceDiagram|stateDiagram|mindmap|journey|gantt|pie|timeline|gitGraph)\b/.test(plainText);
+    const blocks = fencedBlocks.length > 0
+      ? fencedBlocks
+      : looksLikeMermaid
+        ? [plainText]
+        : [];
+    if (blocks.length === 0) {
+      setSvgs([]);
+      setError("未检测到 Mermaid 关系图代码块");
+      return;
+    }
+
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "default",
+    });
+
+    (async () => {
+      try {
+        const rendered: string[] = [];
+        for (let i = 0; i < blocks.length; i++) {
+          const id = `relation-${Date.now()}-${i}`;
+          const { svg } = await mermaid.render(id, blocks[i]);
+          rendered.push(svg);
+        }
+        if (!disposed) {
+          setSvgs(rendered);
+          setError("");
+        }
+      } catch {
+        if (!disposed) {
+          setSvgs([]);
+          setError("关系图渲染失败，请检查 Mermaid 语法");
+        }
+      }
+    })();
+
+    return () => {
+      disposed = true;
+    };
+  }, [markdown]);
+
+  if (error) {
+    return (
+      <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 text-sm text-muted-foreground">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 space-y-4">
+      {svgs.map((svg, idx) => (
+        <div
+          key={idx}
+          className="w-full overflow-auto [&>svg]:max-w-none"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RoleTablePreview({ markdown }: { markdown: string }) {
+  return (
+    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4">
+      <MarkdownRenderer content={markdown} />
+    </div>
+  );
+}
+
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const { workId } = useParams<{ workId: string }>();
@@ -143,7 +232,10 @@ const MarkdownEditorPage = () => {
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
   const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
+  const stoppedByUserRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
+  const [todosExpanded, setTodosExpanded] = useState(true);
+
   const langGraphStream = useLangGraphStream({
     onMessagesUpdate: (messages) => {
       setStreamingMessage((prev) => {
@@ -161,6 +253,19 @@ const MarkdownEditorPage = () => {
         streamingMessageRef.current = msg;
         return msg;
       });
+    },
+    onUpdateFiles: (files, fileId) => {
+      const mergedFiles = { ...useEditorStore.getState().serverData, ...files };
+      setServerData(mergedFiles);
+      const targetFileId =
+        fileId && mergedFiles[fileId] !== undefined
+          ? fileId
+          : currentEditingId && mergedFiles[currentEditingId] !== undefined
+            ? currentEditingId
+            : "";
+      if (targetFileId) {
+        setServerDataFile(targetFileId, mergedFiles[targetFileId] ?? "");
+      }
     },
     onComplete: async () => {
       const finalized = streamingMessageRef.current;
@@ -187,9 +292,22 @@ const MarkdownEditorPage = () => {
       streamingMessageIdRef.current = "";
 
       // 流式结束后调用 guide 接口，将联想提示词展示在最后一条消息下方（与 Vue 一致）
+      // 若最后一条消息存在 write_todos 且人在回路未确认（需先展示外层卡片），则不请求 guide，等用户点击拒绝后再请求
       const pending = guideRequestRef.current;
       guideRequestRef.current = null;
-      if (pending?.sessionId && pending?.workId) {
+      const customMsg = finalized?.customMessage;
+      const lastCustom = Array.isArray(customMsg) ? customMsg[customMsg.length - 1] : undefined;
+      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+      const hasHiltPending =
+        lastCustom &&
+        hiltStatus !== "rejected" &&
+        hiltStatus !== "approved" &&
+        ((lastCustom as { hiltTodos?: unknown[] }).hiltTodos?.length
+          ? hiltStatus === "in_progress"
+          : ((lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
+              (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+            ));
+      if (pending?.sessionId && pending?.workId && !hasHiltPending) {
         const { sessionId, workId: wid } = pending;
         try {
           const res = await generateGuideReq(sessionId, Number(wid)) as { guides?: string[] | string } | undefined;
@@ -231,12 +349,55 @@ const MarkdownEditorPage = () => {
       }
     },
     onError: (err, needSendErrorMsg) => {
+      if (stoppedByUserRef.current) {
+        stoppedByUserRef.current = false;
+        return;
+      }
       if (needSendErrorMsg) toast.error(err.message);
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
     },
   });
+
+  const finalizeStreamingMessageWithSuffix = useCallback(
+    (suffix: string) => {
+      const finalized = streamingMessageRef.current;
+      if (!finalized) return;
+      const withSuffix = { ...finalized };
+      if (withSuffix.content) {
+        withSuffix.content = (withSuffix.content || "").trimEnd() + suffix;
+      } else if (
+        Array.isArray(withSuffix.customMessage) &&
+        withSuffix.customMessage.length > 0
+      ) {
+        const last = withSuffix.customMessage[withSuffix.customMessage.length - 1];
+        withSuffix.customMessage = [...withSuffix.customMessage];
+        (withSuffix.customMessage[withSuffix.customMessage.length - 1] as { content?: string }).content =
+          (last?.content || "").trimEnd() ? (last?.content || "").trimEnd() + suffix : suffix;
+      } else {
+        withSuffix.content = suffix;
+      }
+      addMessageToDualTab("chat", withSuffix as DualTabChatMessage);
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+    },
+    [addMessageToDualTab]
+  );
+
+  const handleStopStreaming = useCallback(() => {
+    stoppedByUserRef.current = true;
+    finalizeStreamingMessageWithSuffix("智能体已暂停");
+    langGraphStream.stop();
+  }, [finalizeStreamingMessageWithSuffix, langGraphStream]);
+
+  const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
+    if (langGraphStream.error) return "error";
+    if (langGraphStream.isStreaming) return "streaming";
+    return "ready";
+  }, [langGraphStream.error, langGraphStream.isStreaming]);
+  const isEditorEditable = chatInputStatus !== "streaming";
 
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const insCanvasRef = useRef<InsCanvasApi | null>(null);
@@ -249,6 +410,7 @@ const MarkdownEditorPage = () => {
   const currentEditingId = useEditorStore((s) => s.currentEditingId);
   const initEditorData = useEditorStore((s) => s.initEditorData);
   const saveEditorData = useEditorStore((s) => s.saveEditorData);
+  const setServerData = useEditorStore((s) => s.setServerData);
   const setServerDataFile = useEditorStore((s) => s.setServerDataFile);
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo);
   const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath);
@@ -260,6 +422,7 @@ const MarkdownEditorPage = () => {
   const resizeContainerRef = useRef<HTMLDivElement>(null);
   const [showAssociationSelector, setShowAssociationSelector] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+  const [relationViewMode, setRelationViewMode] = useState<"edit" | "preview">("edit");
 
   const associationTags = useChatInputStore((s) => s.associationTags);
   const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
@@ -383,7 +546,15 @@ const MarkdownEditorPage = () => {
     [treeData, currentEditingId]
   );
   const currentContent = serverData[fileKey] ?? "";
+  const roleFileMatchTarget = `${fileKey} ${currentLabel}`;
+  const isRoleRelationFile = /(角色关系网|角色关系图|人物关系网|人物关系图|人物关系|角色关系|关系图|关系网)/.test(roleFileMatchTarget);
+  const isRoleTableFile = /(角色表|人物表|角色列表|人物列表)/.test(roleFileMatchTarget);
+  const isRoleSettingPreviewFile = isRoleRelationFile || isRoleTableFile;
   const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
+
+  useEffect(() => {
+    setRelationViewMode(isRoleSettingPreviewFile ? "preview" : "edit");
+  }, [fileKey, isRoleSettingPreviewFile]);
 
   // 点击标题进入编辑（与 Vue startEditingLabel 一致）
   const startEditingLabel = useCallback((label: string) => {
@@ -426,6 +597,116 @@ const MarkdownEditorPage = () => {
     setEditingLabelValue("");
     isSavingLabelRef.current = false;
   }, []);
+
+  const handleCanvasCreateHere = useCallback(
+    async (files: Record<string, string>, chain: { data?: { content?: string } } | null) => {
+      if (!workId) return;
+      const merged = { ...useEditorStore.getState().serverData, ...files };
+      setServerData(merged);
+
+      let title = chain?.data?.content || "";
+      if (title && (!title.startsWith("《") || !title.endsWith("》"))) {
+        title = `《${title}》`;
+      }
+      try {
+        await updateWorkInfoReq(workId, {
+          ...(title ? { title } : {}),
+          stage: "final",
+        });
+        setWorkInfo({
+          ...(title ? { title } : {}),
+          stage: "final",
+        });
+        await saveEditorData("1");
+      } catch {
+        // 后端保存失败时不打断本地继续创作
+      }
+
+      setActiveTab("chat");
+      let sessionId = chatCurrentSession?.id ?? "";
+      if (!sessionId) {
+        const session = createNewSession("chat");
+        sessionId = session.id;
+      }
+
+      const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
+      const synthetic: ChatMessage = {
+        id: `user_${Date.now()}`,
+        role: "user",
+        content: prompt,
+        createdAt: new Date(),
+        messageType: "normal",
+        mode: "chat",
+      };
+      addMessageToDualTab("chat", synthetic as DualTabChatMessage);
+
+      guideRequestRef.current = { sessionId, workId };
+      const placeholderId = `assistant_${Date.now()}`;
+      streamingMessageIdRef.current = placeholderId;
+      const placeholder: ChatMessage = {
+        id: placeholderId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+        messageType: "normal",
+        mode: "chat",
+        customMessage: [],
+      };
+      streamingMessageRef.current = placeholder;
+      setStreamingMessage(placeholder);
+      await langGraphStream.submit(
+        prompt,
+        sessionId,
+        workId,
+        "agent",
+        undefined,
+        undefined,
+        false,
+        undefined,
+        modelLLM,
+        selectedWritingStyle
+      );
+    },
+    [
+      workId,
+      setServerData,
+      setWorkInfo,
+      saveEditorData,
+      chatCurrentSession?.id,
+      createNewSession,
+      addMessageToDualTab,
+      langGraphStream,
+      modelLLM,
+      selectedWritingStyle,
+    ]
+  );
+
+  const handleCanvasCreateNew = useCallback(
+    async (files: Record<string, string>, chain: { data?: { content?: string } } | null) => {
+      try {
+        const req = (await createWorkReq("editor")) as { id?: string };
+        if (!req?.id) {
+          toast.error("创建作品失败，请重试");
+          return;
+        }
+        const newWorkId = req.id;
+        const rawTitle = chain?.data?.content || "";
+        const title =
+          rawTitle && (!rawTitle.startsWith("《") || !rawTitle.endsWith("》"))
+            ? `《${rawTitle}》`
+            : rawTitle;
+        await updateWorkInfoReq(newWorkId, {
+          ...(title ? { title } : {}),
+          stage: "final",
+        });
+        await updateWorkVersionReq(newWorkId, JSON.stringify(files), "1");
+        navigate(`/editor/${newWorkId}`);
+      } catch {
+        toast.error("创建作品失败，请重试");
+      }
+    },
+    [navigate]
+  );
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {
@@ -529,15 +810,16 @@ const MarkdownEditorPage = () => {
             </div>
 
             {/* 编辑区主体 */}
-            <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-              <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative px-[40px]">
-                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col relative overflow-y-auto">
+              <div className="flex flex-col flex-1 min-h-0 relative px-[40px]">
+                <div className="flex flex-col flex-1 min-h-0">
                   <div className="flex flex-col flex-1 min-h-0">
                     {currentEditingId ? (
                       isEditingLabel ? (
                         <input
                           ref={labelInputRef}
                           type="text"
+                          disabled={!isEditorEditable}
                           className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
                           value={editingLabelValue}
                           onChange={(e) => setEditingLabelValue(e.target.value)}
@@ -557,10 +839,14 @@ const MarkdownEditorPage = () => {
                           role="button"
                           tabIndex={0}
                           className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
-                          onClick={() => startEditingLabel(currentLabel)}
+                          onClick={() => {
+                            if (!isEditorEditable) return;
+                            startEditingLabel(currentLabel);
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
+                              if (!isEditorEditable) return;
                               startEditingLabel(currentLabel);
                             }
                           }}
@@ -573,15 +859,60 @@ const MarkdownEditorPage = () => {
                         {currentLabel}
                       </div>
                     )}
-                    <div className="flex-1 min-h-[200px] flex flex-col">
-                      <MarkdownEditor
-                        value={currentContent}
-                        onChange={(markdown) => setServerDataFile(fileKey, markdown)}
-                        placeholder={EDITOR_PLACEHOLDER}
-                      />
+                    <div className="flex-1 min-h-[200px] flex flex-col gap-2">
+                      {isRoleSettingPreviewFile && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <button
+                            type="button"
+                            className={clsx(
+                              "px-2 py-1 rounded border transition-colors",
+                              relationViewMode === "edit"
+                                ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                : "bg-background text-muted-foreground border-border"
+                            )}
+                            onClick={() => setRelationViewMode("edit")}
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            className={clsx(
+                              "px-2 py-1 rounded border transition-colors",
+                              relationViewMode === "preview"
+                                ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                : "bg-background text-muted-foreground border-border"
+                            )}
+                            onClick={() => setRelationViewMode("preview")}
+                          >
+                            {isRoleRelationFile ? "关系图预览" : "表格预览"}
+                          </button>
+                        </div>
+                      )}
+                      {relationViewMode === "preview" && isRoleRelationFile ? (
+                        <div className="flex-1 min-h-0">
+                          <MermaidRelationPreview markdown={currentContent} />
+                        </div>
+                      ) : relationViewMode === "preview" && isRoleTableFile ? (
+                        <div className="flex-1 min-h-0">
+                          <RoleTablePreview markdown={currentContent} />
+                        </div>
+                      ) : (
+                        <MarkdownEditor
+                          key={fileKey}
+                          className="editor-outer-scroll-mode"
+                          value={currentContent}
+                          onChange={(markdown) => setServerDataFile(fileKey, markdown)}
+                          placeholder={EDITOR_PLACEHOLDER}
+                          readonly={!isEditorEditable}
+                        />
+                      )}
                     </div>
                   </div>
-                  <StepWorkflow ref={stepWorkflowRef} />
+                  <StepWorkflow
+                    ref={stepWorkflowRef}
+                    totalMdContentLength={wordCount}
+                    currentEditingId={currentEditingId}
+                  />
                 </div>
               </div>
             </div>
@@ -622,6 +953,8 @@ const MarkdownEditorPage = () => {
                 <InsCanvas
                   ref={insCanvasRef}
                   workId={workId}
+                  onCreateHere={handleCanvasCreateHere}
+                  onCreateNew={handleCanvasCreateNew}
                   onMessage={(type, msg) => {
                     if (type === "success") toast.success(msg);
                     else if (type === "error") toast.error(msg);
@@ -639,6 +972,8 @@ const MarkdownEditorPage = () => {
                 <ProChatContainer
                   workId={workId ?? undefined}
                   activeTab="chat"
+                  inputStatus={chatInputStatus}
+                  onStopStreaming={handleStopStreaming}
                   messages={
                     streamingMessage
                       ? [...chatMessages, streamingMessage]
@@ -671,7 +1006,7 @@ const MarkdownEditorPage = () => {
                         msg.content ?? "",
                         sessionId,
                         workId,
-                        isAnswerOnly ? "agent" : "chat",
+                        isAnswerOnly ? "chat" : "agent",
                         undefined,
                         undefined,
                         undefined,
@@ -689,6 +1024,14 @@ const MarkdownEditorPage = () => {
                   isAnswerOnly={isAnswerOnly}
                   onAnswerOnlyChange={setIsAnswerOnly}
                   slots={{
+                    todos: (
+                      <TodosFixedPanel
+                        todos={langGraphStream.todos}
+                        expanded={todosExpanded}
+                        onToggleExpand={() => setTodosExpanded((e) => !e)}
+                        isStreaming={chatInputStatus === "streaming"}
+                      />
+                    ),
                     renderMessage: (msg: ChatMessage, options?: { isLastMessage?: boolean }) => {
                       const hasCustomMessage =
                         msg.customMessage &&
@@ -711,10 +1054,9 @@ const MarkdownEditorPage = () => {
                         >
                           <div
                             className={clsx(
-                              "rounded-lg px-3 py-2 max-w-[85%]",
-                              msg.role === "user"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
+                              hasCustomMessage
+                                ? "w-full max-w-none rounded-none bg-transparent px-0 py-0 text-foreground"
+                                : "rounded-lg px-3 py-2 max-w-[85%] bg-primary text-primary-foreground"
                             )}
                           >
                           {hasCustomMessage ? (
@@ -722,10 +1064,94 @@ const MarkdownEditorPage = () => {
                               customMessage={msg.customMessage!}
                               activeTab="chat"
                               isLastMessage={options?.isLastMessage ?? false}
+                              streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
+                              currentMessageId={msg.id}
+                              streamingMessageId={streamingMessageIdRef.current}
                               onFileNameClick={(_fileName: string) => {
                                 // TODO: 与编辑器联动定位到文件
                               }}
-                              onSendMessage={(text) => {
+                              onHiltReject={async (rejectedMsg) => {
+                                const sessionId = chatCurrentSession?.id ?? "";
+                                if (!sessionId || !workId) return;
+                                updateLastChatMessage((prev) => {
+                                  const custom = prev.customMessage ?? [];
+                                  return {
+                                    ...prev,
+                                    customMessage: custom.map((item) =>
+                                      item.id === rejectedMsg.id ? { ...item, hiltStatus: "rejected" as const } : item
+                                    ),
+                                  };
+                                });
+                                try {
+                                  const res = await generateGuideReq(sessionId, Number(workId)) as { guides?: string[] | string } | undefined;
+                                  const raw = res?.guides;
+                                  const guides = Array.isArray(raw)
+                                    ? raw
+                                    : typeof raw === "string"
+                                      ? (() => {
+                                          try {
+                                            const parsed = JSON.parse(raw) as string[] | unknown;
+                                            return Array.isArray(parsed) ? parsed : [];
+                                          } catch {
+                                            return [];
+                                          }
+                                        })()
+                                      : [];
+                                  if (guides.length > 0) {
+                                    updateLastChatMessage((prev) => {
+                                      const custom = prev.customMessage ?? [];
+                                      return {
+                                        ...prev,
+                                        customMessage: custom.map((item) =>
+                                          item.id === rejectedMsg.id ? { ...item, suggestions: guides } : item
+                                        ),
+                                      };
+                                    });
+                                  }
+                                } catch (_) {
+                                  // 联想提示词失败静默忽略
+                                }
+                              }}
+                              onHiltApprove={(approvedMsg) => {
+                                updateLastChatMessage((prev) => {
+                                  const custom = prev.customMessage ?? [];
+                                  return {
+                                    ...prev,
+                                    customMessage: custom.map((item) =>
+                                      item.id === approvedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
+                                    ),
+                                  };
+                                });
+                                const sessionId = chatCurrentSession?.id ?? "";
+                                if (!sessionId || !workId) return;
+                                guideRequestRef.current = null;
+                                const placeholderId = `assistant_${Date.now()}`;
+                                streamingMessageIdRef.current = placeholderId;
+                                const placeholder: ChatMessage = {
+                                  id: placeholderId,
+                                  role: "assistant",
+                                  content: "",
+                                  createdAt: new Date(),
+                                  messageType: "normal",
+                                  mode: "chat",
+                                  customMessage: [],
+                                };
+                                streamingMessageRef.current = placeholder;
+                                setStreamingMessage(placeholder);
+                                langGraphStream.submit(
+                                  "",
+                                  sessionId,
+                                  workId,
+                                  isAnswerOnly ? "chat" : "agent",
+                                  undefined,
+                                  undefined,
+                                  false,
+                                  "approve",
+                                  modelLLM,
+                                  selectedWritingStyle
+                                );
+                              }}
+                              onSendMessage={(text, reload = false) => {
                                 const synthetic: ChatMessage = {
                                   id: `user_${Date.now()}`,
                                   role: "user",
@@ -739,7 +1165,9 @@ const MarkdownEditorPage = () => {
                                   const session = createNewSession("chat");
                                   sid = session.id;
                                 }
-                                addMessageToDualTab("chat", synthetic as DualTabChatMessage);
+                                if (!reload) {
+                                  addMessageToDualTab("chat", synthetic as DualTabChatMessage);
+                                }
                                 if (workId && sid) {
                                   guideRequestRef.current = { sessionId: sid, workId };
                                   const placeholderId = `assistant_${Date.now()}`;
@@ -762,7 +1190,7 @@ const MarkdownEditorPage = () => {
                                     isAnswerOnly ? "agent" : "chat",
                                     undefined,
                                     undefined,
-                                    undefined,
+                                    reload,
                                     undefined,
                                     modelLLM,
                                     selectedWritingStyle

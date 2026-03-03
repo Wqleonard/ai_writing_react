@@ -11,6 +11,8 @@ export type {
   FileItem,
   SelectedText,
   AgentCustomMessageItem,
+  ToolCallItemForRender,
+  HiltTodoItem,
 } from "./types";
 export {
   generateSessionId,

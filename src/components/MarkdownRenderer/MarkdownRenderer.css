@@ -1,0 +1,19 @@
+.markdown-content.markdown-renderer table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.markdown-content.markdown-renderer th,
+.markdown-content.markdown-renderer td {
+  border: 1px solid var(--border-color, var(--border));
+  padding: 0.5em;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.markdown-content.markdown-renderer th {
+  background-color: var(--bg-tertiary, var(--muted));
+  font-weight: 600;
+  color: var(--text-primary);
+}

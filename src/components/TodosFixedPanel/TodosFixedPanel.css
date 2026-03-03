@@ -1,0 +1,193 @@
+.todos-input-wrapper {
+  position: relative;
+}
+
+.todos-fixed-container {
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  padding-bottom: 15px;
+  z-index: 1;
+  transform: translateY(55px);
+  position: relative;
+}
+
+.todos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.2s;
+  gap: 8px;
+}
+
+.todos-header:hover {
+  background: #e8e8e8;
+}
+
+.todos-fixed-container:not(.collapsed) .todos-header {
+  background: var(--bg-secondary) !important;
+}
+
+.todos-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.todos-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.todos-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.todos-count-completed {
+  color: var(--bg-editor-save);
+  font-weight: 500;
+}
+
+.todos-separator,
+.todos-count-total {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.todos-title-progress {
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.todos-progress-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.todos-icon-progress {
+  width: 12px;
+  color: var(--bg-editor-save);
+  flex-shrink: 0;
+}
+
+.todos-progress-text {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.todos-divider {
+  width: 1px;
+  height: 12px;
+  background-color: #e5e7eb;
+  flex-shrink: 0;
+  margin: 0 6px;
+}
+
+.toggle-icon {
+  width: 12px;
+  height: 12px;
+  color: #9ca3af;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.todos-content {
+  padding: 8px 14px 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+}
+
+.todos-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.todos-content.expanded {
+  max-height: 300px;
+  opacity: 1;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  transition: all 0.2s;
+}
+
+.todo-status-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.todo-item.todo-completed .todo-status-icon,
+.todo-item.todo-in_progress .todo-status-icon {
+  color: var(--bg-editor-save);
+  width: 12px;
+  font-size: 12px;
+}
+
+.circle-icon-todo {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #9ca3af;
+}
+
+.todo-content {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #374151;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.todo-item.todo-completed .todo-content {
+  text-decoration: line-through;
+  color: var(--text-muted, #666);
+}
+
+.rotating {
+  animation: rotating 1s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

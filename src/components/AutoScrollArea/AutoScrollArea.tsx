@@ -48,7 +48,6 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
     const contentRef = useRef<HTMLDivElement>(null)
     const [userScrolledAway, setUserScrolledAway] = useState(false)
     const lastScrollTopRef = useRef(0)
-    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const resizeObserverRef = useRef<ResizeObserver | null>(null)
     const viewportRef = useRef<HTMLElement | null>(null)
 
@@ -154,12 +153,7 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
 
     const handleWheel = useCallback(() => {
       setUserScrolledAway(true)
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-      debounceTimerRef.current = setTimeout(() => {
-        if (isNearBottom()) setUserScrolledAway(false)
-        debounceTimerRef.current = null
-      }, 100)
-    }, [isNearBottom])
+    }, [])
 
     useEffect(() => {
       if (!autoScroll) return
@@ -192,10 +186,6 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
         }
         resizeObserverRef.current?.disconnect()
         resizeObserverRef.current = null
-        if (debounceTimerRef.current) {
-          clearTimeout(debounceTimerRef.current)
-          debounceTimerRef.current = null
-        }
       }
     }, [getViewport, handleScroll, handleWheel, checkAndAutoScroll])
 

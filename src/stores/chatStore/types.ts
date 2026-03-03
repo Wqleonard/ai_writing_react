@@ -48,11 +48,36 @@ export interface ChatMessage {
   selectedTexts?: SelectedText[];
 }
 
+/** 人在回路单条任务 */
+export interface HiltTodoItem {
+  content?: string;
+  status?: "pending" | "in_progress" | "completed";
+}
+
 /** Agent 自定义消息项（与 Vue AgentCustomMessage 简化兼容） */
 export interface AgentCustomMessageItem {
   id: string;
   type: "ai" | "tool" | "human";
   content?: string;
-  tool_calls?: unknown[];
+  /** 工具名（如 edit_file），output 类型时用于折叠配置 */
+  name?: string | null;
+  /** input | output，用于判断是否折叠、是否展示内容 */
+  resultType?: "input" | "output";
+  tool_calls?: ToolCallItemForRender[];
   suggestions?: string[];
+  /** 评价状态 */
+  rating?: "none" | "like" | "dislike";
+  /** 人在回路任务列表 */
+  hiltTodos?: HiltTodoItem[];
+  /** 人在回路内层卡片标题（接口返回，如 "To-dos 6"） */
+  hiltTodosTitle?: string;
+  /** 人在回路状态 */
+  hiltStatus?: "in_progress" | "approved" | "rejected";
+}
+
+/** 单条 tool call（与 Vue ToolCallItem 兼容） */
+export interface ToolCallItemForRender {
+  id?: string;
+  name?: string;
+  args?: Record<string, unknown>;
 }
