@@ -6,6 +6,7 @@ import LandingPage from '@/pages/landing'
 import { WorkspaceLayout } from '@/layout'
 import { MobileRedirectGuard } from '@/router/guards/MobileRedirect'
 
+
 // 懒加载页面组件
 const MarkdownEditorPage = lazy(() => import('@/pages/editor'))
 const TrendingListPage = lazy(() => import('@/pages/trending-list'))
@@ -25,15 +26,15 @@ const MLayout = lazy(() => import('@/layout/MLayout/MLayout.tsx'))
 const MWorkSpace = lazy(() => import('@/layout/MWorkSpace'))
 
 // Mobile pages
-const MLandingPage = lazy(() => import('@/pages/m-landing'))
-const MChatPage = lazy(() => import('@/pages/m-workspace/chat'))
-const MNotesPage = lazy(() => import('@/pages/m-workspace/notes'))
-const MNotesDetailPage = lazy(() => import('@/pages/m-workspace/notes-detail'))
-const MMinePage = lazy(() => import('@/pages/m-workspace/mine'))
-const MRulesPage = lazy(() => import('@/pages/m-rules'))
-const MFeedbackIssuePage = lazy(() => import('@/pages/m-feedback-issue'))
-const MUserAgreementPage = lazy(() => import('@/pages/m-user-agreement'))
-const MPrivacyPolicyPage = lazy(() => import('@/pages/m-privacy-policy'))
+const MLandingPage = lazy(() => import('@/m-pages/landing'))
+const MChatPage = lazy(() => import("@/m-pages/workspace/chat"));
+const MNotesPage = lazy(() => import("@/m-pages/workspace/notes"));
+const MNotesDetailPage = lazy(() => import("@/m-pages/workspace/notes-detail"));
+const MMinePage = lazy(() => import("@/m-pages/workspace/mine"));
+const MRulesPage = lazy(() => import("@/m-pages/rules"));
+const MFeedbackIssuePage = lazy(() => import("@/m-pages/feedback-issue"));
+const MUserAgreementPage = lazy(() => import("@/m-pages/user-agreement"));
+const MPrivacyPolicyPage = lazy(() => import("@/m-pages/privacy-policy"));
 
 const routes: RouteObject[] = [
   {
