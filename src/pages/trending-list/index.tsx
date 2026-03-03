@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import { getKeywordsRankReq, getSocialRankReq } from '@/api/trending-list'
 import { TrendingCard } from './components/TrendingCard'
 import titleBg from '@/assets/images/title_bg.png'
+import { useLoginStore } from '@/stores/loginStore'
 
 const defaultTimeRange: [string, string] = [
   dayjs().subtract(7, 'day').format('YYYY.MM.DD'),
@@ -75,6 +76,7 @@ const TrendingListPage = () => {
       // ignore
     }
   }
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
 
   useEffect(() => {
     const run = async () => {
@@ -85,6 +87,7 @@ const TrendingListPage = () => {
       }
     }
     run()
+    completeNewbieMissionByCode('CLICK_TRENDING_LIST')
   }, [])
 
   return (

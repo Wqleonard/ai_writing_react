@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone'
 import { Upload as UploadIcon, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { uploadFileReq } from '@/api/files'
+import { useLoginStore } from '@/stores/loginStore'
 import type { UploadFile, UploadFileResponse } from './types'
 import { cn } from '@/lib/utils'
 
@@ -35,6 +36,7 @@ export const Upload = ({
   disabled = false,
 }: UploadProps) => {
   const isUploadingRef = useRef(false)
+  const requireLogin = useLoginStore((s) => s.requireLogin)
 
   const validateFile = useCallback(
     (file: File): string | null => {
@@ -55,35 +57,45 @@ export const Upload = ({
 
   const doUpload = useCallback(
     async (file: File) => {
-      if (isUploadingRef.current) return
-      isUploadingRef.current = true
-      const uploadFile: UploadFile = {
-        name: file.name,
-        size: file.size,
-        raw: file,
-        uid: Date.now(),
-        status: 'uploading',
-      }
-      onChange(uploadFile)
-      onChangeFile?.(uploadFile)
       try {
-        const result = await uploadFileReq(file)
-        const next: UploadFile = {
-          ...uploadFile,
-          status: 'success',
-          response: result as UploadFileResponse,
+        await requireLogin(async () => {
+          if (isUploadingRef.current) return
+          isUploadingRef.current = true
+          const uploadFile: UploadFile = {
+            name: file.name,
+            size: file.size,
+            raw: file,
+            uid: Date.now(),
+            status: 'uploading',
+          }
+          onChange(uploadFile)
+          onChangeFile?.(uploadFile)
+          try {
+            const result = await uploadFileReq(file)
+            const next: UploadFile = {
+              ...uploadFile,
+              status: 'success',
+              response: result as UploadFileResponse,
+            }
+            onChange(next)
+            onChangeFile?.(next)
+          } catch {
+            toast.error('文件上传失败，请重试')
+            onChange(null)
+            onChangeFile?.(null)
+          } finally {
+            isUploadingRef.current = false
+          }
+        })
+      } catch (error) {
+        const err = error as Error | undefined
+        if (err?.message !== '需要登录') {
+          console.error('上传前登录校验失败:', error)
+          toast.error('拉起登录失败，请稍后重试')
         }
-        onChange(next)
-        onChangeFile?.(next)
-      } catch {
-        toast.error('文件上传失败，请重试')
-        onChange(null)
-        onChangeFile?.(null)
-      } finally {
-        isUploadingRef.current = false
       }
     },
-    [onChange, onChangeFile]
+    [onChange, onChangeFile, requireLogin]
   )
 
   const onDrop = useCallback(

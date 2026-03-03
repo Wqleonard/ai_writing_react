@@ -362,7 +362,16 @@ export const useLoginStore = create<LoginStore>((set, get) => {
         interceptedActions: [...s.interceptedActions, () => action(...args)],
         loginDialogRequest: s.loginDialogRequest + 1,
       }))
-      return Promise.reject(new Error('需要登录'))
+
+      try {
+        const { openLoginDialog } = await import('@/components/LoginDialog/openLoginDialog')
+        await openLoginDialog()
+        await get().executeInterceptedActions()
+      } catch (error) {
+        console.error('requireLogin 打开登录弹窗失败:', error)
+        get().clearInterceptedActions()
+        return Promise.reject(new Error('需要登录'))
+      }
     },
 
     makeRandomAvatar,
