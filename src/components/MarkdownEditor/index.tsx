@@ -41,6 +41,10 @@ export interface MarkdownEditorRef {
   setMarkdown: (markdown: string) => void
   focus: () => void
   blur: () => void
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
   editor: Editor | null
 }
 
@@ -242,6 +246,14 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         },
         focus: () => editor?.commands.focus(),
         blur: () => editor?.commands.blur(),
+        undo: () => {
+          editor?.commands.undo()
+        },
+        redo: () => {
+          editor?.commands.redo()
+        },
+        canUndo: () => editor?.can().undo() ?? false,
+        canRedo: () => editor?.can().redo() ?? false,
         editor: editor ?? null,
       }),
       [editor]
