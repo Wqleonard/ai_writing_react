@@ -22,8 +22,7 @@ import ROLE_1 from '@/assets/images/mlanding/role_1.webp'
 import ROLE_2 from '@/assets/images/mlanding/role_2.webp'
 import ROLE_3 from '@/assets/images/mlanding/role_3.webp'
 import ROLE_4 from '@/assets/images/mlanding/role_4.webp'
-import contactMail from "@/assets/landing_image/contact-icon-mail.svg";
-import contactLocation from "@/assets/landing_image/contact-icon-location.svg";
+import { Iconfont } from "@/components/IconFont";
 
 // 角色数据
 const ROLE_DATA = [
@@ -86,10 +85,10 @@ export default function MLandingPage() {
     const website = 'https://www.baowenmao.com'
     try {
       await navigator.clipboard.writeText(website)
-      toast.success("网址已复制到剪贴板", { position: 'top-center'})
+      toast.success("网址已复制到剪贴板", { position: 'top-center' })
     } catch (e) {
       console.error(e)
-      toast.error("复制失败", { position: 'top-center'})
+      toast.error("复制失败", { position: 'top-center' })
     }
   }, [])
 
@@ -362,18 +361,15 @@ export default function MLandingPage() {
               <div className="mt-25 text-[#999999]">内容安全</div>
               <div className="mt-25 text-[#999999]">联系我们</div>
               <div className="flex items-center mt-7 text-[#999999]">
-                <img
-                  src={contactMail} alt="Email" className="size-10 mr-1 shrink-0 object-contain" loading="lazy"/>
+                <Iconfont unicode="&#xe612;" className="mr-2 text-[32px]"/>
                 <span>baowenmaoai@126.com</span>
               </div>
-              <div className="flex items-center  mt-7 text-[#999999]">
-                <img
-                  src={contactLocation} alt="Location" className="size-10 mr-1 shrink-0 object-contain"
-                  loading="lazy"/>
+              <div className="flex items-center mt-7 text-[#999999]">
+                <Iconfont unicode="&#xe617;" className="mr-2 text-[32px]"/>
                 <span>上海浦东新区</span>
               </div>
             </div>
-            <div className="flex-1 pl-27">
+            <div className="flex-1 pl-20">
               <div className="text-[#999999]">使用说明</div>
               <div className="mt-7">写手教程</div>
               <div className="mt-7">进阶技巧</div>
