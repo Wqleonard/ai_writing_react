@@ -1,9 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Toast } from 'vant'
-import { useLoginStore } from '@/stores/loginStore'
 import { useMobileChat, type ChatMessage } from '@/hooks/useMobileChat'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import {
@@ -15,8 +12,12 @@ import { getWorksByIdReq } from '@/api/works'
 import { addNote } from '@/api/notes'
 import type { NoteSourceType } from '@/api/notes'
 import MarkdownRenderer from '@/components/MarkdownRenderer/MarkdownRenderer'
+import { Drawer, DrawerContent } from '@/components/ui/Drawer'
 import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
 import LOGO from '@/assets/images/logo.png'
+import { Button } from '@/components/ui/Button';
+import { Iconfont } from '@/components/IconFont';
+import { mtoast } from '@/components/ui/toast';
 
 interface ChatHistory {
   sessionId: string
@@ -32,19 +33,19 @@ interface ChatHistoryGroup {
 }
 
 export default function MChatPage() {
-  const navigate = useNavigate()
-  const { requireLogin } = useLoginStore()
-
   const [showChat, setShowChat] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [chatHistoryList, setChatHistoryList] = useState<ChatHistory[]>([])
   const [currentWorkId, setCurrentWorkId] = useState<string | number>('')
-  const [currentSessionId, setCurrentSessionId] = useState<string>('')
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
-  const [isNewSession, setIsNewSession] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isSendingRef = useRef(false)
+
+  // 生成 sessionId
+  const generateSessionId = useCallback(() => {
+    return crypto.randomUUID?.().replace(/-/g, '') || Date.now().toString(36)
+  }, [])
 
   // 使用聊天 hook
   const {
@@ -52,18 +53,18 @@ export default function MChatPage() {
     isSending,
     streamLoading,
     currentStreamingMessageId,
+    trendingTopics,
+    updateTrendingTopics,
     sendMessage,
     stopStream,
     clearMessages,
+    replaceMessages,
+    setSessionId,
+    resetSessionId,
   } = useMobileChat({
     workId: currentWorkId || '',
-    sessionId: currentSessionId,
+    generateSessionId,
   })
-
-  // 生成 sessionId
-  const generateSessionId = useCallback(() => {
-    return crypto.randomUUID?.().replace(/-/g, '') || Date.now().toString(36)
-  }, [])
 
   // 获取或创建 workId
   const getOrCreateWorkId = useCallback(async () => {
@@ -118,6 +119,9 @@ export default function MChatPage() {
 
   // 初始化
   useEffect(() => {
+    // 每次页面初始化都创建一个新的会话 ID
+    setSessionId(generateSessionId())
+
     const init = async () => {
       try {
         await getOrCreateWorkId()
@@ -126,7 +130,7 @@ export default function MChatPage() {
       }
     }
     init()
-  }, [])
+  }, [generateSessionId, getOrCreateWorkId, setSessionId])
 
   // 获取到 workId 后加载历史
   useEffect(() => {
@@ -150,19 +154,12 @@ export default function MChatPage() {
   const handleSend = useCallback(async () => {
     if (isSendingRef.current || !inputValue.trim()) return
 
-    // 如果是新对话，生成新的 sessionId
-    if (messages.length === 0 || !currentSessionId) {
-      const newSessionId = generateSessionId()
-      setCurrentSessionId(newSessionId)
-      setIsNewSession(true)
-    }
-
     const query = inputValue
     setInputValue('')
     setShowChat(true)
 
     await sendMessage(query)
-  }, [inputValue, messages.length, currentSessionId, generateSessionId, sendMessage])
+  }, [inputValue, sendMessage])
 
   // 创建新聊天
   const handleCreateNewChat = useCallback(() => {
@@ -171,39 +168,61 @@ export default function MChatPage() {
     setHistoryDrawerOpen(false)
     setInputValue('')
     clearMessages()
-    setCurrentSessionId(generateSessionId())
-    setIsNewSession(true)
-  }, [stopStream, clearMessages, generateSessionId])
+    resetSessionId()
+  }, [stopStream, clearMessages, resetSessionId])
+
+  useEffect(() => {
+    (async() => {
+      await updateTrendingTopics()
+    })()
+  }, [])
 
   // 加载历史会话
   const handleHistoryItemClick = useCallback(
     async (item: ChatHistory) => {
       try {
+        stopStream()
         const res: any = await getMobileChatHistoryById(String(currentWorkId), item.sessionId)
 
-        setCurrentSessionId(item.sessionId)
+        setSessionId(item.sessionId)
 
         if (Array.isArray(res)) {
-          // 转换历史消息
-          const convertedMessages: ChatMessage[] = res.map((msg: any) => ({
-            role: msg.role,
-            content: msg.role === 'human' ? msg.content : JSON.parse(msg.content) || '',
-            messageId: msg.id || '',
-            attachments: msg.attachments || [],
-            updatedTime: msg.updatedTime || new Date().toISOString(),
-          }))
+          const historyMessages = res
+            .map<ChatMessage>((msg: any) => {
+              const role = msg?.role === 'human' ? 'human' : 'ai'
+              let content: any = msg?.content ?? ''
 
-          // 这里需要更新 messages，但由于 hook 限制，需要通过其他方式
-          // 简单处理：重新设置 session 并让 hook 处理
+              if (role === 'ai' && typeof content === 'string') {
+                try {
+                  content = JSON.parse(content)
+                } catch {
+                  // fallback to plain text content
+                }
+              }
+
+              return {
+                role: role as 'human' | 'ai',
+                content,
+                messageId: String(msg?.id || msg?.messageId || ''),
+                attachments: Array.isArray(msg?.attachments) ? msg.attachments : [],
+                updatedTime: msg?.updatedTime || msg?.createdTime || new Date().toISOString(),
+              }
+            })
+            .filter((msg) => Boolean(msg.messageId))
+
+          replaceMessages(historyMessages)
+        } else {
+          replaceMessages([])
         }
 
         setShowChat(true)
         setHistoryDrawerOpen(false)
       } catch (e) {
         console.error('加载会话历史失败:', e)
+        mtoast.error('加载会话历史失败，请稍后重试')
       }
     },
-    [currentWorkId]
+    [currentWorkId, replaceMessages, setSessionId, stopStream]
   )
 
   // 添加到笔记
@@ -212,7 +231,7 @@ export default function MChatPage() {
       try {
         const content = getContentFromPartial(chatItem.content)
         if (!content) {
-          Toast.show({ message: '内容为空', type: 'fail' })
+          mtoast.error('内容为空')
           return
         }
 
@@ -222,10 +241,10 @@ export default function MChatPage() {
         const source: NoteSourceType = 'MINI_APP_CHAT'
         await addNote(title, content, source)
 
-        Toast.show({ message: '已添加到笔记', type: 'success', duration: 2000 })
+        mtoast.success('已添加到笔记')
       } catch (e) {
         console.error('添加到笔记失败:', e)
-        Toast.show({ message: '添加失败，请稍后重试', type: 'fail', duration: 2000 })
+        mtoast.error('添加失败，请稍后重试')
       }
     },
     []
@@ -325,16 +344,16 @@ export default function MChatPage() {
           </div>
 
           {/* 创作热点 */}
-          <div className="px-6 pt-6 pb-3 bg-white rounded-[24px] mb-6">
+          <div className="px-6 pt-6 pb-3 bg-white rounded-[24px] text-3xl">
             <div className="flex items-center gap-2 mb-4">
               <span className="iconfont text-[#ffcc00] text-[28px]!">&#xe637;</span>
               <div className="text-[28px] font-semibold text-[#464646]">创作热点</div>
             </div>
             <div className="flex flex-col">
-              {[1, 2, 3, 4, 5].map((_, index) => (
+              {trendingTopics.map((topic, index) => (
                 <div
-                  key={index}
-                  className="flex items-center py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
+                  key={topic.name + index}
+                  className="flex items-center  py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
                 >
                   <div className="leading-12 text-gray-500">
                     <span
@@ -350,7 +369,7 @@ export default function MChatPage() {
                     >
                       {index + 1}
                     </span>
-                    <span className="text-[#464646]">热门话题 {index + 1}</span>
+                    <span className="text-gray-500">{topic.name}</span>
                   </div>
                 </div>
               ))}
@@ -381,7 +400,7 @@ export default function MChatPage() {
         </div>
       ) : (
         /* 聊天状态 */
-        <div className="h-[calc(100%-15.75rem)] flex-1 min-h-0 flex flex-col gap-9">
+        <div className="h-[calc(100%-15.75rem)] flex-1 min-h-0 flex flex-col gap-9 text-3xl">
           <div className="flex flex-col pt-14 gap-9 overflow-y-auto">
             {messages.map((chatItem, index) => (
               <div key={index}>
@@ -402,7 +421,7 @@ export default function MChatPage() {
                     <div className="mt-5 bg-white px-9 py-3 rounded-[30px] rounded-ss-md!">
                       <MarkdownRenderer content={parseMessageContent(chatItem.content)} />
                       {chatItem.messageId !== currentStreamingMessageId && (
-                        <div className="mt-3 flex items-center gap-7 text-[#8a8a8a] text-[20px]">
+                        <div className="my-3 flex items-center gap-7 text-[#8a8a8a] text-[20px]">
                           <div
                             className="active:bg-[#e5e5e5] px-2 rounded-lg cursor-pointer"
                             onClick={() => handleAddToNote(chatItem)}
@@ -455,53 +474,50 @@ export default function MChatPage() {
       )}
 
       {/* 历史记录抽屉 */}
-      {historyDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setHistoryDrawerOpen(false)}>
-          <div
-            className="absolute left-0 top-0 h-full w-[80%] bg-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-22 px-8 flex items-center justify-between border-b">
-              <div className="text-[36px] font-bold text-[#464646]">聊天记录</div>
-              <div
-                className="iconfont text-[40px]! text-[#999] cursor-pointer active:bg-[#e5e5e5] rounded-md"
-                onClick={() => setHistoryDrawerOpen(false)}
-              >
-                &#xe633;
-              </div>
-            </div>
-            <div className="p-8 overflow-y-auto h-[calc(100%-5.5rem)]">
-              {groupedChatHistory().length > 0 ? (
-                groupedChatHistory().map((group) => (
-                  <div key={group.title} className="mb-8">
-                    <div className="text-[28px] text-[#999] mb-4">{group.title}</div>
-                    <div className="flex flex-col gap-4">
-                      {group.items.map((item) => (
-                        <div
-                          key={item.sessionId}
-                          className="bg-white rounded-[16px] px-6 py-5 active:bg-[#f5f5f5] cursor-pointer border shadow-sm"
-                          onClick={() => handleHistoryItemClick(item)}
-                        >
-                          <div className="text-[28px] text-[#1a1a1a] truncate">
-                            会话 {item.sessionId.slice(0, 8)}
-                          </div>
-                          <div className="text-[22px] text-[#999] mt-2">
-                            {formatTime(item.createdTime)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex flex-col items-center justify-center h-80 text-[#999]">
-                  <div className="text-[28px]">暂无聊天记录</div>
-                </div>
-              )}
-            </div>
+      <Drawer direction="left" open={historyDrawerOpen} onOpenChange={setHistoryDrawerOpen}>
+        <DrawerContent className="h-full w-[70%]! max-w-[70%]! border-none bg-white p-0">
+          <div className="w-full h-22 px-8 flex items-center justify-between">
+            <div className="text-[36px] font-bold text-[#464646]">聊天记录</div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-12 active:bg-[#e5e5e5] rounded-md"
+              onClick={() => setHistoryDrawerOpen(false)}
+            >
+              <Iconfont unicode="&#xe633;" className="text-[40px] text-[#999]"/>
+            </Button>
           </div>
-        </div>
-      )}
+          <div className="p-8 overflow-y-auto h-[calc(100%-5.5rem)]">
+            {groupedChatHistory().length > 0 ? (
+              groupedChatHistory().map((group) => (
+                <div key={group.title} className="mb-8">
+                  <div className="text-[28px] text-[#999] mb-4">{group.title}</div>
+                  <div className="flex flex-col gap-4">
+                    {group.items.map((item) => (
+                      <div
+                        key={item.sessionId}
+                        className="bg-white rounded-[16px] px-6 py-5 active:bg-[#f5f5f5] cursor-pointer"
+                        onClick={() => handleHistoryItemClick(item)}
+                      >
+                        <div className="text-[28px] text-[#1a1a1a] truncate">
+                          会话 {item.sessionId.slice(0, 8)}
+                        </div>
+                        <div className="text-[22px] text-[#999] mt-2">
+                          {formatTime(item.createdTime)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center h-80 text-[#999]">
+                <div className="text-[28px]">暂无聊天记录</div>
+              </div>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }

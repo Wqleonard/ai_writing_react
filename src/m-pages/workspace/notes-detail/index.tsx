@@ -1,13 +1,13 @@
-'use client'
-
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Toast } from 'vant'
 import { addNote, updateNote } from '@/api/notes'
 import type { NoteSourceType } from '@/api/notes'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Button } from "@/components/ui/Button.tsx";
+import { Iconfont } from "@/components/IconFont";
+import { mtoast } from '@/components/ui/toast'
 
 interface NoteItem {
   id: number
@@ -83,7 +83,7 @@ export default function MNotesDetailPage() {
     const canSave = title.trim() !== '' || content.trim() !== '<p></p>'
 
     if (!canSave) {
-      Toast.show({ message: '请输入标题或内容', type: 'fail', duration: 2000 })
+      mtoast.error("请输入标题或内容", {position: 'top-center'})
       return
     }
 
@@ -94,18 +94,15 @@ export default function MNotesDetailPage() {
       if (isNewNote) {
         const source: NoteSourceType = 'MINI_APP_ADD'
         await addNote(title.trim(), content, source)
-        Toast.show({ message: '保存成功', type: 'success', duration: 2000 })
+        mtoast.success("保存成功", { position: 'top-center' })
       } else if (currentNote) {
         await updateNote(String(currentNote.id), content, title.trim())
-        Toast.show({ message: '更新成功', type: 'success', duration: 2000 })
+        mtoast.success("更新成功", { position: 'top-center' })
       }
       navigate('/m/m-workspace-notes')
     } catch (error) {
-      Toast.show({
-        message: isNewNote ? '保存失败，请稍后重试' : '更新失败，请稍后重试',
-        type: 'fail',
-        duration: 2000,
-      })
+      console.error(error)
+      mtoast.error(isNewNote ? '保存失败，请稍后重试' : '更新失败，请稍后重试', { position: 'top-center' })
     } finally {
       setIsSaving(false)
     }
@@ -117,12 +114,14 @@ export default function MNotesDetailPage() {
     <div className="h-[100dvh] w-full flex flex-col bg-[#f3f3f3]">
       {/* 顶部栏 */}
       <div className="flex h-20 items-center justify-between px-8 border-b border-[#ebebeb] bg-[#f3f3f3]">
-        <div
-          className="iconfont text-[40px]! w-10 h-10 leading-10 active:bg-[#e5e5e5] rounded-md cursor-pointer"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-10 leading-10 active:bg-gray-300"
           onClick={handleBack}
         >
-          &#xeaa2;
-        </div>
+          <Iconfont unicode="&#xeaa2;" className="text-[40px]"/>
+        </Button>
         <div
           className={`text-[32px] cursor-pointer ${canSave && !isSaving ? 'text-[#1a1a1a]' : 'text-[#a5a5a5] pointer-events-none'}`}
           onClick={handleComplete}

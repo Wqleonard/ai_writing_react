@@ -1,7 +1,5 @@
-'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 
 interface Role {
   img: string

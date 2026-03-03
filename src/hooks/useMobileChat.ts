@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { postChatStream, type PostChatStreamData } from '@/api/m-workspace-chat'
+import { getKeywordsRankReq, postChatStream, type PostChatStreamData } from '@/api/m-workspace-chat'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 
 export interface ChatMessage {
@@ -12,27 +12,52 @@ export interface ChatMessage {
 
 export interface UseMobileChatOptions {
   workId: string | number
-  sessionId: string
+  initialSessionId?: string
+  generateSessionId?: () => string
   onMessageUpdate?: (messages: ChatMessage[]) => void
 }
 
 export interface UseMobileChatReturn {
   messages: ChatMessage[]
+  currentSessionId: string
   isSending: boolean
   streamLoading: boolean
   currentStreamingMessageId: string | null
+  trendingTopics: Topic[]
+  setTrendingTopics: (topics: Topic[]) => void
+  updateTrendingTopics: () => Promise<void>
   sendMessage: (query: string) => Promise<void>
   stopStream: () => void
   clearMessages: () => void
+  replaceMessages: (nextMessages: ChatMessage[]) => void
+  setSessionId: (sessionId: string) => void
+  resetSessionId: () => string
+}
+
+export interface Topic {
+  name: string
+  description: string
+  workReference: string
 }
 
 export function useMobileChat(options: UseMobileChatOptions): UseMobileChatReturn {
-  const { workId, sessionId, onMessageUpdate } = options
+  const { workId, initialSessionId = '', generateSessionId } = options
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState(initialSessionId)
   const [isSending, setIsSending] = useState(false)
   const [streamLoading, setStreamLoading] = useState(false)
   const [currentStreamingMessageId, setCurrentStreamingMessageId] = useState<string | null>(null)
   const streamAbortControllerRef = useRef<AbortController | null>(null)
+
+  const createSessionId = useCallback(() => {
+    return generateSessionId?.() || crypto.randomUUID?.().replace(/-/g, '') || Date.now().toString(36)
+  }, [generateSessionId])
+
+  const resetSessionId = useCallback(() => {
+    const nextSessionId = createSessionId()
+    setCurrentSessionId(nextSessionId)
+    return nextSessionId
+  }, [createSessionId])
 
   const handleStreamData = useCallback((data: any) => {
     switch (data.event) {
@@ -114,6 +139,8 @@ export function useMobileChat(options: UseMobileChatOptions): UseMobileChatRetur
       setIsSending(true)
       setCurrentStreamingMessageId(null)
 
+      const sessionId = currentSessionId || resetSessionId()
+
       // 添加用户消息
       const userMessage: ChatMessage = {
         role: 'human',
@@ -168,7 +195,8 @@ export function useMobileChat(options: UseMobileChatOptions): UseMobileChatRetur
     [
       isSending,
       workId,
-      sessionId,
+      currentSessionId,
+      resetSessionId,
       currentStreamingMessageId,
       handleStreamData,
       handleStreamError,
@@ -189,13 +217,55 @@ export function useMobileChat(options: UseMobileChatOptions): UseMobileChatRetur
     setMessages([])
   }, [])
 
+  const replaceMessages = useCallback((nextMessages: ChatMessage[]) => {
+    setMessages(nextMessages)
+  }, [])
+
+
+  const [trendingTopics, setTrendingTopics] = useState<Topic[]>(
+    Array.from({ length: 5 }, () => ({
+      name: '',
+      description: '',
+      workReference: '',
+    }))
+  )
+
+  const updateTrendingTopics = useCallback(async () => {
+    try {
+      const req: any = await getKeywordsRankReq()
+      if (req && Array.isArray(req?.keywords)) {
+        const keywords = req.keywords as any[]
+        const nextTrendingTopics: Topic[] = Array.from({ length: 5 }, (_, i) => {
+          const keyword = keywords[i]
+          return {
+            name: keyword?.name || '',
+            description: keyword?.description || '',
+            workReference: keyword?.workReference || '',
+          }
+        })
+        setTrendingTopics(nextTrendingTopics)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
+
+
+
   return {
     messages,
+    currentSessionId,
     isSending,
     streamLoading,
     currentStreamingMessageId,
+    trendingTopics,
+    setTrendingTopics,
+    updateTrendingTopics,
     sendMessage,
     stopStream,
     clearMessages,
+    replaceMessages,
+    setSessionId: setCurrentSessionId,
+    resetSessionId,
   }
 }

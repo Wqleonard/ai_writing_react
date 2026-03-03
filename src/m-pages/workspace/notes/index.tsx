@@ -109,7 +109,7 @@ export default function MNotesPage() {
       }
 
       // 跳转到详情页
-      navigate('/m/m-workspace-notes-detail', {
+      navigate('/m/workspace/notes/detail', {
         state: {
           newNote: false,
           note: JSON.stringify(note),
@@ -121,7 +121,7 @@ export default function MNotesPage() {
 
   // 添加笔记
   const handleAddNote = useCallback(() => {
-    navigate('/m/m-workspace-notes-detail', {
+    navigate('/m/workspace/notes/detail', {
       state: { newNote: true },
     })
   }, [navigate])
@@ -168,7 +168,7 @@ export default function MNotesPage() {
   return (
     <div className="w-full h-full flex flex-col bg-gray-100">
       {/* 顶部标题栏 */}
-      <div className="flex items-center h-22 px-9 bg-white">
+      <div className="flex items-center h-22 px-9">
         <div className="w-15 h-15 mr-4" style={{ transform: 'scaleX(-1)' }}>
           <img src={BOOM_CAT_ICON} alt="" className="w-full h-full object-cover" />
         </div>

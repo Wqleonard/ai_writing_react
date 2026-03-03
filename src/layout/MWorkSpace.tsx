@@ -5,6 +5,7 @@ interface TabBar {
   label: string
   name: string
   icon: string
+  route: string
 }
 
 const tabBar: TabBar[] = [
@@ -12,16 +13,19 @@ const tabBar: TabBar[] = [
     label: '对话',
     name: 'm-workspace-chat',
     icon: '\ue940',
+    route:'/m/workspace/chat'
   },
   {
     label: '笔记',
     name: 'm-workspace-notes',
     icon: '\ue644',
+    route:'/m/workspace/notes'
   },
   {
     label: '我的',
     name: 'm-workspace-mine',
     icon: '\ue60b',
+    route:'/m/workspace/mine'
   },
 ]
 
@@ -30,14 +34,14 @@ export default function MWorkSpace() {
   const navigate = useNavigate()
 
   const isActive = (tab: TabBar) => {
-    return location.pathname.includes(tab.name)
+    return location.pathname.includes(tab.route)
   }
 
   const handleTabClick = (tab: TabBar) => {
-    if (location.pathname.includes(tab.name)) {
+    if (location.pathname.includes(tab.route)) {
       return
     }
-    navigate(`/m/${tab.name}`)
+    navigate(tab.route)
   }
 
   return (
