@@ -7,7 +7,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from "@/components/ui/Button.tsx";
 import { Iconfont } from "@/components/IconFont";
-import { toast } from "sonner";
+import { mtoast } from '@/components/ui/toast'
 
 interface NoteItem {
   id: number
@@ -83,7 +83,7 @@ export default function MNotesDetailPage() {
     const canSave = title.trim() !== '' || content.trim() !== '<p></p>'
 
     if (!canSave) {
-      toast.error("请输入标题或内容", {position: 'top-center'})
+      mtoast.error("请输入标题或内容", {position: 'top-center'})
       return
     }
 
@@ -94,15 +94,15 @@ export default function MNotesDetailPage() {
       if (isNewNote) {
         const source: NoteSourceType = 'MINI_APP_ADD'
         await addNote(title.trim(), content, source)
-        toast.success("保存成功", { position: 'top-center' })
+        mtoast.success("保存成功", { position: 'top-center' })
       } else if (currentNote) {
         await updateNote(String(currentNote.id), content, title.trim())
-        toast.success("更新成功", { position: 'top-center' })
+        mtoast.success("更新成功", { position: 'top-center' })
       }
       navigate('/m/m-workspace-notes')
     } catch (error) {
       console.error(error)
-      toast.error(isNewNote ? '保存失败，请稍后重试' : '更新失败，请稍后重试', { position: 'top-center' })
+      mtoast.error(isNewNote ? '保存失败，请稍后重试' : '更新失败，请稍后重试', { position: 'top-center' })
     } finally {
       setIsSaving(false)
     }

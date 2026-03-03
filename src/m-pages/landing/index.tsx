@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useLoginStore } from '@/stores/loginStore'
 import MRoleCarousel from './MRoleCarousel'
-import { toast } from "sonner";
 
 // 图片静态资源
 import LOGO from '@/assets/images/logo.webp'
@@ -23,7 +22,7 @@ import ROLE_2 from '@/assets/images/mlanding/role_2.webp'
 import ROLE_3 from '@/assets/images/mlanding/role_3.webp'
 import ROLE_4 from '@/assets/images/mlanding/role_4.webp'
 import { Iconfont } from "@/components/IconFont";
-
+import { mtoast } from '@/components/ui/toast'
 // 角色数据
 const ROLE_DATA = [
   { img: ROLE_1, name: '网文/短篇', description: '更稳定的更新速度，更爽的剧情节奏' },
@@ -85,10 +84,10 @@ export default function MLandingPage() {
     const website = 'https://www.baowenmao.com'
     try {
       await navigator.clipboard.writeText(website)
-      toast.success("网址已复制到剪贴板", { position: 'top-center' })
+      mtoast('复制成功')
     } catch (e) {
       console.error(e)
-      toast.error("复制失败", { position: 'top-center' })
+      mtoast.error("复制失败")
     }
   }, [])
 
@@ -175,7 +174,7 @@ export default function MLandingPage() {
 
         {/* 编辑器风格 */}
         <section className="mt-20 w-full">
-          <div className="w-198 h-160 -ml-24 rounded-[24px] bg-gradient-to-r from-[#EFAF00] to-[#ff9500]"/>
+          <div className="w-198 h-160 -ml-24 rounded-[24px] bg-linear-to-r from-[#EFAF00] to-[#ff9500]"/>
           <img
             src={WRITING_STYLE}
             alt="writing style"

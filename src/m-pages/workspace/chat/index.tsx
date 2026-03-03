@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { toast } from "sonner";
 import { useMobileChat, type ChatMessage } from '@/hooks/useMobileChat'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import {
@@ -18,6 +17,7 @@ import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
 import LOGO from '@/assets/images/logo.png'
 import { Button } from '@/components/ui/Button';
 import { Iconfont } from '@/components/IconFont';
+import { mtoast } from '@/components/ui/toast';
 
 interface ChatHistory {
   sessionId: string
@@ -219,7 +219,7 @@ export default function MChatPage() {
         setHistoryDrawerOpen(false)
       } catch (e) {
         console.error('加载会话历史失败:', e)
-        toast.error('加载会话历史失败，请稍后重试')
+        mtoast.error('加载会话历史失败，请稍后重试')
       }
     },
     [currentWorkId, replaceMessages, setSessionId, stopStream]
@@ -231,7 +231,7 @@ export default function MChatPage() {
       try {
         const content = getContentFromPartial(chatItem.content)
         if (!content) {
-          toast.error('内容为空')
+          mtoast.error('内容为空')
           return
         }
 
@@ -241,10 +241,10 @@ export default function MChatPage() {
         const source: NoteSourceType = 'MINI_APP_CHAT'
         await addNote(title, content, source)
 
-        toast.success('已添加到笔记')
+        mtoast.success('已添加到笔记')
       } catch (e) {
         console.error('添加到笔记失败:', e)
-        toast.error('添加失败，请稍后重试')
+        mtoast.error('添加失败，请稍后重试')
       }
     },
     []
