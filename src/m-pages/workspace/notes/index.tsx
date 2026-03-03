@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Toast, showConfirmDialog } from 'vant'
 import { useNoteStore, selectNoteList, selectNotesLoading, selectNotesFinished } from '@/stores/noteStore'
 import { deleteNote } from '@/api/notes'
 import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
+import { mtoast } from '@/components/ui/toast'
+import { MConfirmDialog } from '@/components/ui/MConfirmDialog'
 
 export default function MNotesPage() {
   const navigate = useNavigate()
@@ -17,6 +18,8 @@ export default function MNotesPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const [currentOffset, setCurrentOffset] = useState(0)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<number | null>(null)
   const touchStartX = useRef(0)
   const touchCurrentX = useRef(0)
 
@@ -70,33 +73,31 @@ export default function MNotesPage() {
     }
   }, [activeId, currentOffset])
 
-  // 删除笔记
-  const handleDelete = useCallback(
-    async (noteId: number) => {
-      try {
-        await showConfirmDialog({
-          title: '提示',
-          message: '确定要删除这条笔记吗？',
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
-        })
+  // 打开删除确认框
+  const handleDelete = useCallback((noteId: number) => {
+    setPendingDeleteNoteId(noteId)
+    setDeleteDialogOpen(true)
+  }, [])
 
-        await deleteNote(String(noteId))
-        Toast.show({ message: '删除成功', type: 'success', duration: 2000 })
+  // 确认删除
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDeleteNoteId) return
 
-        // 重新加载列表
-        setCurrentOffset(0)
-        setActiveId(null)
-        loadNotes(true)
-      } catch (e: any) {
-        if (e !== 'cancel') {
-          console.error('删除失败:', e)
-          Toast.show({ message: '删除失败，请稍后重试', type: 'fail', duration: 2000 })
-        }
-      }
-    },
-    [loadNotes]
-  )
+    try {
+      await deleteNote(String(pendingDeleteNoteId))
+      mtoast.success('删除成功')
+
+      // 重新加载列表
+      setCurrentOffset(0)
+      setActiveId(null)
+      setDeleteDialogOpen(false)
+      setPendingDeleteNoteId(null)
+      loadNotes(true)
+    } catch (e: any) {
+      console.error('删除失败:', e)
+      mtoast.error('删除失败，请稍后重试')
+    }
+  }, [loadNotes, pendingDeleteNoteId])
 
   // 点击内容
   const handleContentClick = useCallback(
@@ -237,11 +238,27 @@ export default function MNotesPage() {
 
       {/* 添加按钮 */}
       <div
-        className="iconfont w-24 h-24 rounded-full fixed bottom-60 right-20 bg-black text-[40px]! leading-24 text-white font-semibold text-center cursor-pointer active:opacity-90"
+        className="iconfont size-24 z-10 rounded-full fixed bottom-60 right-20 bg-black text-[40px] leading-24 text-white font-semibold text-center cursor-pointer custom-btn"
         onClick={handleAddNote}
       >
         &#xe625;
       </div>
+
+      <MConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open)
+          if (!open) {
+            setPendingDeleteNoteId(null)
+          }
+        }}
+        title="提示"
+        message="确定要删除这条笔记吗？"
+        cancelText="取消"
+        confirmText="删除"
+        confirmClassName="text-[#ff4444] active:bg-[#fff1f1]"
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }

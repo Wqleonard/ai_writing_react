@@ -12,7 +12,7 @@ export default {
   plugins: {
     'postcss-pxtorem': {
       rootValue({ file }) {
-        return file.indexOf('vant') !== -1 ? 8 : 16;
+        return 16;
       }, // 根字体大小，设计稿 1920px 时 font-size 为 16px
       unitPrecision: 5, // rem 的小数精度
       propList: ['*'],

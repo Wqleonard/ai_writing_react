@@ -9,15 +9,8 @@ import {
 } from "@/stores/loginStore";
 import { getUserBalanceReq } from "@/api/users";
 import USER_INFO_BG from "@/assets/images/m-workspace-mine/mine_bg.png";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/Dialog";
 import { mtoast } from "@/components/ui/toast";
-import { Button } from "@/components/ui/Button";
+import { MConfirmDialog } from "@/components/ui/MConfirmDialog";
 
 export default function MMinePage() {
   const navigate = useNavigate();
@@ -194,40 +187,15 @@ export default function MMinePage() {
         </div>
       </div>
 
-      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="w-120 max-w-[calc(100%-2rem)] rounded-2xl p-0"
-        >
-          <DialogHeader className="px-8 pt-8 text-center">
-            <DialogTitle className="text-[2rem] leading-[1.2] font-semibold text-[#333]">
-              提示
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="px-8 pt-5 pb-7 text-center text-[1.625rem] leading-[1.4] text-[#666]">
-            确定要退出登录吗？
-          </div>
-
-          <DialogFooter className="flex h-20 flex-row gap-0 border-t border-[#ebebeb] p-0">
-            <Button
-              variant="ghost"
-              className="outline-0 rounded-0 h-full flex-1 text-[1.75rem] text-[#999] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-transparent focus-visible:border-transparent active:bg-[#f5f5f5]"
-              onClick={() => setLogoutDialogOpen(false)}
-            >
-              取消
-            </Button>
-            <div className="h-full w-px bg-[#ebebeb]" />
-            <Button
-              variant="ghost"
-              className="outline-0 rounded-0 h-full flex-1 text-[1.75rem] font-semibold text-[#f0ae00] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-transparent focus-visible:border-transparent active:bg-[#fff7e6]"
-              onClick={handleConfirmLogout}
-            >
-              确定
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MConfirmDialog
+        open={logoutDialogOpen}
+        onOpenChange={setLogoutDialogOpen}
+        title="提示"
+        message="确定要退出登录吗？"
+        cancelText="取消"
+        confirmText="确定"
+        onConfirm={handleConfirmLogout}
+      />
     </div>
   );
 }
