@@ -14,8 +14,11 @@ import { getWorksByIdReq } from '@/api/works'
 import { addNote } from '@/api/notes'
 import type { NoteSourceType } from '@/api/notes'
 import MarkdownRenderer from '@/components/MarkdownRenderer/MarkdownRenderer'
+import { Drawer, DrawerContent } from '@/components/ui/Drawer'
 import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
 import LOGO from '@/assets/images/logo.png'
+import { Button } from '@/components/ui/Button';
+import { Iconfont } from '@/components/IconFont';
 
 interface ChatHistory {
   sessionId: string
@@ -453,53 +456,50 @@ export default function MChatPage() {
       )}
 
       {/* 历史记录抽屉 */}
-      {historyDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setHistoryDrawerOpen(false)}>
-          <div
-            className="absolute left-0 top-0 h-full w-[80%] bg-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-22 px-8 flex items-center justify-between border-b">
-              <div className="text-[36px] font-bold text-[#464646]">聊天记录</div>
-              <div
-                className="iconfont text-[40px]! text-[#999] cursor-pointer active:bg-[#e5e5e5] rounded-md"
-                onClick={() => setHistoryDrawerOpen(false)}
-              >
-                &#xe633;
-              </div>
-            </div>
-            <div className="p-8 overflow-y-auto h-[calc(100%-5.5rem)]">
-              {groupedChatHistory().length > 0 ? (
-                groupedChatHistory().map((group) => (
-                  <div key={group.title} className="mb-8">
-                    <div className="text-[28px] text-[#999] mb-4">{group.title}</div>
-                    <div className="flex flex-col gap-4">
-                      {group.items.map((item) => (
-                        <div
-                          key={item.sessionId}
-                          className="bg-white rounded-[16px] px-6 py-5 active:bg-[#f5f5f5] cursor-pointer border shadow-sm"
-                          onClick={() => handleHistoryItemClick(item)}
-                        >
-                          <div className="text-[28px] text-[#1a1a1a] truncate">
-                            会话 {item.sessionId.slice(0, 8)}
-                          </div>
-                          <div className="text-[22px] text-[#999] mt-2">
-                            {formatTime(item.createdTime)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex flex-col items-center justify-center h-80 text-[#999]">
-                  <div className="text-[28px]">暂无聊天记录</div>
-                </div>
-              )}
-            </div>
+      <Drawer direction="left" open={historyDrawerOpen} onOpenChange={setHistoryDrawerOpen}>
+        <DrawerContent className="h-full w-[70%]! max-w-[70%]! border-none bg-white p-0">
+          <div className="w-full h-22 px-8 flex items-center justify-between">
+            <div className="text-[36px] font-bold text-[#464646]">聊天记录</div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-12 active:bg-[#e5e5e5] rounded-md"
+              onClick={() => setHistoryDrawerOpen(false)}
+            >
+              <Iconfont unicode="&#xe633;" className="text-[40px] text-[#999]"/>
+            </Button>
           </div>
-        </div>
-      )}
+          <div className="p-8 overflow-y-auto h-[calc(100%-5.5rem)]">
+            {groupedChatHistory().length > 0 ? (
+              groupedChatHistory().map((group) => (
+                <div key={group.title} className="mb-8">
+                  <div className="text-[28px] text-[#999] mb-4">{group.title}</div>
+                  <div className="flex flex-col gap-4">
+                    {group.items.map((item) => (
+                      <div
+                        key={item.sessionId}
+                        className="bg-white rounded-[16px] px-6 py-5 active:bg-[#f5f5f5] cursor-pointer"
+                        onClick={() => handleHistoryItemClick(item)}
+                      >
+                        <div className="text-[28px] text-[#1a1a1a] truncate">
+                          会话 {item.sessionId.slice(0, 8)}
+                        </div>
+                        <div className="text-[22px] text-[#999] mt-2">
+                          {formatTime(item.createdTime)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center h-80 text-[#999]">
+                <div className="text-[28px]">暂无聊天记录</div>
+              </div>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
