@@ -158,7 +158,7 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
               <Tooltip>
                 <TooltipTrigger>
                   <div
-                    className="create-btn iconfont invisible flex size-8 flex-shrink-0 cursor-pointer select-none items-center justify-center rounded-full text-2xl text-white"
+                    className="create-btn iconfont invisible flex size-8 custom-btn flex-shrink-0 cursor-pointer select-none items-center justify-center rounded-full text-2xl text-white"
                     style={{
                       background: 'linear-gradient(42.67deg, #efaf00 14.59%, #d78b00 84.59%)',
                     }}
