@@ -81,6 +81,8 @@ const EMPTY_CHARACTER: CharacterCardData = {
   identity: "",
 }
 const MAX_INTRO_LENGTH = 1000
+const ROOT_FONT_PX = 16
+const pxToRem = (px: number) => `${(px / ROOT_FONT_PX).toFixed(4)}rem`
 
 // 深拷贝（与 Vue 侧实现一致）
 const deepClone = <T,>(obj: T): T => {
@@ -163,10 +165,10 @@ export const StepCreateDialog = React.forwardRef<
   const [isStoryEditOpen, setIsStoryEditOpen] = useState(false)
   const [isStoryEditAnimating, setIsStoryEditAnimating] = useState(false)
   const [storyEditPanelStyle, setStoryEditPanelStyle] = useState<React.CSSProperties>({
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 440,
+    left: "0rem",
+    top: "0rem",
+    width: "0rem",
+    height: pxToRem(480),
     transformOrigin: "top left",
   })
   const [editingStory, setEditingStory] = useState<StoryStorm>(EMPTY_STORY)
@@ -177,10 +179,10 @@ export const StepCreateDialog = React.forwardRef<
   const [isCharacterEditOpen, setIsCharacterEditOpen] = useState(false)
   const [isCharacterEditAnimating, setIsCharacterEditAnimating] = useState(false)
   const [characterEditPanelStyle, setCharacterEditPanelStyle] = useState<React.CSSProperties>({
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 480,
+    left: "0rem",
+    top: "0rem",
+    width: "0rem",
+    height: pxToRem(480),
     transformOrigin: "top left",
   })
   const [editingCharacter, setEditingCharacter] = useState<CharacterCardData>(EMPTY_CHARACTER)
@@ -620,9 +622,24 @@ export const StepCreateDialog = React.forwardRef<
 
   useEffect(() => {
     if (!open || stepActive !== 2 || !selectedMode) return
-    if (stepSnapshots[2] || stepUpdatedFlags[2]) return
+    // 对齐 Vue：进入步骤2时，只要有当前/历史状态，或已有选中故事，或已更新标记，就不重复请求
+    const hasStoryState =
+      stepSnapshots[2] != null ||
+      historyStepSnapshots[2] != null ||
+      stepUpdatedFlags[2] ||
+      !!selectedStory
+    if (hasStoryState) return
     updateStories()
-  }, [open, stepActive, selectedMode, stepSnapshots, stepUpdatedFlags, updateStories])
+  }, [
+    open,
+    stepActive,
+    selectedMode,
+    stepSnapshots,
+    historyStepSnapshots,
+    stepUpdatedFlags,
+    selectedStory,
+    updateStories,
+  ])
 
   const updateCharacters = useCallback(async () => {
     if (!selectedStory?.title) return
@@ -677,9 +694,24 @@ export const StepCreateDialog = React.forwardRef<
 
   useEffect(() => {
     if (!open || stepActive !== 3 || !selectedStory?.title) return
-    if (stepSnapshots[3] || stepUpdatedFlags[3]) return
+    // 对齐 Vue：进入步骤3时，只要有当前/历史状态，或已有选中角色，或已更新标记，就不重复请求
+    const hasCharacterState =
+      stepSnapshots[3] != null ||
+      historyStepSnapshots[3] != null ||
+      stepUpdatedFlags[3] ||
+      !!selectedCharacter
+    if (hasCharacterState) return
     updateCharacters()
-  }, [open, stepActive, selectedStory, stepSnapshots, stepUpdatedFlags, updateCharacters])
+  }, [
+    open,
+    stepActive,
+    selectedStory,
+    stepSnapshots,
+    historyStepSnapshots,
+    stepUpdatedFlags,
+    selectedCharacter,
+    updateCharacters,
+  ])
 
   const handleCharacterClick = useCallback((c: CharacterCardData) => {
     if (!c.name) return
@@ -711,21 +743,21 @@ export const StepCreateDialog = React.forwardRef<
     const top = cardRect.top - containerRect.top + 60
     const width = cardRect.width
     setStoryEditPanelStyle({
-      left,
-      top,
-      width,
-      height: 440,
+      left: pxToRem(left),
+      top: pxToRem(top),
+      width: pxToRem(width),
+      height: pxToRem(440),
       transformOrigin: "top left",
     })
     setIsStoryEditAnimating(true)
     setIsStoryEditOpen(true)
     storyEditExpandTimerRef.current = window.setTimeout(() => {
       setStoryEditPanelStyle({
-        left: 0,
-        top: 60,
+        left: "0rem",
+        top: pxToRem(60),
         width: "100%",
-        bottom: 60,
-        height: 440,
+        bottom: pxToRem(60),
+        height: pxToRem(440),
         transformOrigin: "top left",
       })
       storyEditFinishTimerRef.current = window.setTimeout(() => {
@@ -807,21 +839,21 @@ export const StepCreateDialog = React.forwardRef<
     const top = cardRect.top - containerRect.top + 60
     const width = cardRect.width
     setCharacterEditPanelStyle({
-      left,
-      top,
-      width,
-      height: 480,
+      left: pxToRem(left),
+      top: pxToRem(top),
+      width: pxToRem(width),
+      height: pxToRem(480),
       transformOrigin: "top left",
     })
     setIsCharacterEditAnimating(true)
     setIsCharacterEditOpen(true)
     characterEditExpandTimerRef.current = window.setTimeout(() => {
       setCharacterEditPanelStyle({
-        left: 0,
-        top: 60,
+        left: "0rem",
+        top: pxToRem(60),
         width: "100%",
-        bottom: 60,
-        height: 480,
+        bottom: pxToRem(60),
+        height: pxToRem(480),
         transformOrigin: "top left",
       })
       characterEditFinishTimerRef.current = window.setTimeout(() => {
@@ -1332,10 +1364,10 @@ export const StepCreateDialog = React.forwardRef<
                             <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">
                               故事简介：
                             </label>
-                            <ScrollArea className="relative min-w-0 flex-1">
+                            <ScrollArea className="relative min-w-0 flex-1 max-h-[240px]">
                               <MarkdownEditor
                                 className="h-[260px] w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 pr-[70px] text-base shadow-none focus:outline-none"
-                                maxLength={MAX_INTRO_LENGTH}
+                                maxlength={MAX_INTRO_LENGTH}
                                 value={editingStory.intro}
                                 onChange={(e) =>
                                   setEditingStory((prev) => ({ ...prev, intro: e }))
@@ -1424,12 +1456,11 @@ export const StepCreateDialog = React.forwardRef<
                       )}
                       style={characterEditPanelStyle}
                     >
-                      <div className="mb-4 text-lg font-semibold">编辑角色</div>
                       <div className="grid grid-cols-2 gap-4 overflow-y-auto">
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">角色名</label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={5}
                             value={editingCharacter.name}
                             onChange={(e) =>
@@ -1440,7 +1471,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">性别</label>
                           <select
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             value={editingCharacter.gender}
                             onChange={(e) =>
                               setEditingCharacter((prev) => ({ ...prev, gender: e.target.value }))
@@ -1454,7 +1485,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">人物标签</label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={100}
                             value={editingCharacter.abilities}
                             onChange={(e) =>
@@ -1465,7 +1496,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">人物身份</label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={50}
                             value={editingCharacter.identity}
                             onChange={(e) =>
@@ -1476,7 +1507,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div className="col-span-2">
                           <label className="mb-2 block text-sm text-gray-700">人物小传</label>
                           <textarea
-                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2"
+                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={300}
                             value={editingCharacter.experiences}
                             onChange={(e) =>

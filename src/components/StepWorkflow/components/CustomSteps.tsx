@@ -45,8 +45,10 @@ export const CustomSteps = ({
 
   return (
     <div
-      className="flex w-full items-center justify-center"
-      style={{ maxWidth }}
+      className={cn(
+        "flex w-full items-center justify-center",
+        `max-w-[${maxWidth}px]`
+      )}
     >
       {steps.map((title, i) => {
         const status = stepStatus(active, i);
