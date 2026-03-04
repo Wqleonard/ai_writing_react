@@ -150,10 +150,13 @@ const updateInspirationDrawReq = (
 /** 保存灵感画布数据（POST，InsCanvas 等使用） */
 const saveInspirationCanvasReq = (
   inspirationDrawId: string | number,
-  canvas: { nodes: unknown[]; edges: unknown[] }
+  canvas: { nodes: unknown[]; edges: unknown[] },
+  sessionId?: string
 ) => {
+  console.log(sessionId, 'sessionId')
   return apiClient.put(`/api/works/inspiration-draw/${inspirationDrawId}`, {
     content: JSON.stringify(canvas),
+    ...(sessionId ? { sessionId } : {}),
   });
 };
 

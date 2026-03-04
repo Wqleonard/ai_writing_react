@@ -51,7 +51,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
   export interface InsCanvasApi {
     addNewCanvas: () => void;
     openHistory: () => void;
-    saveCanvas: () => void;
+    saveCanvas: (sessionId?: string) => void;
     inspirationDrawId: string;
     isLoading: boolean;
   }
@@ -914,7 +914,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
       setInspirationDrawId("");
     }, [setNodes, setEdges]);
 
-    const handleSaveCanvas = useCallback(async () => {
+    const handleSaveCanvas = useCallback(async (sessionId?: string) => {
       if (!inspirationDrawId) {
         msg("warning", "请先创建画布");
         return;
@@ -923,7 +923,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
         await saveInspirationCanvasReq(inspirationDrawId, {
           nodes: nodes as unknown[],
           edges: edges as unknown[],
-        });
+        }, sessionId);
         msg("success", "保存成功");
       } catch {
         msg("error", "保存失败，请稍后重试");
