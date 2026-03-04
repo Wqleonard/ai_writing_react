@@ -187,7 +187,6 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       try {
         const saved = localStorage.getItem('userInfo')
         if (saved) {
-          console.log('saved')
           const parsed = JSON.parse(saved)
           if (parsed?.id) {
             setMatomoUser(parsed.id + '');

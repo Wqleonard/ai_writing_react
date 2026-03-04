@@ -25,6 +25,7 @@ import { UsePrompts } from '@/components/Community/UsePrompts'
 import { useLoginStore } from '@/stores/loginStore'
 import { openAddNewPromptsDialog } from '@/components/Community/AddNewPromptsDialog'
 import { Iconfont } from '@/components/IconFont'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 const PAGE_SIZE = 12
 const USE_PROMPT_DEBOUNCE_MS = 500
@@ -168,6 +169,7 @@ export const PromptsArea = ({
 
   const handleUsePromptInner = useCallback(
     (prompt: PromptItem) => {
+      trackEvent('Community', 'Click', 'Prompt', Number(prompt.id))
       requireLogin(() => {
         setSelectedPrompt(prompt)
         setPromptDetailDialogOpen(true)
@@ -182,6 +184,7 @@ export const PromptsArea = ({
   })
 
   const handleOpenCreateDialog = useCallback(() => {
+    trackEvent('Community', 'Create', 'Prompt Workflow')
     requireLogin(() => {
       if (type === 'my') {
         openAddNewPromptsDialog(loadFirstPage)
