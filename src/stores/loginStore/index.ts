@@ -7,6 +7,7 @@ import type {
   Message,
   LoginStore,
 } from './types'
+import { resetMatomoUser, setMatomoUser } from "@/matomo/trackingMatomoEvent";
 
 export type { UserInfo, AvatarData, Message, InterceptedAction, LoginStore } from './types'
 
@@ -127,7 +128,7 @@ function renderAvatarFromData(
 
 function getAvatarDataUrl(userInfo: UserInfo | null): string {
   return renderAvatarFromData(
-    makeRandomAvatar(userInfo?.phone ?? 'morenToux')
+    makeRandomAvatar(userInfo?.phone ?? '13600008888')
   )
 }
 
@@ -171,9 +172,13 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     saveUserInfo: (info) => {
       if (info) {
         localStorage.setItem('userInfo', JSON.stringify(info))
+        if (info.id) {
+          setMatomoUser(info.id + '');
+        }
         set({ userInfo: info })
       } else {
         localStorage.removeItem('userInfo')
+        resetMatomoUser();
         set({ userInfo: null })
       }
     },
@@ -182,7 +187,11 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       try {
         const saved = localStorage.getItem('userInfo')
         if (saved) {
+          console.log('saved')
           const parsed = JSON.parse(saved)
+          if (parsed?.id) {
+            setMatomoUser(parsed.id + '');
+          }
           set({ userInfo: parsed })
           return parsed
         }
@@ -285,17 +294,21 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       }
     },
 
-
     loginWithTicket: async (ticket: string) => {
       set({ isLoading: true })
       const invitationCode = localStorage.getItem('invitation_code_new') ?? ''
       try {
         const req: any = await verifyTicket(ticket, invitationCode)
-        if (req?.token) localStorage.setItem('token', req.token)
-        if (req?.user) get().saveUserInfo(req.user)
+        if (req?.token) {
+          localStorage.setItem('token', req.token)
+        }
+        if (req?.user) {
+          get().saveUserInfo(req.user)
+        }
         get().updateLoginStatus()
         return { success: true, message: '登录成功' }
       } catch (err: any) {
+        console.error('Login Error:', err)
         return {
           success: false,
           message: err?.response?.data?.message ?? '登录失败',
@@ -309,6 +322,7 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       get().saveUserInfo(null)
       localStorage.removeItem('token')
       localStorage.removeItem('___first_in_editor___')
+      resetMatomoUser()
       get().updateLoginStatus()
       get().clearInterceptedActions()
       if (typeof window !== 'undefined') {
@@ -319,17 +333,6 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     initUserInfo: () => {
       get().loadUserInfo()
       get().updateLoginStatus()
-    },
-
-    handleTokenExpired: () => {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userInfo')
-      set({ userInfo: null, isLoggedIn: false })
-    },
-
-    updateUserInfo: (info) => {
-      set({ userInfo: info })
-      localStorage.setItem('userInfo', JSON.stringify(info))
     },
 
     clearInterceptedActions: () => set({ interceptedActions: [] }),

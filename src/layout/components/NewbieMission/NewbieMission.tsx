@@ -105,7 +105,19 @@ export const NewbieMission = () => {
   }
 
   if (!isLoggedIn) {
-    return null
+    return (
+      <div
+        className="fixed -bottom-4 right-28 h-24 w-24"
+        onMouseEnter={handleCatMouseEnter}
+        onMouseLeave={handleCatMouseLeave}
+      >
+        <img
+          src={open ? PANEL_OPEN_BOOM_CAT : isCatHover ? HOVER_BOOM_CAT : DEFAULT_BOOM_CAT}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+      </div>
+    )
   }
 
   return (

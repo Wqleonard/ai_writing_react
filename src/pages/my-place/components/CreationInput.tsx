@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { Popover, PopoverContent, PopoverAnchor, PopoverTrigger } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 import { useLoginStore } from "@/stores/loginStore";
-import debounce from 'lodash-es/debounce';
+import { debounce } from 'lodash-es';
 import { useMemeWords } from '@/hooks/useMemeWords'
 import { useQuickToolComposer } from '@/hooks/useQuickToolComposer'
 import { useChatInputStore } from '@/stores/chatInputStore'

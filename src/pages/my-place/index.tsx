@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
-import debounce from 'lodash-es/debounce'
+import { debounce } from 'lodash-es'
 import {
   batchDeleteWorkReq,
   createWorkReq,
@@ -38,6 +38,7 @@ import { serverData2FileTreeData } from '@/utils/aiTreeNodeConverter'
 import clsx from 'clsx'
 import LOGO from '@/assets/images/logo.webp'
 import './my-place.css'
+import { useLoginStore } from "@/stores/loginStore";
 
 const PAGE_SIZE = 20
 
@@ -54,7 +55,6 @@ const convertWorkItemToMyWorkData = (item: WorkItem): MyWorkData => ({
   deleteChecked: false,
 })
 
-const isLoggedIn = () => !!localStorage.getItem('token')
 
 
 export default function MyPlacePage() {
@@ -90,8 +90,10 @@ export default function MyPlacePage() {
   })
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  const isFirstPageLoadRef = useRef(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const isLoggedIn = useLoginStore(s => s.isLoggedIn)
+  const requireLogin = useLoginStore(s => s.requireLogin)
 
   const updateMyWorks = useCallback(async () => {
     setWorkListPageInfo((prev) => ({ ...prev, page: -1, total: 0 }))
@@ -177,10 +179,6 @@ export default function MyPlacePage() {
     async (text: string) => {
       const value = text.trim()
       if (!value) return
-      if (!isLoggedIn()) {
-        toast.error('请先登录')
-        return
-      }
       try {
         const req: any = await createWorkReq()
         if (req?.id) {
@@ -219,34 +217,45 @@ export default function MyPlacePage() {
     ]
   )
 
-  const onSubmitCreation = useMemo(
-    () => debounce((text: string) => handleCreationSubmit(text), 300),
-    [handleCreationSubmit]
-  )
+  const onSubmitCreationCallbackRef = useRef<(text: string) => void>(() => {})
+  useEffect(() => {
+    onSubmitCreationCallbackRef.current = (text: string) => {
+      requireLogin(async () => {
+        await handleCreationSubmit(text)
+      })
+    }
+  }, [requireLogin, handleCreationSubmit])
 
-  const handleJump = useCallback(
-    debounce(async (data: MyWorkData) => {
+  const onSubmitCreation = useRef(
+    debounce((text: string) => {
+      console.log('onSubmitCreation', text)
+      onSubmitCreationCallbackRef.current(text)
+    }, 2000, { leading: true, trailing: false })
+  ).current
+
+  const handleJumpCallbackRef = useRef<(data: MyWorkData) => Promise<void>>(async () => {})
+  useEffect(() => {
+    handleJumpCallbackRef.current = async (data: MyWorkData) => {
       if (!data.id) {
         toast.error('作品ID不存在，无法跳转')
         return
       }
       setLoading(true)
       try {
-        const routeName =
-          data.workType === 'doc'
-            ? 'quick-editor-work'
-            : data.workType === 'script'
-              ? 'script-editor-work'
-              : 'editor-work'
         navigate(`/editor/${data.id}`, { state: { workId: data.id } })
       } catch {
         toast.error('跳转失败，请重试')
       } finally {
         setLoading(false)
       }
-    }, 1000, { leading: true, trailing: false }),
-    [navigate]
-  )
+    }
+  }, [navigate])
+
+  const handleJump = useRef(
+    debounce((data: MyWorkData) => {
+      handleJumpCallbackRef.current(data)
+    }, 1000, { leading: true, trailing: false })
+  ).current
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
@@ -379,12 +388,9 @@ export default function MyPlacePage() {
   }, [bannerConfig])
 
   useEffect(() => {
-    if (!isLoggedIn()) return
-    // 避免在 React StrictMode 下初次挂载时重复请求列表
-    if (!isFirstPageLoadRef.current) return
-    isFirstPageLoadRef.current = false
-    void updateMyWorks()
-  }, [updateMyWorks])
+    if (!isLoggedIn) return
+    updateMyWorks()
+  }, [updateMyWorks, isLoggedIn])
 
   useEffect(() => {
     const state = location.state as { shouldAnimate?: boolean; newStyleId?: string } | null

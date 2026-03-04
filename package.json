@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@certible/use-matomo": "^1.1.0",
     "@dagrejs/dagre": "^2.0.4",
     "@fullpage/react-fullpage": "^0.1.49",
     "@tailwindcss/vite": "^4.1.18",

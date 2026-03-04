@@ -3,6 +3,7 @@ import { PromptsArea } from './components/PromptsArea'
 import { PAGE_TYPE_OPTIONS } from './types'
 import { useOptionsStore } from '@/stores/optionsStore'
 import clsx from 'clsx'
+import { useLoginStore } from "@/stores/loginStore";
 
 type PageType = 'public' | 'my' | 'favorite'
 
@@ -10,8 +11,11 @@ const PromptPage = () => {
   const [pageType, setPageType] = useState<PageType>('public')
   const updateCategories = useOptionsStore((s) => s.updateCategories)
 
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
   useEffect(() => {
     updateCategories()
+    completeNewbieMissionByCode('USE_PROMPTS')
   }, [])
 
   return (

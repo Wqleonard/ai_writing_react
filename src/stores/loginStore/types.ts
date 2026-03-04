@@ -55,8 +55,6 @@ export interface LoginActions {
   loginWithTicket: (ticket: string) => Promise<{ success: boolean; message: string }>
   logout: () => void
   initUserInfo: () => void
-  handleTokenExpired: () => void
-  updateUserInfo: (info: UserInfo) => void
   requireLogin: <T extends any[]>(action: (...args: T) => void | Promise<void>, ...args: T) => Promise<void>
   clearInterceptedActions: () => void
   executeInterceptedActions: () => Promise<void>

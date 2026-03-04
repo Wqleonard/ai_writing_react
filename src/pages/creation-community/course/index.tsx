@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { CourseCard } from './components/CourseCard'
 import type { CourseData } from './types'
+import { useLoginStore } from "@/stores/loginStore";
 
 interface ApiTag {
   id: string
@@ -161,8 +162,11 @@ const CoursePage = () => {
     }
   }, [loading, hasMore])
 
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
   useEffect(() => {
     loadCourses(0, false)
+    completeNewbieMissionByCode('USE_COURSE')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onScroll = useCallback(() => {
