@@ -8,7 +8,7 @@ const postSelectionToolbarStream = (
   config?: { signal?: AbortSignal }
 ) => {
   return apiClient.postStream(
-    "api/works/word-highlight/extend",
+    "/api/works/word-highlight/extend",
     data,
     onData,
     onError,
