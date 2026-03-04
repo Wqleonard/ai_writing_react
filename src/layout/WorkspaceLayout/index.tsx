@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { WorkspaceHeader } from './WorkspaceHeader'
 import { NewbieTour } from "@/layout/components/NewbieTour/NewbieTour.tsx";
+import { SendIdeaTour } from "@/layout/components/SebdIdeaTour/index.tsx";
 import { NewbieMission } from "@/layout/components/NewbieMission/NewbieMission.tsx";
 import { useLoginStore } from "@/stores/loginStore";
 
@@ -15,6 +16,10 @@ export function WorkspaceLayout() {
   const [newbieTourOpen, setNewbieTourOpen] = useState(false)
   const setNewbieTourShowed = useLoginStore(state => state.setNewbieTourShowed)
   const hasNewbieTourShowed = useLoginStore(state => state.hasNewbieTourShowed)
+
+  // 发送创作想法引导
+  const sendIdeaTourShow = useLoginStore((s) => s.sendIdeaTourShow)
+  const setSendIdeaTourShow = useLoginStore((s) => s.setSendIdeaTourShow)
 
   useEffect(() => {
     if (location.pathname === '/workspace/my-place' && !hasNewbieTourShowed) {
@@ -58,6 +63,10 @@ export function WorkspaceLayout() {
       </main>
 
       <NewbieTour open={newbieTourOpen} onOpenChange={setNewbieTourOpen}/>
+      <SendIdeaTour
+        open={sendIdeaTourShow && location.pathname === '/workspace/my-place'}
+        onOpenChange={setSendIdeaTourShow}
+      />
     </div>
   )
 }

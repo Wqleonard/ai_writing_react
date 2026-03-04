@@ -393,6 +393,7 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     },
 
     completeNewbieMissionByCode: async (code: string): Promise<boolean> => {
+      console.log('completeNewbieMissionByCode', code)
       try {
         if (!code) return false
         if (!get().isLoggedIn) return false

@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import HOVER_BOOM_CAT from '@/assets/images/my-place/hover.gif'
 import DEFAULT_BOOM_CAT from '@/assets/images/my-place/default.gif'
 import PANEL_OPEN_BOOM_CAT from '@/assets/images/my-place/click.gif'
-import './NewbieMission.css'
 
 export const NewbieMission = () => {
   const [open, setOpen] = useState(false)
@@ -80,7 +79,7 @@ export const NewbieMission = () => {
     // 特殊逻辑
     if (mission.code === 'SEND_CREATIVE_IDEA') {
       setOpen(false)
-      navigate('/workspace')
+      navigate('/workspace/my-place')
       setSendIdeaTourShow(true)
       return
     }
@@ -157,11 +156,17 @@ export const NewbieMission = () => {
             {missionGroup.map((group, groupIndex) => (
               <div
                 key={group.taskId ?? groupIndex}
-                className="flex flex-col gap-2 rounded-[10px] border border-[#ebebeb] p-2"
+                className="flex flex-col gap-2 rounded-[10px] border border-[#ebebeb] py-2 px-1"
                 onClick={() => handleMissionClick(group)}
               >
                 {/* 第一条始终展示 */}
-                <div className="flex h-5 w-full items-center justify-between">
+                <div 
+                  className="flex h-5 w-full items-center justify-between px-1 rounded-sm hover:bg-gray-200 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleGroup(groupIndex)
+                  }}
+                >
                   <div className="flex min-w-0 flex-1 items-center gap-1">
                     {group?.status === 1 ? (
                       <div className="h-3.5 w-3.5 shrink-0 rounded-full bg-[#f8a001] text-center text-[8px] leading-3.5 text-white">
@@ -183,7 +188,7 @@ export const NewbieMission = () => {
                       {group.name}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <div
                       className={cn(
                         'text-sm',
@@ -192,17 +197,13 @@ export const NewbieMission = () => {
                     >
                       +{Math.floor((group?.rewardPoints || 0) / 1000)}
                     </div>
-                    <div className="w-3">
+                    <div className="w-4">
                       {group.children.length > 1 && (
                         <div
                           className={cn(
                             'w-full cursor-pointer select-none text-center text-gray-500 transition-transform duration-300 ease-in-out',
                             isGroupExpanded(groupIndex) && 'rotate-180'
                           )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleGroup(groupIndex)
-                          }}
                         >
                           <IconFont unicode="&#xeaa1;"/>
                         </div>
@@ -212,7 +213,7 @@ export const NewbieMission = () => {
                 </div>
 
                 {/* 其余条用展开/收起 */}
-                {group.children.length > 1 && (
+                {(group.children.length > 1 && isGroupExpanded(groupIndex)) && (
                   <div
                     className={cn(
                       'grid transition-all duration-300 ease-in-out',
@@ -226,7 +227,12 @@ export const NewbieMission = () => {
                         {group.children.map((mission, missionIndex) => (
                           <div
                             key={`${groupIndex}-${missionIndex}-${mission.taskId}`}
-                            className="child-mission relative flex items-center justify-between"
+                            className={
+                              cn(
+                                "relative px-1 flex items-center justify-between after:absolute after:bottom-[-9px] after:left-[6px] after:h-[10px] after:w-px after:bg-[#cfcfcf] after:content-[''] last:after:hidden",
+                                "rounded-sm hover:bg-gray-200 cursor-pointer"
+                              )
+                            }
                             onClick={(e) => {
                               e.stopPropagation()
                               handleMissionClick(mission)
@@ -262,7 +268,7 @@ export const NewbieMission = () => {
                                 >
                                   +{Math.floor((mission?.rewardPoints || 0) / 1000)}
                                 </div>
-                                <div className="w-3" />
+                                <div className="w-4" />
                               </div>
                             </div>
                           </div>

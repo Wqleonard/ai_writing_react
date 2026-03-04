@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLLM } from '@/hooks/useLLM'
 import { useProChatContainer } from '@/components/ProChatContainer'
 import {
@@ -18,6 +18,8 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { getKeywords } from '@/api/tools-square'
 import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
+import { useLoginStore } from "@/stores/loginStore";
+import debounce from 'lodash-es/debounce';
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 
@@ -162,7 +164,7 @@ export const CreationInput = (props: CreationInputProps) => {
     setToolPopoverOpen(true)
   }, [setToolPopoverOpen])
 
-  const openFilePopover = useCallback(()=>{
+  const openFilePopover = useCallback(() => {
     setFilePopoverOpen(true)
   }, [setFilePopoverOpen])
 
@@ -178,13 +180,18 @@ export const CreationInput = (props: CreationInputProps) => {
   const writingStyleOptions =
     writingStyles.length > 0 ? writingStyles : [{ id: selectedWritingStyle, name: '默认' }]
 
-  const handleSubmitClick = () => {
-    if (status === 'error' && onRetry) {
-      onRetry()
-    } else {
-      onSubmit?.()
-    }
-  }
+  const completeNewbieMissionByCode = useLoginStore(s => s.completeNewbieMissionByCode)
+
+  const handleSubmit = useRef(
+    debounce(async () => {
+      if (status === 'error' && onRetry) {
+        onRetry()
+      } else {
+        await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
+        onSubmit?.()
+      }
+    }, 2000, { leading: true, trailing: false })
+  ).current
 
   const disabled = isButtonDisabled || status === 'submitted' || status === 'streaming'
 
@@ -240,12 +247,14 @@ export const CreationInput = (props: CreationInputProps) => {
     })
   }
 
-  const handleRichKeyDown = (e: React.KeyboardEvent, inputIndex: number) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (!disabled) handleSubmitClick()
-    }
-  }
+  const handleRichKeyDown = useRef(
+    debounce((e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (!disabled) handleSubmit()
+      }
+    }, 2000, { leading: true, trailing: false })
+  ).current
 
   /** 获取创作热点数据，与 Vue fetchMemeWords 一致 */
   useEffect(() => {
@@ -361,6 +370,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   }
                   Array.from(el.childNodes).forEach(walk)
                 }}
+                onKeyDown={e => handleRichKeyDown(e)}
               >
                 {currentChannel.value.map((item, index) => {
                   if (item.mold === 'tip') {
@@ -405,7 +415,6 @@ export const CreationInput = (props: CreationInputProps) => {
                         placeholder={item.value}
                         value={richInputValues[inputIndex] ?? ''}
                         onChange={e => setRichInputAt(inputIndex, e.target.value)}
-                        onKeyDown={e => handleRichKeyDown(e, inputIndex)}
                       />
                     </span>
                     )
@@ -419,12 +428,6 @@ export const CreationInput = (props: CreationInputProps) => {
                 placeholder={placeholder}
                 value={value}
                 onChange={e => onChange(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (!disabled) handleSubmitClick()
-                  }
-                }}
               />
             )}
           </div>
@@ -556,9 +559,9 @@ export const CreationInput = (props: CreationInputProps) => {
               {/* 发送按钮 - 多状态图标 */}
               <Button
                 role="button"
-                onClick={handleSubmitClick}
+                onClick={handleSubmit}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && !disabled) handleSubmitClick()
+                  if (e.key === 'Enter' && !disabled) handleSubmit()
                 }}
                 className="w-7.5 h-7.5 rounded-full"
               >
