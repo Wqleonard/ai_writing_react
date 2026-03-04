@@ -23,6 +23,7 @@ import { ShareCard } from './components/ShareCard'
 import { MyShareCard } from './components/MyShareCard'
 import type { ShareData } from './types'
 import { useLoginStore } from "@/stores/loginStore";
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 const transformShareData = (item: {
   id: number
@@ -69,6 +70,7 @@ const SharePage = () => {
 
   const handleCardClick = useCallback(
     (share: ShareData) => {
+      trackEvent('Community', 'Click', 'Share', Number(share.id))
       if (!share?.id) {
         toast.warning('暂无详情')
         return
@@ -204,6 +206,7 @@ const SharePage = () => {
   }, [loadMyShares])
 
   const handleCreateShare = useCallback(() => {
+    trackEvent('Community', 'Create', 'Share')
     setMyShareOpen(false)
     navigateTo('/workspace/creation-community/share/create/new')
   }, [navigateTo])

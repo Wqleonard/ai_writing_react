@@ -11,27 +11,22 @@ import { ScenariosSection } from './components/ScenariosSection'
 import { FaqSection } from './components/FaqSection'
 import { CtaSection } from './components/CtaSection'
 import arrowUp from '@/assets/images/arrow_up.svg'
+import { useLoginStore } from '@/stores/loginStore'
 import './landing.css'
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 // CJS → ESM interop: Vite may wrap the default in an extra object layer for this webpack-bundled package
 const ReactFullpage: typeof ReactFullpageLib =
   (ReactFullpageLib as any).default ?? ReactFullpageLib
-
-const isLoggedIn = () => !!localStorage.getItem('token')
-
-const requireLogin = (callback: () => void) => {
-  if (isLoggedIn()) {
-    callback()
-  } else {
-    window.location.href = '/workspace/my-place'
-  }
-}
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const [showScrollToTop, setShowScrollToTop] = useState(false)
   const [isCreatingWork, setIsCreatingWork] = useState(false)
   const fullpageApiRef = useRef<any>(null)
+
+  const isLoggedIn = useLoginStore(state => state.isLoggedIn)
+  const requireLogin = useLoginStore(state => state.requireLogin)
 
   const moveTo = useCallback((anchor: string) => {
     fullpageApiRef.current?.moveTo(anchor)
@@ -62,7 +57,7 @@ export default function LandingPage() {
       setIsCreatingWork(true)
       const req = await createWorkReq()
       if (req?.id) {
-        navigate(`/workspace/editor/${req.id}`, { state: { isNew: true } })
+        navigate(`/editor/${req.id}`, { state: { isNew: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')
@@ -80,6 +75,7 @@ export default function LandingPage() {
   }
 
   const handleProfessionalClick = () => {
+    trackEvent('Story Creation', 'Click', "Common New from Landing")
     requireLogin(addWorkEditor)
   }
 
@@ -94,7 +90,7 @@ export default function LandingPage() {
       )}
 
       <LandingNavbar
-        isLoggedIn={isLoggedIn()}
+        isLoggedIn={isLoggedIn}
         onNavClick={moveTo}
         onShowLogin={handleShowLogin}
       />

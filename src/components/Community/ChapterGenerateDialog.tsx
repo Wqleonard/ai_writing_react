@@ -25,6 +25,7 @@ import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/work
 import { useOptionsStore } from '@/stores/optionsStore'
 import { toast } from 'sonner'
 import clsx from 'clsx'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 type GenerateType = 'current' | 'custom'
 
@@ -117,6 +118,12 @@ export const ChapterGenerateDialog = ({
   }, [])
 
   useEffect(() => { resetDialog() }, [open, resetDialog])
+
+  useEffect(() => {
+    if (open) {
+      trackEvent('AI Tool', 'Click', 'Chapter')
+    }
+  }, [open])
 
   const getDescription = useCallback(() => {
     if (formModel.generateType === 'current') return formModel.extra || ''
@@ -262,10 +269,12 @@ export const ChapterGenerateDialog = ({
 
   const handleConfirm = useCallback(async () => {
     if (!formConfirmed) {
+      trackEvent('AI Tool', 'Generate', 'Chapter')
       if (!validate()) return
       setFormConfirmed(true)
       if (isFormModelChanged()) await postStreamHandler()
     } else {
+      trackEvent('AI Tool', 'Use', 'Chapter')
       await handleSave()
     }
   }, [formConfirmed, validate, isFormModelChanged, postStreamHandler, handleSave])

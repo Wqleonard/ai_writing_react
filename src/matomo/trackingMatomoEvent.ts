@@ -13,6 +13,10 @@ export function setMatomoTracker(t: MatomoTracker) {
   tracker = t
 }
 
+export const getMatomoTracker = () => {
+  return tracker
+}
+
 // 设置用户id
 export const setMatomoUser = (userId: string) => {
   console.log('setMatomoUser', userId)

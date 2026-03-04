@@ -24,6 +24,7 @@ import { showGenerationSaveDialog } from '@/utils/showGenerationSaveDialog'
 import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/works'
 import { toast } from 'sonner'
 import clsx from 'clsx'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 type GenerateType = 'current' | 'custom'
 
@@ -117,6 +118,12 @@ export const WorldGenerateDialog = ({
   }, [])
 
   useEffect(() => { resetDialog() }, [open, resetDialog])
+
+  useEffect(() => {
+    if (open) {
+      trackEvent('AI Tool', 'Click', 'Worldview')
+    }
+  }, [open])
 
   const getDescription = useCallback(() => {
     if (formModel.generateType === 'current') return formModel.extra || ''
@@ -254,10 +261,12 @@ export const WorldGenerateDialog = ({
 
   const handleConfirm = useCallback(async () => {
     if (!formConfirmed) {
+      trackEvent('AI Tool', 'Generate', 'Worldview')
       if (!validate()) return
       setFormConfirmed(true)
       if (isFormModelChanged()) await postStreamHandler()
     } else {
+      trackEvent('AI Tool', 'Use', 'Worldview')
       await handleSave()
     }
   }, [formConfirmed, validate, isFormModelChanged, postStreamHandler, handleSave])

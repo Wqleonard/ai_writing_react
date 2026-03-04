@@ -43,7 +43,6 @@ const ShareDetailsPage = () => {
       <header className="flex h-8 w-265 items-center">
         <Button
           variant="link"
-          className="back-button gap-1 text-xl text-black hover:bg-transparent"
           onClick={goBack}
         >
           <ArrowLeft className="size-5" />

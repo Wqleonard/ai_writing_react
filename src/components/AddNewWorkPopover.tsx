@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button"
 import { createWorkReq } from "@/api/works"
 import { cn } from "@/lib/utils"
 import { useLoginStore } from "@/stores/loginStore";
+import { trackEvent } from "@/matomo/trackingMatomoEvent"
 
 type Placement = "top" | "bottom" | "left" | "right" | "top-start" | "top-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end" | "right-start" | "right-end"
 
@@ -157,6 +158,7 @@ export const AddNewWorkPopover = ({
     (type: WorkType) => {
       switch (type.id) {
         case "short-story":
+          trackEvent('Story Creation', 'Click', 'Common New from Sidebar')
           debouncedAddNewWork()
           break
         case "short-story-quick":

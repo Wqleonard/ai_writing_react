@@ -26,6 +26,7 @@ import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/work
 import { useOptionsStore } from '@/stores/optionsStore'
 import { toast } from 'sonner'
 import clsx from 'clsx'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 type GenerateType = 'current' | 'custom'
 
@@ -126,6 +127,12 @@ export const OutlineGenerateDialog = ({
   useEffect(() => {
     resetDialog()
   }, [open, resetDialog])
+
+  useEffect(() => {
+    if (open) {
+      trackEvent('AI Tool', 'Click', 'Outline')
+    }
+  }, [open])
 
   const getDescription = useCallback(() => {
     if (formModel.generateType === 'current') {
@@ -308,12 +315,14 @@ export const OutlineGenerateDialog = ({
 
   const handleConfirm = useCallback(async () => {
     if (!formConfirmed) {
+      trackEvent('AI Tool', 'Generate', 'Outline')
       if (!validate()) return
       setFormConfirmed(true)
       if (isFormModelChanged()) {
         await postStreamHandler()
       }
     } else {
+      trackEvent('AI Tool', 'Use', 'Outline')
       await handleSave()
     }
   }, [formConfirmed, validate, isFormModelChanged, postStreamHandler, handleSave])

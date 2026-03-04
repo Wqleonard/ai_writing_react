@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/Popover'
 import { ChevronRight } from 'lucide-react'
 import { useLoginStore } from "@/stores/loginStore";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 type From = 'Sidebar' | 'Workspace'
 type Placement = 'top' | 'bottom' | 'left' | 'right'
@@ -83,6 +84,7 @@ export const AddNewWorkPopover = ({
     async (type: WorkTypeItem) => {
       switch (type.id) {
         case 'short-story':
+          trackEvent('Story Creation', 'Click', 'Common New from Workspace')
           await requireLogin(addNewWork)
           break
         case 'short-story-quick':

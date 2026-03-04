@@ -8,6 +8,7 @@ import { OutlineGenerateDialog } from "./OutlineGenerateDialog";
 import { CharacterGenerateDialog } from "./CharacterGenerateDialog";
 import { WorldGenerateDialog } from "./WorldGenerateDialog";
 import { ChapterGenerateDialog } from "./ChapterGenerateDialog";
+import { trackEvent } from "@/matomo/trackingMatomoEvent";
 
 export interface UsePromptsProps {
   open: boolean;
@@ -41,6 +42,7 @@ export const UsePrompts = ({ open, onOpenChange, data, openMarketDirectly }: Use
 
   const handleDetailUse = useCallback(
     (item: PromptItem | null) => {
+      trackEvent('Community', 'Use', 'Prompt', Number(item?.id))
       if (!promptData?.isOfficial) {
         onOpenChange(false);
         setPublicGenerateDialogShow(true);

@@ -107,7 +107,7 @@ export const NewbieMission = () => {
   if (!isLoggedIn) {
     return (
       <div
-        className="fixed -bottom-4 right-28 h-24 w-24"
+        className="fixed -bottom-4 right-28 h-24 w-24 max-[1700px]:right-0"
         onMouseEnter={handleCatMouseEnter}
         onMouseLeave={handleCatMouseLeave}
       >
@@ -124,7 +124,7 @@ export const NewbieMission = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div
-          className="fixed -bottom-4 right-28 h-24 w-24 cursor-pointer"
+          className="fixed -bottom-4 right-28 h-24 w-24 cursor-pointer max-[1700px]:right-0"
           onMouseEnter={handleCatMouseEnter}
           onMouseLeave={handleCatMouseLeave}
         >

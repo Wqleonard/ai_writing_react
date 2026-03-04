@@ -28,6 +28,7 @@ import { postPublicPromptStream } from '@/api/community-prompt'
 import { showGenerationSaveDialog } from '@/utils/showGenerationSaveDialog'
 import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/works'
 import { toast } from 'sonner'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 export interface PublicGenerateDialogProps {
   open: boolean
@@ -262,6 +263,25 @@ export const PublicGenerateDialog = ({
     }
   }, [open])
 
+  useEffect(() => {
+    if (open && data?.categories[0]?.id) {
+      let type: 'Outline' | 'Character' | 'Lead' | 'Chapter' | 'Worldview' = 'Lead'
+      const categoryId = data?.categories?.[0]?.id
+      if (categoryId === 1) {
+        type = 'Lead'
+      } else if (categoryId === 2) {
+        type = 'Outline'
+      } else if (categoryId === 3) {
+        type = 'Character'
+      } else if (categoryId === 4) {
+        type = 'Worldview'
+      } else if (categoryId === 5) {
+        type = 'Chapter'
+      }
+      trackEvent('AI Tool', 'Click', type)
+    }
+  }, [open, data?.categories])
+
   const handleAddToWork = useCallback(async () => {
     try {
       const name = `${data?.categories?.[0]?.name || ''}(来自生成器)`
@@ -298,8 +318,39 @@ export const PublicGenerateDialog = ({
     }
   }, [data, markdownContent, onSave, onOpenChange])
 
+  const doGenerateTrack = useCallback(() => {
+    const categoryId = data?.categories?.[0]?.id
+    if (categoryId === 1) {
+      trackEvent('AI Tool', 'Generate', 'Lead')
+    } else if (categoryId === 2) {
+      trackEvent('AI Tool', 'Generate', 'Outline')
+    } else if (categoryId === 3) {
+      trackEvent('AI Tool', 'Generate', 'Character')
+    } else if (categoryId === 4) {
+      trackEvent('AI Tool', 'Generate', 'Worldview')
+    } else if (categoryId === 5) {
+      trackEvent('AI Tool', 'Generate', 'Chapter')
+    }
+  }, [data?.categories])
+
+  const doResultUseTrack = useCallback(() => {
+    const categoryId = data?.categories?.[0]?.id
+    if (categoryId === 1) {
+      trackEvent('AI Tool', 'Use', 'Lead')
+    } else if (categoryId === 2) {
+      trackEvent('AI Tool', 'Use', 'Outline')
+    } else if (categoryId === 3) {
+      trackEvent('AI Tool', 'Use', 'Character')
+    } else if (categoryId === 4) {
+      trackEvent('AI Tool', 'Use', 'Worldview')
+    } else if (categoryId === 5) {
+      trackEvent('AI Tool', 'Use', 'Chapter')
+    }
+  }, [data?.categories])
+
   const handleGenerateConfirm = useCallback(async () => {
     if (!generateMode) {
+      doGenerateTrack()
       setShowRequireWarning(false)
       if (!generateRequire.trim()) {
         setShowRequireWarning(true)
@@ -315,6 +366,7 @@ export const PublicGenerateDialog = ({
       return
     }
     if (generateLoading) return
+    doResultUseTrack()
     await handleAddToWork()
   }, [
     generateMode,
@@ -323,6 +375,8 @@ export const PublicGenerateDialog = ({
     isFormModelChanged,
     executeStreamGeneration,
     handleAddToWork,
+    doGenerateTrack,
+    doResultUseTrack
   ])
 
   const handleRegenerate = useCallback(() => {

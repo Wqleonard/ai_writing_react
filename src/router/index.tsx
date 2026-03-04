@@ -4,7 +4,7 @@ import { lazy } from 'react'
 // 首屏关键组件保持同步导入
 import LandingPage from '@/pages/landing'
 import { WorkspaceLayout } from '@/layout'
-import { MobileRedirectGuard } from '@/router/guards/MobileRedirect'
+import { AppRouteGuard } from '@/router/guards/AppRouteGuard'
 
 
 // 懒加载页面组件
@@ -39,7 +39,7 @@ const MPrivacyPolicyPage = lazy(() => import("@/m-pages/privacy-policy"));
 const routes: RouteObject[] = [
   {
     path: '/',
-    element: <MobileRedirectGuard />,
+    element: <AppRouteGuard />,
     children: [
       {
         index: true,

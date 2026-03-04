@@ -81,7 +81,6 @@ const CourseDetailsPage = () => {
       <header className="w-265 h-8 flex items-center">
         <Button
           variant="link"
-          className="back-button"
           onClick={goBack}
         >
           <ArrowLeft className="size-5" />
