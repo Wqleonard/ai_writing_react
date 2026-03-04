@@ -1,7 +1,7 @@
 import apiClient, { type PostStreamData } from "./index";
 
 const postSelectionToolbarStream = (
-  data: { action: string; originalText: string; query: string },
+  data: { action: string; originalText: string; query: string; fullText?: string },
   onData: (data: PostStreamData) => void,
   onError: (error: any) => void,
   onComplete: () => void,
