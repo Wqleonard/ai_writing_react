@@ -16,14 +16,14 @@
 .markdown-editor .markdown-editor-content {
   width: 100%;
   height: 100%;
-  overflow-y: auto;
+
 }
 
 /* editor 页面外层承载滚动：关闭内部滚动，让内容高度自然撑开 */
 .markdown-editor.editor-outer-scroll-mode .editor-content,
 .markdown-editor.editor-outer-scroll-mode .markdown-editor-content {
   height: auto;
-  overflow: visible;
+
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap {
@@ -35,6 +35,9 @@
   color: #303133;
   line-height: var(--tiptap-prosemirror-line-height);
   font-size: var(--tiptap-prosemirror-font-size);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap p {
@@ -47,6 +50,10 @@
   color: #adb5bd;
   pointer-events: none;
   height: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap h1,
@@ -165,6 +172,10 @@
   color: #adb5bd;
   pointer-events: none;
   height: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror .remark-highlight-paragraph {

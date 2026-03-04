@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useImperativeHandle, useRef, useState } from "react"
+import React, { useCallback, useImperativeHandle, useRef, useState, useEffect } from "react"
 import { CreateRecommendDialog } from "./components/CreateRecommendDialog"
 import { StepCreateDialog, type StepCreateDialogRef } from "./components/StepCreateDialog"
 import type { Template, StepSaveData, Mode } from "./types"
@@ -26,6 +26,8 @@ export interface StepWorkflowRef {
 export interface StepWorkflowProps {
   /** 编辑器内容总字数，用于控制快捷入口显隐 */
   totalMdContentLength?: number
+  /** 当前编辑器内容是否为空（优先于 totalMdContentLength） */
+  isEditorEmpty?: boolean
   /** 当前编辑中的文件 id，变化时重算快捷入口 */
   currentEditingId?: string | null
   /** 步骤创建完成：保存到当前作品后的回调（React 侧需自行更新 sidebar/editor 等） */
@@ -35,6 +37,7 @@ export interface StepWorkflowProps {
 export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>(function StepWorkflow(
   {
     totalMdContentLength = 0,
+    isEditorEmpty,
     currentEditingId,
     onStepConfirm,
   },
@@ -42,24 +45,14 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
 ) {
   const [recommendDialogShow, setRecommendDialogShow] = useState(true)
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
-  const [showQuickStart, setShowQuickStart] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
+  const showQuickStart = isEditorEmpty ?? totalMdContentLength === 0
+  const [enterActive, setEnterActive] = useState(false)
+  const [enterSeed, setEnterSeed] = useState(0)
 
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: () => setStepCreateDialogShow(true),
   }), [])
-
-  const updateQuickStart = useCallback(() => {
-    if (totalMdContentLength === 0) {
-      setShowQuickStart(true)
-    } else {
-      setShowQuickStart(false)
-    }
-  }, [totalMdContentLength])
-
-  React.useEffect(() => {
-    updateQuickStart()
-  }, [updateQuickStart, currentEditingId])
 
   const handleCreateWithTags = useCallback(() => {
     setRecommendDialogShow(false)
@@ -86,6 +79,27 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     stepCreateDialogRef.current?.startMode(mode as Mode)
   }, [])
 
+  useEffect(() => {
+    if (showQuickStart) {
+      setEnterActive(false)
+      // 双 rAF：确保浏览器先绘制 enter-from（opacity-0 translate-y-50），再切到 enter-to，过渡才会生效
+      let raf2 = 0
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setEnterActive(true))
+      })
+      return () => {
+        cancelAnimationFrame(raf1)
+        if (raf2) cancelAnimationFrame(raf2)
+      }
+    }
+    setEnterActive(false)
+  }, [showQuickStart, enterSeed])
+
+  // 与 Vue 版本行为保持一致：切换编辑目标且内容为空时，重触发一次进入动画
+  useEffect(() => {
+    if (showQuickStart) setEnterSeed((v) => v + 1)
+  }, [currentEditingId, showQuickStart])
+
   return (
     <>
       <CreateRecommendDialog
@@ -102,20 +116,32 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
         onConfirm={handleStepConfirm}
       />
 
+      {/* 始终挂载，用 visibility + opacity/transform 控制显隐与过渡，避免条件渲染导致过渡无法触发 */}
       <div
-        className={`
-          absolute inset-0 overflow-hidden transition-all duration-300 ease-in-out
-          ${showQuickStart ? "opacity-100 max-h-[420px] translate-y-0" : "opacity-0 max-h-0 -translate-y-4 pointer-events-none"}
-        `}
-        style={{ contain: "layout style paint", willChange: "transform, opacity, max-height" }}
+        className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+        style={{
+          contain: "layout style paint",
+          willChange: "transform, opacity",
+          visibility: showQuickStart ? "visible" : "hidden",
+        }}
         aria-hidden={!showQuickStart}
       >
-        <div className="pointer-events-none h-full flex flex-col-reverse items-center py-5">
+        <div
+          className={`
+            pointer-events-none flex h-full flex-col-reverse items-center pb-5 pt-2
+            transform-gpu
+          `}
+          style={{
+            transition: "transform 240ms ease-out, opacity 160ms ease-out",
+            transform: showQuickStart && enterActive ? "translate3d(0, 0, 0)" : "translate3d(0, 56px, 0)",
+            opacity: showQuickStart ? 1 : 0,
+          }}
+        >
           <div className="flex items-center justify-center gap-4">
             {MODES.map((m) => (
               <div
                 key={m.mode}
-                role="button"
+                  role="button"
                 tabIndex={0}
                 onClick={() => handleStartItemClick(m.mode)}
                 onKeyDown={(e) => {
@@ -124,7 +150,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
                     handleStartItemClick(m.mode)
                   }
                 }}
-                className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] p-4 hover:border-[var(--theme-color)]"
+                className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-[var(--theme-color)]"
               >
                 <div className="h-[50px] w-full bg-white">
                   <img src={m.cover} alt="" className="h-full w-full object-cover" />

@@ -78,6 +78,11 @@ const getNewPathFromLabel = (currentPath: string, newLabel: string): string => {
 
 const REM_BASE = 16;
 const pxToRem = (px: number) => px / REM_BASE;
+const getRootRemPx = () => {
+  if (typeof document === "undefined") return REM_BASE;
+  const v = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(v) && v > 0 ? v : REM_BASE;
+};
 
 const LEFT_MIN_REM = pxToRem(200);
 const LEFT_MAX_REM = pxToRem(500);
@@ -85,7 +90,10 @@ const LEFT_DEFAULT_REM = pxToRem(280);
 
 const RIGHT_DEFAULT_REM = 32.5;
 const RIGHT_MIN_REM = pxToRem(280);
-const RIGHT_MAX_REM = pxToRem(640);
+/** 中间主编辑区最小宽度（按需求允许被挤压到 0） */
+const CENTER_EDITOR_MIN_REM = 0;
+/** 中间区域内「修改详情」面板固定宽度（rem） */
+const CHANGES_PANEL_WIDTH_REM = 20;
 /** 两侧把手总宽度 (10px * 2)，用于右拖时计算右栏上限 */
 const HANDLES_WIDTH_REM = pxToRem(20);
 /** 三栏容器水平 padding (px-2.5 左右各 10px)，计算右栏上限时需扣除避免溢出 */
@@ -123,9 +131,39 @@ const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   textIndentEnabled: false,
 };
 
+let htmlEntityDecoder: HTMLTextAreaElement | null = null;
+const decodeHtmlEntities = (text: string): string => {
+  if (!text) return "";
+  if (typeof document === "undefined") return text;
+  if (!htmlEntityDecoder) htmlEntityDecoder = document.createElement("textarea");
+  htmlEntityDecoder.innerHTML = text;
+  return htmlEntityDecoder.value;
+};
+
 const getWordCount = (text: string): number => {
   if (!text || typeof text !== "string") return 0;
-  return text.replace(/\s/g, "").length;
+  const normalized = decodeHtmlEntities(text)
+    .replace(/<[^>]*>/g, "")
+    .replace(/\u00A0/g, " ");
+  return normalized.replace(/\s/g, "").length;
+};
+
+const isEditorContentEffectivelyEmpty = (text: string): boolean => {
+  if (!text || typeof text !== "string") return true;
+  const compact = decodeHtmlEntities(text)
+    // markdown 常见结构符号
+    .replace(/```/g, "")
+    .replace(/`/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^(\s{0,3}(?:[-*+]|\d+\.)\s+)/gm, "")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\(([^)]*)\)/g, "$1")
+    .replace(/<[^>]*>/g, "")
+    // 零宽字符
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "");
+  return compact.length === 0;
 };
 
 const WHITESPACE_RE = /\s/;
@@ -509,9 +547,12 @@ const MarkdownEditorPage = () => {
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
   const editorMainScrollRef = useRef<HTMLDivElement | null>(null);
+  const leftPanelRef = useRef<HTMLDivElement | null>(null);
+  const rightPanelRef = useRef<HTMLDivElement | null>(null);
   const activeRemarkHighlightRef = useRef<HTMLElement | null>(null);
   const [activeChangeIndex, setActiveChangeIndex] = useState<number | null>(null);
   const [changesPanelHeight, setChangesPanelHeight] = useState(0);
+  const [isEditorActuallyEmpty, setIsEditorActuallyEmpty] = useState(true);
   const insCanvasRef = useRef<InsCanvasApi | null>(null);
   const [, setCanvasReadyKey] = useState(0);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
@@ -531,6 +572,7 @@ const MarkdownEditorPage = () => {
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
   const [rightPanelWidthRem, setRightPanelWidthRem] = useState(RIGHT_DEFAULT_REM);
   const dragStartRightRem = useRef(RIGHT_DEFAULT_REM);
+  const dragStartRightPx = useRef(RIGHT_DEFAULT_REM * REM_BASE);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
   const [showAssociationSelector, setShowAssociationSelector] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
@@ -543,6 +585,7 @@ const MarkdownEditorPage = () => {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [restoringVersionId, setRestoringVersionId] = useState<string>("");
   const [isChangesPanelVisible, setIsChangesPanelVisible] = useState(false);
+  const centerRequiredRem = CENTER_EDITOR_MIN_REM + (isChangesPanelVisible ? CHANGES_PANEL_WIDTH_REM : 0);
   const [fileChangesMap, setFileChangesMap] = useState<FileChangesMap>({});
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
     try {
@@ -766,33 +809,45 @@ const MarkdownEditorPage = () => {
 
   const onLeftResize = useCallback((deltaX: number) => {
     const deltaRem = pxToRem(deltaX);
-    const newWidth = Math.max(
-      LEFT_MIN_REM,
-      Math.min(LEFT_MAX_REM, dragStartLeftRem.current + deltaRem)
-    );
-    setLeftPanelWidthRem(newWidth);
-  }, []);
-
-  const onRightResizeStart = useCallback(() => {
-    dragStartRightRem.current = rightPanelWidthRem;
-  }, [rightPanelWidthRem]);
-
-  const onRightResize = useCallback((adjustedDeltaX: number) => {
-    // position="right" 时组件传入 -deltaX；右栏上限=内容区宽-左栏-把手，扣除容器 padding 避免出现横向滚动条
-    const deltaRem = pxToRem(adjustedDeltaX);
     const el = resizeContainerRef.current;
     const contentWidthPx = el ? el.clientWidth - CONTAINER_PADDING_PX : 0;
     const totalRem = contentWidthPx > 0 ? contentWidthPx / REM_BASE : 0;
-    const maxRight =
+    const maxLeft =
       totalRem > 0
-        ? totalRem - leftPanelWidthRem - HANDLES_WIDTH_REM
+        ? totalRem - rightPanelWidthRem - HANDLES_WIDTH_REM - centerRequiredRem
         : Number.POSITIVE_INFINITY;
-    const raw = dragStartRightRem.current + deltaRem;
+    const effectiveMaxLeft = Math.max(LEFT_MIN_REM, Math.min(maxLeft, LEFT_MAX_REM));
     const newWidth = Math.max(
-      RIGHT_MIN_REM,
-      Math.min(maxRight, raw)
+      LEFT_MIN_REM,
+      Math.min(effectiveMaxLeft, dragStartLeftRem.current + deltaRem)
     );
-    setRightPanelWidthRem(newWidth);
+    setLeftPanelWidthRem(newWidth);
+  }, [rightPanelWidthRem, isChangesPanelVisible]);
+
+  const onRightResizeStart = useCallback(() => {
+    dragStartRightRem.current = rightPanelWidthRem;
+    dragStartRightPx.current =
+      rightPanelRef.current?.offsetWidth ?? rightPanelWidthRem * getRootRemPx();
+  }, [rightPanelWidthRem]);
+
+  const onRightResize = useCallback((adjustedDeltaX: number) => {
+    // position="right" 时组件传入 -deltaX；全像素链路避免 rem 换算误差
+    const el = resizeContainerRef.current;
+    const contentWidthPx = el ? el.clientWidth - CONTAINER_PADDING_PX : 0;
+    const remBase = getRootRemPx();
+    const leftWidthPx = leftPanelRef.current?.offsetWidth ?? leftPanelWidthRem * remBase;
+    const maxRightPx =
+      contentWidthPx > 0
+        ? Math.max(0, contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase)
+        : Number.POSITIVE_INFINITY;
+    // 视口过窄时，右栏最小宽不应强行占位，否则中间区无法压到 0
+    const effectiveMinRightPx =
+      contentWidthPx > 0
+        ? Math.min(RIGHT_MIN_REM * remBase, maxRightPx)
+        : RIGHT_MIN_REM * remBase;
+    const rawPx = dragStartRightPx.current + adjustedDeltaX;
+    const newWidthPx = Math.max(effectiveMinRightPx, Math.min(maxRightPx, rawPx));
+    setRightPanelWidthRem(newWidthPx / remBase);
   }, [leftPanelWidthRem]);
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
@@ -1069,6 +1124,26 @@ const MarkdownEditorPage = () => {
   const isRoleTableFile = /(角色表|人物表|角色列表|人物列表)/.test(roleFileMatchTarget);
   const isRoleSettingPreviewFile = isRoleRelationFile || isRoleTableFile;
   const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
+  const isCurrentEditorEmpty = useMemo(
+    () => isEditorContentEffectivelyEmpty(currentContent),
+    [currentContent]
+  );
+
+  useEffect(() => {
+    const editorInstance = markdownEditorRef.current?.editor;
+    if (editorInstance) {
+      setIsEditorActuallyEmpty(editorInstance.isEmpty);
+      return;
+    }
+    setIsEditorActuallyEmpty(isCurrentEditorEmpty);
+  }, [currentContent, fileKey, relationViewMode, isCurrentEditorEmpty]);
+
+  useEffect(() => {
+    if (!isEditorActuallyEmpty) return;
+    const el = editorMainScrollRef.current;
+    if (!el) return;
+    if (el.scrollTop !== 0) el.scrollTop = 0;
+  }, [isEditorActuallyEmpty]);
 
   useEffect(() => {
     setRelationViewMode(isRoleSettingPreviewFile ? "preview" : "edit");
@@ -1257,7 +1332,8 @@ const MarkdownEditorPage = () => {
       >
         {/* 左侧面板 */}
         <div
-          className="shrink-0 h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] p-2"
+          ref={leftPanelRef}
+          className="box-border shrink-0 h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] p-2"
           style={{ width: `${leftPanelWidthRem}rem` }}
         >
           <EditorTreeSidebar className="h-full" />
@@ -1271,11 +1347,14 @@ const MarkdownEditorPage = () => {
         />
 
         {/* 中间编辑面板 */}
-        <div className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-editor)]">
+        <div
+          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-editor)]"
+          style={{ minWidth: "0rem" }}
+        >
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
             {/* 字数栏 */}
-            <div className="flex flex-row-reverse h-[38px] px-6 items-center shrink-0">
-              <div className="flex h-full items-center gap-0">
+            <div className="flex flex-row-reverse h-[38px] px-6 items-center shrink-0 min-w-0">
+              <div className="flex h-full items-center gap-0 min-w-0">
                 <span className="text-sm text-(--text-primary)">字数: {wordCount}</span>
                 <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5" />
                 <Button
@@ -1429,15 +1508,16 @@ const MarkdownEditorPage = () => {
 
             {/* 编辑区主体 */}
             <div className="flex flex-1 min-h-0 min-w-0 relative">
-              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col">
+              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col" style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem` }}>
                 <div
                   ref={editorMainScrollRef}
                   className={clsx(
-                    "h-full min-h-0 flex flex-col relative overflow-y-auto",
+                    "h-full min-h-0 flex flex-col relative overflow-x-hidden",
+                    isCurrentEditorEmpty ? "overflow-y-hidden" : "overflow-y-auto",
                     isStreamingOverlayVisible && "cursor-not-allowed"
                   )}
                 >
-                  <div className="editor-content-layout flex flex-1 min-h-0 relative">
+                  <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
                     <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
                       <div className="flex flex-col flex-1 min-h-0">
                         {currentEditingId ? (
@@ -1538,6 +1618,7 @@ const MarkdownEditorPage = () => {
                       <StepWorkflow
                         ref={stepWorkflowRef}
                         totalMdContentLength={wordCount}
+                        isEditorEmpty={isEditorActuallyEmpty}
                         currentEditingId={currentEditingId}
                       />
                     </div>
@@ -1593,7 +1674,10 @@ const MarkdownEditorPage = () => {
                 )}
               </div>
               {isChangesPanelVisible && (
-                <div className="h-full w-[20rem] shrink-0 min-h-0 overflow-hidden border-l border-[var(--border-color)] bg-[var(--bg-primary)]">
+                <div
+                  className="h-full shrink-0 min-h-0 overflow-hidden border-l border-[var(--border-color)] bg-[var(--bg-primary)]"
+                  style={{ width: `${CHANGES_PANEL_WIDTH_REM}rem` }}
+                >
                   <EditChangesPanel
                     changes={currentFileChanges}
                     onAccept={handleAcceptChange}
@@ -1624,7 +1708,8 @@ const MarkdownEditorPage = () => {
 
         {/* 右侧聊天面板：与 Vue 一致，chat-content 内仅消息区滚动、输入框固定在底部 */}
         <div
-          className="shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] isolate"
+          ref={rightPanelRef}
+          className="box-border shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] isolate"
           style={{ width: `${rightPanelWidthRem}rem` }}
         >
           <ChatHeader
