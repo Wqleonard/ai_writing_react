@@ -21,8 +21,10 @@ import {
   buildQuickChannelFullText,
   getQuickChannelInputCount,
 } from '@/services/quickChatComposerService'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
+const NOOP = () => {}
 
 /** 在 ProChatContainer 内使用时，value/onChange/onSubmit/isAnswerOnly/onAnswerOnlyChange 由 context 提供，可不传 */
 export interface CreationInputProps {
@@ -136,13 +138,10 @@ export const CreationInput = (props: CreationInputProps) => {
 
   const ctx = useProChatContainer()
   const value = ctx ? ctx.inputValue : (valueProp ?? '')
-  const onChange = ctx ? (v: string) => ctx.setInputValue(v) : (onChangeProp ?? (() => {
-  }))
+  const onChange = ctx ? (v: string) => ctx.setInputValue(v) : (onChangeProp ?? NOOP)
   const isAnswerOnly = ctx ? ctx.isAnswerOnly : (isAnswerOnlyProp ?? true)
-  const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? (() => {
-  }))
-  const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {
-  }))
+  const onAnswerOnlyChange = ctx ? ctx.onAnswerOnlyChange : (onAnswerOnlyChangeProp ?? NOOP)
+  const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? NOOP)
   const hideAssociationFeature = ctx?.hideAssociationFeature ?? true
   const onOpenAssociationSelector = ctx?.onOpenAssociationSelector
 
@@ -208,9 +207,6 @@ export const CreationInput = (props: CreationInputProps) => {
   const completeNewbieMissionByCode = useLoginStore(s => s.completeNewbieMissionByCode)
   const userInfo = useLoginStore(s => s.userInfo)
   const isLoggedIn = Boolean(userInfo?.id)
-  const onSubmitRef = useRef(onSubmit)
-  const onRetryRef = useRef(onRetry)
-  const statusRef = useRef(status)
 
   const {
     handleLocalFileSelect,
@@ -224,23 +220,23 @@ export const CreationInput = (props: CreationInputProps) => {
     onOpenAssociationSelector,
   })
 
-  useEffect(() => {
-    onSubmitRef.current = onSubmit
-    onRetryRef.current = onRetry
-    statusRef.current = status
-  }, [onSubmit, onRetry, status])
+  const submitAction = useCallback(async () => {
+    if (status === 'error' && onRetry) {
+      onRetry()
+      return
+    }
+    await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
+    onSubmit()
+  }, [status, onRetry, completeNewbieMissionByCode, onSubmit])
 
   const handleSubmit = useMemo(
     () =>
       debounce(async () => {
-        if (statusRef.current === 'error' && onRetryRef.current) {
-          onRetryRef.current()
-        } else {
-          await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
-          onSubmitRef.current?.()
-        }
+        trackEvent('Story Creation', 'Click', 'Common New from Chat')
+        trackEvent('AI Chat', 'Generate', 'Message Send')
+        await submitAction()
       }, 2000, { leading: true, trailing: false }),
-    [completeNewbieMissionByCode]
+    [submitAction]
   )
 
   useEffect(() => {
