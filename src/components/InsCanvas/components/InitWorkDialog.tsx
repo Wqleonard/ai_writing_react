@@ -101,6 +101,7 @@ export default function InitWorkDialog({
           background: white;
           cursor: pointer;
           font-size: 13px;
+          color: black;
           line-height: 1.4;
           white-space: nowrap;
         }

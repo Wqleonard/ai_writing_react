@@ -103,7 +103,7 @@ export const ProChatPanel = () => {
         )}
       >
         <div className="whitespace-pre-wrap break-words">
-          {msg.content || "(无文本)"}
+          {msg.content || ""}
         </div>
       </div>
     </div>
