@@ -68,6 +68,10 @@
     font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 
+  .font-YaHei\! {
+    font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  }
+
   .font-KaiTi {
     font-family: 'KaiTi', 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
   }

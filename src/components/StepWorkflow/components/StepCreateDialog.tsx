@@ -57,6 +57,7 @@ import { LinkButton } from "@/components/ui/LinkButton"
 import { Link } from "react-router-dom"
 import { useEditorStore } from "@/stores/editorStore";
 import { AutoScrollArea } from "@/components/AutoScrollArea";
+import { ScrollArea } from "@/components/ui/ScrollArea"
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -80,9 +81,6 @@ const EMPTY_CHARACTER: CharacterCardData = {
   identity: "",
 }
 const MAX_INTRO_LENGTH = 1000
-const EDIT_PANEL_TRANSITION = "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
-const ROOT_FONT_PX = 16
-const pxToRem = (px: number) => `${(px / ROOT_FONT_PX).toFixed(4)}rem`
 
 // 深拷贝（与 Vue 侧实现一致）
 const deepClone = <T,>(obj: T): T => {
@@ -163,6 +161,7 @@ export const StepCreateDialog = React.forwardRef<
   const characterAbortRef = useRef<AbortController | null>(null)
   const lastTrackedStepRef = useRef<number | null>(null)
   const [isStoryEditOpen, setIsStoryEditOpen] = useState(false)
+  const [isStoryEditAnimating, setIsStoryEditAnimating] = useState(false)
   const [storyEditPanelStyle, setStoryEditPanelStyle] = useState<React.CSSProperties>({
     left: 0,
     top: 0,
@@ -174,18 +173,21 @@ export const StepCreateDialog = React.forwardRef<
   const [editingStoryIndex, setEditingStoryIndex] = useState<number | null>(null)
   const storyStepRef = useRef<HTMLDivElement | null>(null)
   const storyEditExpandTimerRef = useRef<number | null>(null)
+  const storyEditFinishTimerRef = useRef<number | null>(null)
   const [isCharacterEditOpen, setIsCharacterEditOpen] = useState(false)
+  const [isCharacterEditAnimating, setIsCharacterEditAnimating] = useState(false)
   const [characterEditPanelStyle, setCharacterEditPanelStyle] = useState<React.CSSProperties>({
-    left: "0rem",
-    top: "0rem",
-    width: "0rem",
-    height: pxToRem(480),
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 480,
     transformOrigin: "top left",
   })
   const [editingCharacter, setEditingCharacter] = useState<CharacterCardData>(EMPTY_CHARACTER)
   const [editingCharacterIndex, setEditingCharacterIndex] = useState<number | null>(null)
   const characterStepRef = useRef<HTMLDivElement | null>(null)
   const characterEditExpandTimerRef = useRef<number | null>(null)
+  const characterEditFinishTimerRef = useRef<number | null>(null)
 
   const workId = useEditorStore(s=>s.workId)
 
@@ -690,11 +692,16 @@ export const StepCreateDialog = React.forwardRef<
       window.clearTimeout(storyEditExpandTimerRef.current)
       storyEditExpandTimerRef.current = null
     }
+    if (storyEditFinishTimerRef.current !== null) {
+      window.clearTimeout(storyEditFinishTimerRef.current)
+      storyEditFinishTimerRef.current = null
+    }
   }, [])
 
   const animateStoryPanelFromCard = useCallback((cardElement: HTMLElement) => {
     if (!storyStepRef.current) {
       setIsStoryEditOpen(true)
+      setIsStoryEditAnimating(false)
       return
     }
     clearStoryEditTimers()
@@ -710,6 +717,7 @@ export const StepCreateDialog = React.forwardRef<
       height: 440,
       transformOrigin: "top left",
     })
+    setIsStoryEditAnimating(true)
     setIsStoryEditOpen(true)
     storyEditExpandTimerRef.current = window.setTimeout(() => {
       setStoryEditPanelStyle({
@@ -720,18 +728,19 @@ export const StepCreateDialog = React.forwardRef<
         height: 440,
         transformOrigin: "top left",
       })
+      storyEditFinishTimerRef.current = window.setTimeout(() => {
+        setIsStoryEditAnimating(false)
+      }, 650)
     }, 50)
   }, [clearStoryEditTimers])
 
   const closeStoryEditPanel = useCallback(() => {
     clearStoryEditTimers()
     setIsStoryEditOpen(false)
-  }, [clearStoryEditTimers])
-
-  const resetStoryEditPanelState = useCallback(() => {
     setEditingStory(EMPTY_STORY)
     setEditingStoryIndex(null)
-  }, [])
+    setIsStoryEditAnimating(false)
+  }, [clearStoryEditTimers])
 
   const handleEditStory = useCallback(
     (story: StoryStorm, index: number, event?: React.MouseEvent<HTMLElement>) => {
@@ -745,6 +754,7 @@ export const StepCreateDialog = React.forwardRef<
         animateStoryPanelFromCard(cardElement)
         return
       }
+      setIsStoryEditAnimating(false)
       setIsStoryEditOpen(true)
     },
     [animateStoryPanelFromCard]
@@ -778,11 +788,16 @@ export const StepCreateDialog = React.forwardRef<
       window.clearTimeout(characterEditExpandTimerRef.current)
       characterEditExpandTimerRef.current = null
     }
+    if (characterEditFinishTimerRef.current !== null) {
+      window.clearTimeout(characterEditFinishTimerRef.current)
+      characterEditFinishTimerRef.current = null
+    }
   }, [])
 
   const animateCharacterPanelFromCard = useCallback((cardElement: HTMLElement) => {
     if (!characterStepRef.current) {
       setIsCharacterEditOpen(true)
+      setIsCharacterEditAnimating(false)
       return
     }
     clearCharacterEditTimers()
@@ -792,34 +807,36 @@ export const StepCreateDialog = React.forwardRef<
     const top = cardRect.top - containerRect.top + 60
     const width = cardRect.width
     setCharacterEditPanelStyle({
-      left: pxToRem(left),
-      top: pxToRem(top),
-      width: pxToRem(width),
-      height: pxToRem(480),
+      left,
+      top,
+      width,
+      height: 480,
       transformOrigin: "top left",
     })
+    setIsCharacterEditAnimating(true)
     setIsCharacterEditOpen(true)
     characterEditExpandTimerRef.current = window.setTimeout(() => {
       setCharacterEditPanelStyle({
-        left: "0rem",
-        top: pxToRem(60),
+        left: 0,
+        top: 60,
         width: "100%",
-        bottom: pxToRem(60),
-        height: pxToRem(480),
+        bottom: 60,
+        height: 480,
         transformOrigin: "top left",
       })
+      characterEditFinishTimerRef.current = window.setTimeout(() => {
+        setIsCharacterEditAnimating(false)
+      }, 650)
     }, 50)
   }, [clearCharacterEditTimers])
 
   const closeCharacterEditPanel = useCallback(() => {
     clearCharacterEditTimers()
     setIsCharacterEditOpen(false)
-  }, [clearCharacterEditTimers])
-
-  const resetCharacterEditPanelState = useCallback(() => {
     setEditingCharacter(EMPTY_CHARACTER)
     setEditingCharacterIndex(null)
-  }, [])
+    setIsCharacterEditAnimating(false)
+  }, [clearCharacterEditTimers])
 
   const handleEditCharacter = useCallback(
     (character: CharacterCardData, index: number, event?: React.MouseEvent) => {
@@ -833,6 +850,7 @@ export const StepCreateDialog = React.forwardRef<
         animateCharacterPanelFromCard(cardElement)
         return
       }
+      setIsCharacterEditAnimating(false)
       setIsCharacterEditOpen(true)
     },
     [animateCharacterPanelFromCard]
@@ -964,9 +982,11 @@ export const StepCreateDialog = React.forwardRef<
       setIsOutlineEditing(false)
       setLoading(false)
       setIsStoryEditOpen(false)
+      setIsStoryEditAnimating(false)
       setEditingStory(EMPTY_STORY)
       setEditingStoryIndex(null)
       setIsCharacterEditOpen(false)
+      setIsCharacterEditAnimating(false)
       setEditingCharacter(EMPTY_CHARACTER)
       setEditingCharacterIndex(null)
       setStepSnapshots([null, null, null, null, null])
@@ -1227,10 +1247,10 @@ export const StepCreateDialog = React.forwardRef<
                       }}
                       className={clsx(
                         "story-card group relative flex h-[310px] flex-col gap-3 overflow-hidden rounded-xl bg-[#f9eece] p-5 transition",
-                        selectedStory === s ? "outline-2 outline-(--theme-color)" : "hover:outline hover:outline-2 hover:outline-[var(--theme-color)]"
+                        selectedStory === s ? "outline-2 outline-(--theme-color)" : "hover:outline-2 hover:outline-(--theme-color)"
                       )}
                     >
-                      {(!s.title && !s.intro) || loading ? (
+                      {(!s.title && !s.intro) ? (
                         <div className="mt-2 flex flex-col gap-3">
                           <Skeleton className="h-6 w-3/5 bg-gray-300" />
                           <Skeleton className="h-3 w-full bg-gray-200" />
@@ -1238,7 +1258,7 @@ export const StepCreateDialog = React.forwardRef<
                           <Skeleton className="h-3 w-4/5 bg-gray-200" />
                         </div>
                       ) : (
-                        <>
+                        <div className="flex flex-col h-full">
                           <button
                             type="button"
                             className="absolute cursor-pointer right-2 top-2 ml-auto text-lg leading-none opacity-0 transition-opacity hover:text-(--theme-color) group-hover:opacity-100"
@@ -1249,13 +1269,20 @@ export const StepCreateDialog = React.forwardRef<
                           >
                             <span className="iconfont">&#xea48;</span>
                           </button>
-                          <div className="book-title mt-2 line-clamp-2 text-xl font-semibold leading-tight text-black">
+                          <div className="shrink-0 book-title mt-2 line-clamp-2 text-xl font-semibold leading-tight text-black">
                             书名: 《{s.title || "未命名"}》
                           </div>
-                          <div className="book-synopsis line-clamp-6 max-h-[220px] flex-1 overflow-hidden text-sm text-gray-700">
+                          <ScrollArea className="flex-1 min-h-0">
+                            <MarkdownEditor
+                              value={s.intro}
+                              readonly
+                              className="font-Yahei!"
+                            />
+                          </ScrollArea>
+                          {/* <div className="book-synopsis line-clamp-6 max-h-[220px] flex-1 overflow-hidden text-sm text-gray-700">
                             {s.intro}
-                          </div>
-                        </>
+                          </div> */}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -1272,24 +1299,19 @@ export const StepCreateDialog = React.forwardRef<
                     <span>换一批</span>
                   </LinkButton>
                 </div>
-                <AnimatePresence
-                  mode="wait"
-                  onExitComplete={() => {
-                    if (!isStoryEditOpen) resetStoryEditPanelState()
-                  }}
-                >
+                <AnimatePresence>
                   {isStoryEditOpen && (
                     <motion.div
                       key="story-edit-panel"
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-                      className="absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5]"
-                      style={{
-                        ...storyEditPanelStyle,
-                        transition: EDIT_PANEL_TRANSITION,
-                      }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      className={clsx(
+                        "absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5] transition-all duration-600",
+                        isStoryEditAnimating && "duration-600"
+                      )}
+                      style={storyEditPanelStyle}
                     >
                       <div className="flex h-full flex-col overflow-y-auto px-[50px] pt-[30px]">
                         <div className="flex h-full flex-col gap-[22px]">
@@ -1310,19 +1332,19 @@ export const StepCreateDialog = React.forwardRef<
                             <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">
                               故事简介：
                             </label>
-                            <div className="relative min-w-0 flex-1">
-                              <textarea
+                            <ScrollArea className="relative min-w-0 flex-1">
+                              <MarkdownEditor
                                 className="h-[260px] w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 pr-[70px] text-base shadow-none focus:outline-none"
                                 maxLength={MAX_INTRO_LENGTH}
                                 value={editingStory.intro}
                                 onChange={(e) =>
-                                  setEditingStory((prev) => ({ ...prev, intro: e.target.value }))
+                                  setEditingStory((prev) => ({ ...prev, intro: e }))
                                 }
                               />
                               <span className="absolute bottom-4 right-4 text-sm text-[#999]">
                                 {(editingStory.intro || "").length}/{MAX_INTRO_LENGTH}
                               </span>
-                            </div>
+                            </ScrollArea>
                           </div>
                           <div className="mt-4 flex justify-center gap-6">
                             <Button type="button" variant="outline" onClick={closeStoryEditPanel}>
@@ -1388,24 +1410,19 @@ export const StepCreateDialog = React.forwardRef<
                     <span>换一批</span>
                   </LinkButton>
                 </div>
-                <AnimatePresence
-                  mode="wait"
-                  onExitComplete={() => {
-                    if (!isCharacterEditOpen) resetCharacterEditPanelState()
-                  }}
-                >
+                <AnimatePresence>
                   {isCharacterEditOpen && (
                     <motion.div
                       key="character-edit-panel"
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-                      className="absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5] p-6"
-                      style={{
-                        ...characterEditPanelStyle,
-                        transition: EDIT_PANEL_TRANSITION,
-                      }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      className={clsx(
+                        "absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5] p-6 transition-all duration-600",
+                        isCharacterEditAnimating && "duration-600"
+                      )}
+                      style={characterEditPanelStyle}
                     >
                       <div className="mb-4 text-lg font-semibold">编辑角色</div>
                       <div className="grid grid-cols-2 gap-4 overflow-y-auto">
