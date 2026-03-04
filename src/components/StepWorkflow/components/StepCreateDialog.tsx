@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react"
 import clsx from "clsx"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   Dialog,
   DialogContent,
@@ -79,6 +80,9 @@ const EMPTY_CHARACTER: CharacterCardData = {
   identity: "",
 }
 const MAX_INTRO_LENGTH = 1000
+const EDIT_PANEL_TRANSITION = "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
+const ROOT_FONT_PX = 16
+const pxToRem = (px: number) => `${(px / ROOT_FONT_PX).toFixed(4)}rem`
 
 // 深拷贝（与 Vue 侧实现一致）
 const deepClone = <T,>(obj: T): T => {
@@ -159,11 +163,29 @@ export const StepCreateDialog = React.forwardRef<
   const characterAbortRef = useRef<AbortController | null>(null)
   const lastTrackedStepRef = useRef<number | null>(null)
   const [isStoryEditOpen, setIsStoryEditOpen] = useState(false)
+  const [storyEditPanelStyle, setStoryEditPanelStyle] = useState<React.CSSProperties>({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 440,
+    transformOrigin: "top left",
+  })
   const [editingStory, setEditingStory] = useState<StoryStorm>(EMPTY_STORY)
   const [editingStoryIndex, setEditingStoryIndex] = useState<number | null>(null)
+  const storyStepRef = useRef<HTMLDivElement | null>(null)
+  const storyEditExpandTimerRef = useRef<number | null>(null)
   const [isCharacterEditOpen, setIsCharacterEditOpen] = useState(false)
+  const [characterEditPanelStyle, setCharacterEditPanelStyle] = useState<React.CSSProperties>({
+    left: "0rem",
+    top: "0rem",
+    width: "0rem",
+    height: pxToRem(480),
+    transformOrigin: "top left",
+  })
   const [editingCharacter, setEditingCharacter] = useState<CharacterCardData>(EMPTY_CHARACTER)
   const [editingCharacterIndex, setEditingCharacterIndex] = useState<number | null>(null)
+  const characterStepRef = useRef<HTMLDivElement | null>(null)
+  const characterEditExpandTimerRef = useRef<number | null>(null)
 
   const workId = useEditorStore(s=>s.workId)
 
@@ -663,12 +685,70 @@ export const StepCreateDialog = React.forwardRef<
     updateStepSnapshot(3, c)
   }, [updateStepSnapshot])
 
-  const handleEditStory = useCallback((story: StoryStorm, index: number) => {
-    if (!story?.title && !story?.intro) return
-    setEditingStory({ ...story })
-    setEditingStoryIndex(index)
-    setIsStoryEditOpen(true)
+  const clearStoryEditTimers = useCallback(() => {
+    if (storyEditExpandTimerRef.current !== null) {
+      window.clearTimeout(storyEditExpandTimerRef.current)
+      storyEditExpandTimerRef.current = null
+    }
   }, [])
+
+  const animateStoryPanelFromCard = useCallback((cardElement: HTMLElement) => {
+    if (!storyStepRef.current) {
+      setIsStoryEditOpen(true)
+      return
+    }
+    clearStoryEditTimers()
+    const containerRect = storyStepRef.current.getBoundingClientRect()
+    const cardRect = cardElement.getBoundingClientRect()
+    const left = cardRect.left - containerRect.left
+    const top = cardRect.top - containerRect.top + 60
+    const width = cardRect.width
+    setStoryEditPanelStyle({
+      left,
+      top,
+      width,
+      height: 440,
+      transformOrigin: "top left",
+    })
+    setIsStoryEditOpen(true)
+    storyEditExpandTimerRef.current = window.setTimeout(() => {
+      setStoryEditPanelStyle({
+        left: 0,
+        top: 60,
+        width: "100%",
+        bottom: 60,
+        height: 440,
+        transformOrigin: "top left",
+      })
+    }, 50)
+  }, [clearStoryEditTimers])
+
+  const closeStoryEditPanel = useCallback(() => {
+    clearStoryEditTimers()
+    setIsStoryEditOpen(false)
+  }, [clearStoryEditTimers])
+
+  const resetStoryEditPanelState = useCallback(() => {
+    setEditingStory(EMPTY_STORY)
+    setEditingStoryIndex(null)
+  }, [])
+
+  const handleEditStory = useCallback(
+    (story: StoryStorm, index: number, event?: React.MouseEvent<HTMLElement>) => {
+      if (!story?.title && !story?.intro) return
+      setEditingStory({ ...story })
+      setEditingStoryIndex(index)
+      const cardElement = event?.currentTarget
+        ? ((event.currentTarget as HTMLElement).closest(".story-card") as HTMLElement | null)
+        : null
+      if (cardElement) {
+        animateStoryPanelFromCard(cardElement)
+        return
+      }
+      setIsStoryEditOpen(true)
+    },
+    [animateStoryPanelFromCard]
+  )
 
   const handleSaveStoryEdit = useCallback(() => {
     if (editingStoryIndex == null) return
@@ -690,17 +770,73 @@ export const StepCreateDialog = React.forwardRef<
       setSelectedStory(nextStory)
     }
     if (nextStory) updateStepSnapshot(2, nextStory)
-    setIsStoryEditOpen(false)
-    setEditingStory(EMPTY_STORY)
-    setEditingStoryIndex(null)
-  }, [editingStory, editingStoryIndex, selectedStory, stories, updateStepSnapshot])
+    closeStoryEditPanel()
+  }, [editingStory, editingStoryIndex, selectedStory, stories, updateStepSnapshot, closeStoryEditPanel])
 
-  const handleEditCharacter = useCallback((character: CharacterCardData, index: number) => {
-    if (!character?.name) return
-    setEditingCharacter({ ...character })
-    setEditingCharacterIndex(index)
-    setIsCharacterEditOpen(true)
+  const clearCharacterEditTimers = useCallback(() => {
+    if (characterEditExpandTimerRef.current !== null) {
+      window.clearTimeout(characterEditExpandTimerRef.current)
+      characterEditExpandTimerRef.current = null
+    }
   }, [])
+
+  const animateCharacterPanelFromCard = useCallback((cardElement: HTMLElement) => {
+    if (!characterStepRef.current) {
+      setIsCharacterEditOpen(true)
+      return
+    }
+    clearCharacterEditTimers()
+    const containerRect = characterStepRef.current.getBoundingClientRect()
+    const cardRect = cardElement.getBoundingClientRect()
+    const left = cardRect.left - containerRect.left
+    const top = cardRect.top - containerRect.top + 60
+    const width = cardRect.width
+    setCharacterEditPanelStyle({
+      left: pxToRem(left),
+      top: pxToRem(top),
+      width: pxToRem(width),
+      height: pxToRem(480),
+      transformOrigin: "top left",
+    })
+    setIsCharacterEditOpen(true)
+    characterEditExpandTimerRef.current = window.setTimeout(() => {
+      setCharacterEditPanelStyle({
+        left: "0rem",
+        top: pxToRem(60),
+        width: "100%",
+        bottom: pxToRem(60),
+        height: pxToRem(480),
+        transformOrigin: "top left",
+      })
+    }, 50)
+  }, [clearCharacterEditTimers])
+
+  const closeCharacterEditPanel = useCallback(() => {
+    clearCharacterEditTimers()
+    setIsCharacterEditOpen(false)
+  }, [clearCharacterEditTimers])
+
+  const resetCharacterEditPanelState = useCallback(() => {
+    setEditingCharacter(EMPTY_CHARACTER)
+    setEditingCharacterIndex(null)
+  }, [])
+
+  const handleEditCharacter = useCallback(
+    (character: CharacterCardData, index: number, event?: React.MouseEvent) => {
+      if (!character?.name) return
+      setEditingCharacter({ ...character })
+      setEditingCharacterIndex(index)
+      const cardElement = event?.currentTarget
+        ? ((event.currentTarget as HTMLElement).closest(".character-card") as HTMLElement | null)
+        : null
+      if (cardElement) {
+        animateCharacterPanelFromCard(cardElement)
+        return
+      }
+      setIsCharacterEditOpen(true)
+    },
+    [animateCharacterPanelFromCard]
+  )
 
   const handleSaveCharacterEdit = useCallback(() => {
     if (editingCharacterIndex == null) return
@@ -721,10 +857,8 @@ export const StepCreateDialog = React.forwardRef<
       setSelectedCharacter(nextCharacter)
     }
     if (nextCharacter) updateStepSnapshot(3, nextCharacter)
-    setIsCharacterEditOpen(false)
-    setEditingCharacter(EMPTY_CHARACTER)
-    setEditingCharacterIndex(null)
-  }, [editingCharacter, editingCharacterIndex, selectedCharacter, characters, updateStepSnapshot])
+    closeCharacterEditPanel()
+  }, [editingCharacter, editingCharacterIndex, selectedCharacter, characters, updateStepSnapshot, closeCharacterEditPanel])
 
   const FormMap = new Map([
     ['prompt', '提示词'],
@@ -781,7 +915,7 @@ export const StepCreateDialog = React.forwardRef<
     } else if (selectedMode === 'tag') {
       requestData.description = selectedTags.map(tag => tag.name).join(',')
     } else if (selectedMode == 'custom') {
-      requestData.description = generateCustomDesc(historyStepSnapshots[1]?.snapshot)
+      requestData.description = generateCustomDesc(historyStepSnapshots[1] as Record<string, any>)
     }
     postTemplateStream(
       requestData,
@@ -850,8 +984,17 @@ export const StepCreateDialog = React.forwardRef<
         outlineStreamAbortControllerRef.current.abort()
         outlineStreamAbortControllerRef.current = null
       }
+      clearStoryEditTimers()
+      clearCharacterEditTimers()
     }
-  }, [open])
+  }, [open, clearStoryEditTimers, clearCharacterEditTimers])
+
+  useEffect(() => {
+    return () => {
+      clearStoryEditTimers()
+      clearCharacterEditTimers()
+    }
+  }, [clearStoryEditTimers, clearCharacterEditTimers])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1060,8 +1203,16 @@ export const StepCreateDialog = React.forwardRef<
             )}
 
             {stepActive === 2 && (
-              <div className="w-full story-step step-content relative flex min-h-[540px] flex-col justify-center gap-6">
-                <div className="story-grid grid w-full grid-cols-3 gap-6 px-20">
+              <div
+                ref={storyStepRef}
+                className="w-full story-step step-content relative flex min-h-[540px] flex-col justify-center gap-6"
+              >
+                <div
+                  className={clsx(
+                    "story-grid grid w-full grid-cols-3 gap-6 px-20 transition-opacity",
+                    isStoryEditOpen && "pointer-events-none opacity-60"
+                  )}
+                >
                   {stories.map((s, i) => (
                     <div
                       key={i}
@@ -1093,7 +1244,7 @@ export const StepCreateDialog = React.forwardRef<
                             className="absolute cursor-pointer right-2 top-2 ml-auto text-lg leading-none opacity-0 transition-opacity hover:text-(--theme-color) group-hover:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleEditStory(s, i)
+                              handleEditStory(s, i, e)
                             }}
                           >
                             <span className="iconfont">&#xea48;</span>
@@ -1121,62 +1272,85 @@ export const StepCreateDialog = React.forwardRef<
                     <span>换一批</span>
                   </LinkButton>
                 </div>
-                {isStoryEditOpen && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center">
-                    <div className="w-full max-w-[900px] rounded-xl bg-[#fff6d9] p-6">
-                      <div className="mb-4 text-lg font-semibold">编辑故事</div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="mb-2 block text-sm text-gray-700">书名</label>
-                          <input
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
-                            maxLength={50}
-                            value={editingStory.title}
-                            onChange={(e) =>
-                              setEditingStory((prev) => ({ ...prev, title: e.target.value }))
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-2 block text-sm text-gray-700">故事简介</label>
-                          <textarea
-                            className="h-[260px] w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2"
-                            maxLength={MAX_INTRO_LENGTH}
-                            value={editingStory.intro}
-                            onChange={(e) =>
-                              setEditingStory((prev) => ({ ...prev, intro: e.target.value }))
-                            }
-                          />
-                          <div className="mt-1 text-right text-xs text-gray-500">
-                            {(editingStory.intro || "").length}/{MAX_INTRO_LENGTH}
+                <AnimatePresence
+                  mode="wait"
+                  onExitComplete={() => {
+                    if (!isStoryEditOpen) resetStoryEditPanelState()
+                  }}
+                >
+                  {isStoryEditOpen && (
+                    <motion.div
+                      key="story-edit-panel"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+                      className="absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5]"
+                      style={{
+                        ...storyEditPanelStyle,
+                        transition: EDIT_PANEL_TRANSITION,
+                      }}
+                    >
+                      <div className="flex h-full flex-col overflow-y-auto px-[50px] pt-[30px]">
+                        <div className="flex h-full flex-col gap-[22px]">
+                          <div className="flex items-start gap-[50px]">
+                            <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">书名：</label>
+                            <div className="relative min-w-0 flex-1">
+                              <input
+                                className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 text-base shadow-none focus:outline-none"
+                                maxLength={50}
+                                value={editingStory.title}
+                                onChange={(e) =>
+                                  setEditingStory((prev) => ({ ...prev, title: e.target.value }))
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-[50px]">
+                            <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">
+                              故事简介：
+                            </label>
+                            <div className="relative min-w-0 flex-1">
+                              <textarea
+                                className="h-[260px] w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 pr-[70px] text-base shadow-none focus:outline-none"
+                                maxLength={MAX_INTRO_LENGTH}
+                                value={editingStory.intro}
+                                onChange={(e) =>
+                                  setEditingStory((prev) => ({ ...prev, intro: e.target.value }))
+                                }
+                              />
+                              <span className="absolute bottom-4 right-4 text-sm text-[#999]">
+                                {(editingStory.intro || "").length}/{MAX_INTRO_LENGTH}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex justify-center gap-6">
+                            <Button type="button" variant="outline" onClick={closeStoryEditPanel}>
+                              取消
+                            </Button>
+                            <Button type="button" onClick={handleSaveStoryEdit}>
+                              确定
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex justify-end gap-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setIsStoryEditOpen(false)
-                              setEditingStory(EMPTY_STORY)
-                              setEditingStoryIndex(null)
-                            }}
-                          >
-                            取消
-                          </Button>
-                          <Button type="button" onClick={handleSaveStoryEdit}>
-                            确定
-                          </Button>
-                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 
             {stepActive === 3 && (
-              <div className="character-step w-full step-content relative flex min-h-[540px] flex-col justify-center gap-6">
-                <div className="character-grid flex w-full justify-center gap-6 px-20">
+              <div
+                ref={characterStepRef}
+                className="character-step w-full step-content relative flex min-h-[540px] flex-col justify-center gap-6"
+              >
+                <div
+                  className={clsx(
+                    "character-grid flex w-full justify-center gap-6 px-20 transition-opacity",
+                    isCharacterEditOpen && "pointer-events-none opacity-60"
+                  )}
+                >
                   {characters.map((c, i) => (
                     <div
                       key={`${c.name}-${c.mbti}-${i}`}
@@ -1189,7 +1363,7 @@ export const StepCreateDialog = React.forwardRef<
                         data={c}
                         loading={loading}
                         onClick={() => handleCharacterClick(c)}
-                        onEdit={(data) => handleEditCharacter(data, i)}
+                        onEdit={(data, event) => handleEditCharacter(data, i, event)}
                       />
                     </div>
                   ))}
@@ -1214,15 +1388,31 @@ export const StepCreateDialog = React.forwardRef<
                     <span>换一批</span>
                   </LinkButton>
                 </div>
-                {isCharacterEditOpen && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center">
-                    <div className="w-full max-w-[900px] rounded-xl bg-[#fff6d9] p-6">
+                <AnimatePresence
+                  mode="wait"
+                  onExitComplete={() => {
+                    if (!isCharacterEditOpen) resetCharacterEditPanelState()
+                  }}
+                >
+                  {isCharacterEditOpen && (
+                    <motion.div
+                      key="character-edit-panel"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+                      className="absolute z-20 flex flex-col overflow-hidden rounded-[10px] border-2 border-[#ff9500] bg-[#fff8e5] p-6"
+                      style={{
+                        ...characterEditPanelStyle,
+                        transition: EDIT_PANEL_TRANSITION,
+                      }}
+                    >
                       <div className="mb-4 text-lg font-semibold">编辑角色</div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-4 overflow-y-auto">
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">角色名</label>
                           <input
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
                             maxLength={5}
                             value={editingCharacter.name}
                             onChange={(e) =>
@@ -1233,7 +1423,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">性别</label>
                           <select
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
                             value={editingCharacter.gender}
                             onChange={(e) =>
                               setEditingCharacter((prev) => ({ ...prev, gender: e.target.value }))
@@ -1247,7 +1437,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">人物标签</label>
                           <input
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
                             maxLength={100}
                             value={editingCharacter.abilities}
                             onChange={(e) =>
@@ -1258,7 +1448,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div>
                           <label className="mb-2 block text-sm text-gray-700">人物身份</label>
                           <input
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2"
                             maxLength={50}
                             value={editingCharacter.identity}
                             onChange={(e) =>
@@ -1269,7 +1459,7 @@ export const StepCreateDialog = React.forwardRef<
                         <div className="col-span-2">
                           <label className="mb-2 block text-sm text-gray-700">人物小传</label>
                           <textarea
-                            className="h-32 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2"
+                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2"
                             maxLength={300}
                             value={editingCharacter.experiences}
                             onChange={(e) =>
@@ -1278,15 +1468,11 @@ export const StepCreateDialog = React.forwardRef<
                           />
                         </div>
                       </div>
-                      <div className="mt-5 flex justify-end gap-3">
+                      <div className="mt-5 flex justify-center gap-6">
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => {
-                            setIsCharacterEditOpen(false)
-                            setEditingCharacter(EMPTY_CHARACTER)
-                            setEditingCharacterIndex(null)
-                          }}
+                          onClick={closeCharacterEditPanel}
                         >
                           取消
                         </Button>
@@ -1294,9 +1480,9 @@ export const StepCreateDialog = React.forwardRef<
                           确定
                         </Button>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 
