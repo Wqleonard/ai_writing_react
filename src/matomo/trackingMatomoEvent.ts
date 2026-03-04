@@ -2,6 +2,10 @@
  * @description: tracking point
  */
 import type { MatomoTracker } from '@certible/use-matomo'
+import type {
+  MatomoEventSpec,
+  TrackEventArgs,
+} from '@/matomo/types'
 
 let tracker: MatomoTracker | null = null
 
@@ -20,28 +24,13 @@ export const resetMatomoUser = () => {
   tracker?.setUserId(null)
 }
 
-export type TrackingEventAction =
-  | "Use"
-  | "Click"
-  | "Generate"
-  | "Add"
-  | "Create"
-  | "Apply"
-  | "Step"
-  | "Complete"
-  | "Success"
-  | "Impression"
-  | "Save"
-  | "Start"
-  | "Export"
-
 // 通用埋点
-export const trackEvent = (
-  category: string,
-  action: TrackingEventAction,
-  name?: string,
-  value?: number
+export const trackEvent = <
+  E extends MatomoEventSpec
+>(
+  ...args: TrackEventArgs<E>
 ) => {
+  const [category, action, name, value] = args
   if (!tracker) {
     console.warn('[Matomo] tracker is not initialized yet')
     return

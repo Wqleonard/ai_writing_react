@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, VisuallyHidden } from '@/components/ui/Dialog'
 import { useLoginStore } from '@/stores/loginStore'
 import { isMobileDevice } from '@/utils/isMobileDevice'
-import clsx from 'clsx'
 import { toast } from "sonner";
+import { cn } from '@/lib/utils'
 
 const IFRAME_URL = 'https://www.baowenmao.com/login/login'
 const ALLOWED_ORIGIN = 'https://www.baowenmao.com'
@@ -109,7 +109,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className={clsx(
+        className={cn(
           'p-0 gap-0 overflow-hidden',
           'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
           isMobile && 'w-[650px] p-4'
@@ -121,7 +121,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
           <DialogTitle>登录</DialogTitle>
         </VisuallyHidden>
         <div
-          className={clsx(
+          className={cn(
             'relative overflow-hidden w-full h-[560px]',
             isMobile && 'h-[230px]'
           )}

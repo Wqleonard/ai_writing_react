@@ -29,4 +29,5 @@
     "noUncheckedSideEffectImports": false
   },
   "include": ["src"],
+  "exclude": ["src/matomo/TrackEventTabel"],
 }
