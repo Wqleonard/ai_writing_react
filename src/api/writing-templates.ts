@@ -63,7 +63,7 @@ const postTemplateStream = (
   config?: { signal?: AbortSignal }
 ) => {
   return apiClient.postStream(
-    "api/works/chat/template-stream",
+    "/api/works/chat/template-stream",
     data,
     onData,
     onError,
