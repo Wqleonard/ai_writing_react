@@ -17,13 +17,17 @@ import {
 } from "@/components/ui/Dialog"
 import { Button } from "@/components/ui/Button"
 import { FormRecommendLabel } from "@/components/ui/FormRecommendLabel"
+import { Skeleton } from "@/components/ui/Skeleton"
+import { toast } from "sonner"
 import { getTemplatesReq, getCharacterSettings, getStoriesReq } from "@/api/generate-dialog"
 import { postTemplateStream } from "@/api/writing-templates"
 import { useOptionsStore } from "@/stores/options"
 import type { PostStreamData } from "@/api"
+import { trackEvent } from "@/matomo/trackingMatomoEvent"
 import { showStepConfirmDialog } from "./showStepConfirmDialog"
 import { CustomSteps } from "./CustomSteps"
 import { CharacterCard } from "./CharacterCard"
+import { TagSelector, type TagCategoryDataItem } from "./TagSelector"
 import { TemplateCardItem } from "../TemplateCardItem"
 import { MarkdownEditor, type MarkdownEditorRef } from "@/components/MarkdownEditor"
 import type {
@@ -45,6 +49,11 @@ import type {
 import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
+import Iconfont from "@/components/IconFont/Iconfont"
+import { getWorkTagsReq } from "@/api/works"
+import { cn } from "@/lib/utils"
+import { LinkButton } from "@/components/ui/LinkButton"
+import { Link } from "react-router-dom"
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -67,6 +76,7 @@ const EMPTY_CHARACTER: CharacterCardData = {
   abilities: "",
   identity: "",
 }
+const MAX_INTRO_LENGTH = 1000
 
 // 深拷贝（与 Vue 侧实现一致）
 const deepClone = <T,>(obj: T): T => {
@@ -114,6 +124,7 @@ export const StepCreateDialog = React.forwardRef<
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [selectedTags, setSelectedTags] = useState<Tag[]>([])
+  const [tagCategories, setTagCategories] = useState<TagCategoryDataItem[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [stories, setStories] = useState<StoryStorm[]>([EMPTY_STORY, EMPTY_STORY, EMPTY_STORY])
   const [selectedStory, setSelectedStory] = useState<StoryStorm | null>(null)
@@ -141,8 +152,17 @@ export const StepCreateDialog = React.forwardRef<
   const [stepSnapshots, setStepSnapshots] = useState<(unknown | null)[]>([null, null, null, null, null])
   // 历史步骤快照（与 Vue 的 historyStepStates 对应）
   const [historyStepSnapshots, setHistoryStepSnapshots] = useState<(unknown | null)[]>([null, null, null, null, null])
+  const [stepUpdatedFlags, setStepUpdatedFlags] = useState<boolean[]>([false, false, false, false, false])
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null)
   const storyAbortRef = useRef<AbortController | null>(null)
+  const characterAbortRef = useRef<AbortController | null>(null)
+  const lastTrackedStepRef = useRef<number | null>(null)
+  const [isStoryEditOpen, setIsStoryEditOpen] = useState(false)
+  const [editingStory, setEditingStory] = useState<StoryStorm>(EMPTY_STORY)
+  const [editingStoryIndex, setEditingStoryIndex] = useState<number | null>(null)
+  const [isCharacterEditOpen, setIsCharacterEditOpen] = useState(false)
+  const [editingCharacter, setEditingCharacter] = useState<CharacterCardData>(EMPTY_CHARACTER)
+  const [editingCharacterIndex, setEditingCharacterIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (selectedMode === "template") setSteps(STEPS_TEMPLATE)
@@ -151,16 +171,97 @@ export const StepCreateDialog = React.forwardRef<
     else setSteps(STEPS)
   }, [selectedMode])
 
+  const [categories, setCategories] = useState<TagCategoryDataItem[]>([])
+
+  const updateTagCategories = useCallback(async () => {
+    try {
+      const response: any = await getWorkTagsReq()
+      if (!Array.isArray(response)) {
+        setCategories([])
+        return
+      }
+      const nextCategories = response.map(
+        (group: { category: string; categoryId: number; max: number; tags: Tag[] }) => ({
+          category: group.category,
+          categoryId: String(group.categoryId),
+          max: group.max,
+          tags: (group.tags ?? []).map((tag: Tag) => ({
+            ...tag,
+            category: group.category,
+            categoryId: String(group.categoryId),
+            max: group.max,
+          })),
+        })
+      )
+      setCategories(nextCategories)
+    } catch (error) {
+      setCategories([])
+      console.error("获取标签数据失败:", error)
+    }
+  }, [])
+
   // 弹窗打开时拉取推荐配置（与 Vue optionsStore.updateConfig 一致）
   useEffect(() => {
-    if (open) void updateRecommendConfig()
-  }, [open, updateRecommendConfig])
+    if (open){
+      updateTagCategories()
+      updateRecommendConfig()
+    }
+  }, [open, updateRecommendConfig, updateTagCategories])
+
+  useEffect(() => {
+    if (!open) {
+      lastTrackedStepRef.current = null
+      return
+    }
+    if (lastTrackedStepRef.current === stepActive) return
+    lastTrackedStepRef.current = stepActive
+
+    if (stepActive === 0) {
+      trackEvent("Guided Writing", "Step", "Mode")
+      return
+    }
+    if (stepActive === 1) {
+      trackEvent("Guided Writing", "Step", "Content")
+      return
+    }
+    if (stepActive === 2) {
+      trackEvent("Guided Writing", "Step", "Story")
+      if (selectedMode === "template" && selectedTemplate?.title) {
+        trackEvent("Template", "Apply", selectedTemplate.title)
+      }
+      if (selectedMode === "tag" && selectedTags.length > 0) {
+        selectedTags.forEach((tag) => {
+          const category = tagCategories.find((cat) => cat.categoryId === tag.categoryId)
+          if (category) {
+            trackEvent("Tag", "Apply", `${category.category}:${tag.name}`)
+          }
+        })
+      }
+      return
+    }
+    if (stepActive === 3) {
+      trackEvent("Guided Writing", "Step", "Protagonist")
+    }
+  }, [open, stepActive, selectedMode, selectedTemplate, selectedTags, tagCategories])
 
   const updateStepSnapshot = useCallback((index: number, snapshot: unknown) => {
     setStepSnapshots((prev) => {
       const next = [...prev]
       next[index] = snapshot
       for (let j = index + 1; j < next.length; j++) next[j] = null
+      return next
+    })
+    setStepUpdatedFlags((prev) => {
+      const next = [...prev]
+      for (let j = index + 1; j < next.length; j++) next[j] = false
+      return next
+    })
+  }, [])
+
+  const markStepUpdated = useCallback((index: number) => {
+    setStepUpdatedFlags((prev) => {
+      const next = [...prev]
+      next[index] = true
       return next
     })
   }, [])
@@ -172,7 +273,7 @@ export const StepCreateDialog = React.forwardRef<
     } else {
       updateStepSnapshot(1, null)
     }
-  }, [formModel.coreMeme, formModel.background, formModel.persona, updateStepSnapshot])
+  }, [formModel, updateStepSnapshot])
 
   const isStepAccessible = useCallback((stepIndex: number) => {
     if (stepIndex === 0) return true
@@ -216,12 +317,15 @@ export const StepCreateDialog = React.forwardRef<
       return true
     }
     return true
-  }, [stepActive, selectedMode, selectedTemplate, selectedTags, selectedStory, selectedCharacter, loading])
+  }, [stepActive, selectedMode, selectedTemplate, selectedTags, selectedStory, selectedCharacter, loading, formModel])
 
   // 下一步/保存至作品（与 Vue nextStepConfirm 一致，Footer 与 ref 共用）
   const handleNextStepConfirm = useCallback(() => {
     syncHistoryIfChanged()
     if (stepActive === 0 && selectedMode) {
+      if (selectedMode === "template") trackEvent("Guided Writing", "Start", "Template Write from Tool")
+      if (selectedMode === "tag") trackEvent("Guided Writing", "Start", "Tag Write from Tool")
+      if (selectedMode === "custom") trackEvent("Guided Writing", "Start", "Custom Write from Tool")
       setStepActive(1)
       return
     }
@@ -247,6 +351,7 @@ export const StepCreateDialog = React.forwardRef<
           : selectedMode === "custom"
           ? [formModel.coreMeme, formModel.background, formModel.persona].filter(Boolean).join(";")
           : ""
+      trackEvent("Guided Writing", "Complete", "End")
       onConfirm?.({
         mode: selectedMode,
         template: selectedTemplate,
@@ -255,6 +360,7 @@ export const StepCreateDialog = React.forwardRef<
         story: selectedStory,
         outline,
         description,
+        saveTarget: "default",
       })
       onOpenChange(false)
     }
@@ -325,6 +431,35 @@ export const StepCreateDialog = React.forwardRef<
     updateStepSnapshot(1, template)
   }, [updateStepSnapshot])
 
+  const handleSelectedTagsChange = useCallback((tags: Tag[]) => {
+    setSelectedTags(tags)
+  }, [])
+
+  const handleTagCategoriesChange = useCallback((categories: TagCategoryDataItem[]) => {
+    setTagCategories(categories)
+  }, [])
+
+  useEffect(() => {
+    if (selectedMode !== "tag") return
+    if (selectedTags.length > 0) {
+      updateStepSnapshot(1, selectedTags)
+      return
+    }
+    updateStepSnapshot(1, null)
+  }, [selectedMode, selectedTags, updateStepSnapshot])
+
+  const chapterNumber = useMemo(() => {
+    const chapterCategory = tagCategories.find((cat) => cat.category.includes("章"))
+    if (!chapterCategory) return 10
+    const selectedIds = new Set(selectedTags.map((tag) => String(tag.id)))
+    const selectedChapterTag = chapterCategory.tags.find((tag) => selectedIds.has(String(tag.id)))
+    const chapterText = selectedChapterTag?.name ?? "10章"
+    const matched = chapterText.match(/\d+/)
+    if (!matched) return 10
+    const parsed = Number.parseInt(matched[0], 10)
+    return Number.isNaN(parsed) ? 10 : parsed
+  }, [selectedTags, tagCategories])
+
   const handleSelectStory = useCallback((story: StoryStorm) => {
     if (story === selectedStory) return
     if (!story?.title && !story?.intro) return
@@ -351,6 +486,14 @@ export const StepCreateDialog = React.forwardRef<
         if (result === "saveToCurrent" || result === "saveToNew") {
           const outline =
             markdownEditorRef.current?.getMarkdown?.() ?? outlineContent
+          const description =
+            selectedMode === "template"
+              ? selectedTemplate?.description ?? ""
+              : selectedMode === "tag"
+              ? selectedTags.map((t) => t.name).join(",")
+              : selectedMode === "custom"
+              ? [formModel.coreMeme, formModel.background, formModel.persona].filter(Boolean).join(";")
+              : ""
           onConfirm?.({
             mode: selectedMode,
             template: selectedTemplate,
@@ -358,7 +501,8 @@ export const StepCreateDialog = React.forwardRef<
             character: selectedCharacter,
             story: selectedStory,
             outline,
-            description: "",
+            description,
+            saveTarget: result === "saveToCurrent" ? "current" : "new",
           })
           onOpenChange(false)
         }
@@ -375,6 +519,7 @@ export const StepCreateDialog = React.forwardRef<
     selectedMode,
     selectedTemplate,
     selectedTags,
+    formModel,
     onOpenChange,
     onConfirm,
   ])
@@ -395,7 +540,9 @@ export const StepCreateDialog = React.forwardRef<
             }))
           )
         }
-      } catch {}
+      } catch (error) {
+        console.error(error)
+      }
     }
     load()
   }, [open])
@@ -404,6 +551,7 @@ export const StepCreateDialog = React.forwardRef<
     if (storyAbortRef.current) storyAbortRef.current.abort()
     const controller = new AbortController()
     storyAbortRef.current = controller
+    markStepUpdated(2)
     setStories([EMPTY_STORY, EMPTY_STORY, EMPTY_STORY])
     setSelectedStory(null)
     setLoading(true)
@@ -441,15 +589,20 @@ export const StepCreateDialog = React.forwardRef<
       setLoading(false)
       storyAbortRef.current = null
     }
-  }, [selectedMode, selectedTemplate, selectedTags, formModel.coreMeme, formModel.background, formModel.persona])
+  }, [selectedMode, selectedTemplate, selectedTags, formModel.coreMeme, formModel.background, formModel.persona, markStepUpdated])
 
   useEffect(() => {
     if (!open || stepActive !== 2 || !selectedMode) return
+    if (stepSnapshots[2] || stepUpdatedFlags[2]) return
     updateStories()
-  }, [open, stepActive, selectedMode, updateStories])
+  }, [open, stepActive, selectedMode, stepSnapshots, stepUpdatedFlags, updateStories])
 
   const updateCharacters = useCallback(async () => {
     if (!selectedStory?.title) return
+    if (characterAbortRef.current) characterAbortRef.current.abort()
+    const controller = new AbortController()
+    characterAbortRef.current = controller
+    markStepUpdated(3)
     setLoading(true)
     setCharacters([EMPTY_CHARACTER, EMPTY_CHARACTER, EMPTY_CHARACTER])
     setSelectedCharacter(null)
@@ -464,7 +617,10 @@ export const StepCreateDialog = React.forwardRef<
         workType: "editor",
         description: desc,
         brainStorm: { title: selectedStory.title, intro: selectedStory.intro },
+      }, {
+        signal: controller.signal,
       })
+      if (controller.signal.aborted) return
       const list = Array.isArray(req?.roleCards) ? req.roleCards : []
       setCharacters(
         [0, 1, 2].map((i) => {
@@ -488,13 +644,15 @@ export const StepCreateDialog = React.forwardRef<
       setCharacters([EMPTY_CHARACTER, EMPTY_CHARACTER, EMPTY_CHARACTER])
     } finally {
       setLoading(false)
+      characterAbortRef.current = null
     }
-  }, [selectedStory, selectedMode, selectedTemplate, selectedTags, formModel.coreMeme, formModel.background, formModel.persona])
+  }, [selectedStory, selectedMode, selectedTemplate, selectedTags, formModel.coreMeme, formModel.background, formModel.persona, markStepUpdated])
 
   useEffect(() => {
     if (!open || stepActive !== 3 || !selectedStory?.title) return
+    if (stepSnapshots[3] || stepUpdatedFlags[3]) return
     updateCharacters()
-  }, [open, stepActive, selectedStory, updateCharacters])
+  }, [open, stepActive, selectedStory, stepSnapshots, stepUpdatedFlags, updateCharacters])
 
   const handleCharacterClick = useCallback((c: CharacterCardData) => {
     if (!c.name) return
@@ -502,11 +660,75 @@ export const StepCreateDialog = React.forwardRef<
     updateStepSnapshot(3, c)
   }, [updateStepSnapshot])
 
+  const handleEditStory = useCallback((story: StoryStorm, index: number) => {
+    if (!story?.title && !story?.intro) return
+    setEditingStory({ ...story })
+    setEditingStoryIndex(index)
+    setIsStoryEditOpen(true)
+  }, [])
+
+  const handleSaveStoryEdit = useCallback(() => {
+    if (editingStoryIndex == null) return
+    const title = (editingStory.title || "").trim()
+    const intro = (editingStory.intro || "").trim()
+    if (!title) {
+      toast.warning("请填写书名")
+      return
+    }
+
+    let nextStory: StoryStorm | null = null
+    setStories((prev) => {
+      const next = [...prev]
+      nextStory = { ...editingStory, title, intro }
+      next[editingStoryIndex] = nextStory
+      return next
+    })
+    if (selectedStory === stories[editingStoryIndex] && nextStory) {
+      setSelectedStory(nextStory)
+    }
+    if (nextStory) updateStepSnapshot(2, nextStory)
+    setIsStoryEditOpen(false)
+    setEditingStory(EMPTY_STORY)
+    setEditingStoryIndex(null)
+  }, [editingStory, editingStoryIndex, selectedStory, stories, updateStepSnapshot])
+
+  const handleEditCharacter = useCallback((character: CharacterCardData, index: number) => {
+    if (!character?.name) return
+    setEditingCharacter({ ...character })
+    setEditingCharacterIndex(index)
+    setIsCharacterEditOpen(true)
+  }, [])
+
+  const handleSaveCharacterEdit = useCallback(() => {
+    if (editingCharacterIndex == null) return
+    const name = (editingCharacter.name || "").trim()
+    if (!name) {
+      toast.warning("请填写角色名称")
+      return
+    }
+
+    let nextCharacter: CharacterCardData | null = null
+    setCharacters((prev) => {
+      const next = [...prev]
+      nextCharacter = { ...editingCharacter, name }
+      next[editingCharacterIndex] = nextCharacter
+      return next
+    })
+    if (selectedCharacter === characters[editingCharacterIndex] && nextCharacter) {
+      setSelectedCharacter(nextCharacter)
+    }
+    if (nextCharacter) updateStepSnapshot(3, nextCharacter)
+    setIsCharacterEditOpen(false)
+    setEditingCharacter(EMPTY_CHARACTER)
+    setEditingCharacterIndex(null)
+  }, [editingCharacter, editingCharacterIndex, selectedCharacter, characters, updateStepSnapshot])
+
   const updateOutlineStream = useCallback(() => {
     if (!selectedStory?.title || !selectedCharacter?.name) return
     if (outlineStreamAbortControllerRef.current) outlineStreamAbortControllerRef.current.abort()
     const controller = new AbortController()
     outlineStreamAbortControllerRef.current = controller
+    markStepUpdated(4)
     setOutlineContent("")
     setLoading(true)
     const onData = (data: PostStreamData) => {
@@ -522,7 +744,7 @@ export const StepCreateDialog = React.forwardRef<
         targetStage: "outline",
         brainStorm: { title: selectedStory.title, intro: selectedStory.intro },
         roleCard: selectedCharacter,
-        chapterNumber: 10,
+        chapterNumber,
       },
       onData,
       () => {
@@ -535,13 +757,14 @@ export const StepCreateDialog = React.forwardRef<
       },
       { signal: controller.signal }
     )
-  }, [workId, selectedStory, selectedCharacter])
+  }, [workId, selectedStory, selectedCharacter, chapterNumber, markStepUpdated])
 
   useEffect(() => {
     if (!open || stepActive !== 4 || !selectedStory?.title || !selectedCharacter?.name) return
     setIsOutlineEditing(false)
+    if (stepSnapshots[4] || stepUpdatedFlags[4]) return
     updateOutlineStream()
-  }, [open, stepActive, selectedStory, selectedCharacter, updateOutlineStream])
+  }, [open, stepActive, selectedStory, selectedCharacter, stepSnapshots, stepUpdatedFlags, updateOutlineStream])
 
   // 关闭时重置状态（与 Vue initDialog 一致）
   useEffect(() => {
@@ -551,6 +774,7 @@ export const StepCreateDialog = React.forwardRef<
       setSelectedMode(null)
       setSelectedTemplate(null)
       setSelectedTags([])
+      setTagCategories([])
       setFormModel({
         prompt: "官方提供-专业短篇小说写作30年",
         coreMeme: "",
@@ -566,11 +790,22 @@ export const StepCreateDialog = React.forwardRef<
       setOutlineContent("")
       setIsOutlineEditing(false)
       setLoading(false)
+      setIsStoryEditOpen(false)
+      setEditingStory(EMPTY_STORY)
+      setEditingStoryIndex(null)
+      setIsCharacterEditOpen(false)
+      setEditingCharacter(EMPTY_CHARACTER)
+      setEditingCharacterIndex(null)
       setStepSnapshots([null, null, null, null, null])
       setHistoryStepSnapshots([null, null, null, null, null])
+      setStepUpdatedFlags([false, false, false, false, false])
       if (storyAbortRef.current) {
         storyAbortRef.current.abort()
         storyAbortRef.current = null
+      }
+      if (characterAbortRef.current) {
+        characterAbortRef.current.abort()
+        characterAbortRef.current = null
       }
       if (outlineStreamAbortControllerRef.current) {
         outlineStreamAbortControllerRef.current.abort()
@@ -582,9 +817,9 @@ export const StepCreateDialog = React.forwardRef<
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        showCloseButton={false}
+        showCloseButton
         className={clsx(
-          "flex max-h-[80vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-[10px] p-0 sm:w-[1020px] sm:!max-w-[1020px]",
+          "flex max-h-[80vh] min-h-[680px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:!max-w-[1020px]",
           "left-1/2 top-[10vh] -translate-x-1/2 translate-y-0"
         )}
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -595,29 +830,19 @@ export const StepCreateDialog = React.forwardRef<
         </VisuallyHidden>
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header：与 Vue 一致 - 绝对定位的返回/关闭 + 居中步骤条 */}
-          <header className="relative flex w-full justify-center px-8 pt-4 pb-0">
+          <header className="relative flex w-full justify-center px-8 pt-8 pb-0">
             {stepActive !== 0 ? (
-              <button
+              <Button
+                variant="ghost"
+                size="icon-lg"
                 type="button"
                 onClick={handleBack}
                 className="absolute left-6 top-5 flex h-8 w-8 cursor-pointer items-center justify-center rounded bg-transparent p-0 transition-colors hover:text-[var(--el-color-primary)]"
                 aria-label="返回"
               >
-                <span className="text-[28px] text-[var(--el-text-color-secondary)] [font-family:iconfont]">
-                  &#xe62a;
-                </span>
-              </button>
+                <Iconfont unicode="&#xe62a;" className="text-lg text-[var(--el-text-color-secondary)]" />
+              </Button>
             ) : null}
-            <button
-              type="button"
-              onClick={handleClose}
-              className="absolute right-6 top-5 flex h-8 w-8 cursor-pointer items-center justify-center rounded bg-transparent p-0 transition-colors hover:text-[var(--el-color-primary)]"
-              aria-label="关闭"
-            >
-              <span className="text-[28px] text-[var(--el-text-color-secondary)] [font-family:iconfont]">
-                &#xe633;
-              </span>
-            </button>
             <div className="w-full max-w-[550px]">
               <CustomSteps
                 active={stepActive}
@@ -630,9 +855,9 @@ export const StepCreateDialog = React.forwardRef<
           </header>
 
           {/* Body：与 Vue dialog-body-wrapper + el-dialog__body 一致 */}
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-auto px-6 pb-3 pt-4">
+          <div className="relative h-full flex flex-1 flex-col items-center justify-center overflow-auto px-6 pb-3 pt-4">
             {stepActive === 0 && (
-              <div className="step-content step-mode flex min-h-[540px] flex-wrap items-center justify-center gap-6">
+              <div className="step-content step-mode flex h-full flex-wrap items-center justify-center gap-6">
                 {MODES.map((m) => (
                   <button
                     key={m.mode}
@@ -784,16 +1009,20 @@ export const StepCreateDialog = React.forwardRef<
             )}
 
             {stepActive === 1 && selectedMode === "tag" && (
-              <div className="step-content tag-select-layout min-h-[540px] px-8 py-4">
-                <div className="rounded-md border border-dashed border-gray-300 p-8 text-center text-gray-500">
-                  标签选择器（TagSelector）待接入
-                </div>
+              <div className="step-content min-h-[540px] px-20">
+                <TagSelector
+                  categories={categories}
+                  selectedTags={selectedTags}
+                  updateTagCategories={updateTagCategories}
+                  onSelectedTagsChange={handleSelectedTagsChange}
+                  onCategoriesChange={handleTagCategoriesChange}
+                />
               </div>
             )}
 
             {stepActive === 2 && (
-              <div className="story-step step-content flex min-h-[540px] flex-col gap-6">
-                <div className="story-grid grid w-full grid-cols-3 gap-6 px-12">
+              <div className="w-full story-step step-content relative flex min-h-[540px] flex-col justify-center gap-6">
+                <div className="story-grid grid w-full grid-cols-3 gap-6 px-20">
                   {stories.map((s, i) => (
                     <div
                       key={i}
@@ -807,19 +1036,29 @@ export const StepCreateDialog = React.forwardRef<
                         }
                       }}
                       className={clsx(
-                        "story-card flex h-[310px] flex-col gap-3 overflow-hidden rounded-xl bg-[#f9eece] p-5 transition",
-                        selectedStory === s ? "outline outline-2 outline-[var(--theme-color)]" : "hover:outline hover:outline-2 hover:outline-[var(--theme-color)]"
+                        "story-card group relative flex h-[310px] flex-col gap-3 overflow-hidden rounded-xl bg-[#f9eece] p-5 transition",
+                        selectedStory === s ? "outline-2 outline-(--theme-color)" : "hover:outline hover:outline-2 hover:outline-[var(--theme-color)]"
                       )}
                     >
                       {(!s.title && !s.intro) || loading ? (
                         <div className="mt-2 flex flex-col gap-3">
-                          <div className="h-6 w-3/5 animate-pulse rounded bg-gray-300" />
-                          <div className="h-3 w-full animate-pulse rounded bg-gray-200" />
-                          <div className="h-3 w-full animate-pulse rounded bg-gray-200" />
-                          <div className="h-3 w-4/5 animate-pulse rounded bg-gray-200" />
+                          <Skeleton className="h-6 w-3/5 bg-gray-300" />
+                          <Skeleton className="h-3 w-full bg-gray-200" />
+                          <Skeleton className="h-3 w-full bg-gray-200" />
+                          <Skeleton className="h-3 w-4/5 bg-gray-200" />
                         </div>
                       ) : (
                         <>
+                          <button
+                            type="button"
+                            className="absolute cursor-pointer right-2 top-2 ml-auto text-lg leading-none opacity-0 transition-opacity hover:text-(--theme-color) group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditStory(s, i)
+                            }}
+                          >
+                            <span className="iconfont">&#xea48;</span>
+                          </button>
                           <div className="book-title mt-2 line-clamp-2 text-xl font-semibold leading-tight text-black">
                             书名: 《{s.title || "未命名"}》
                           </div>
@@ -832,54 +1071,92 @@ export const StepCreateDialog = React.forwardRef<
                   ))}
                 </div>
                 <div className="footer-actions flex w-full justify-center">
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={loading ? undefined : updateStories}
-                    onKeyDown={(e) => {
-                      if (!loading && (e.key === "Enter" || e.key === " ")) {
-                        e.preventDefault()
-                        updateStories()
-                      }
-                    }}
-                    className={clsx(
-                      "flex cursor-pointer items-center gap-2 text-[var(--bg-editor-save)]",
-                      loading && "cursor-not-allowed opacity-50"
+                  <LinkButton
+                    onClick={updateStories}
+                    disabled={loading}      
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 text-gray-500 custom-btn disabled:cursor-not-allowed",
                     )}
                   >
                     <span className={clsx("iconfont", loading && "animate-spin")}>&#xe66f;</span>
                     <span>换一批</span>
-                  </div>
+                  </LinkButton>
                 </div>
+                {isStoryEditOpen && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center">
+                    <div className="w-full max-w-[900px] rounded-xl bg-[#fff6d9] p-6">
+                      <div className="mb-4 text-lg font-semibold">编辑故事</div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">书名</label>
+                          <input
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={50}
+                            value={editingStory.title}
+                            onChange={(e) =>
+                              setEditingStory((prev) => ({ ...prev, title: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">故事简介</label>
+                          <textarea
+                            className="h-[260px] w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={MAX_INTRO_LENGTH}
+                            value={editingStory.intro}
+                            onChange={(e) =>
+                              setEditingStory((prev) => ({ ...prev, intro: e.target.value }))
+                            }
+                          />
+                          <div className="mt-1 text-right text-xs text-gray-500">
+                            {(editingStory.intro || "").length}/{MAX_INTRO_LENGTH}
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setIsStoryEditOpen(false)
+                              setEditingStory(EMPTY_STORY)
+                              setEditingStoryIndex(null)
+                            }}
+                          >
+                            取消
+                          </Button>
+                          <Button type="button" onClick={handleSaveStoryEdit}>
+                            确定
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {stepActive === 3 && (
-              <div className="character-step step-content flex min-h-[540px] flex-col gap-6">
+              <div className="character-step step-content relative flex min-h-[540px] flex-col justify-center gap-6">
                 <div className="character-grid flex w-full justify-center gap-6 px-12">
                   {characters.map((c, i) => (
                     <div
                       key={`${c.name}-${c.mbti}-${i}`}
                       className={clsx(
-                        "character-card cursor-pointer",
-                        selectedCharacter === c && "outline outline-2 outline-[var(--theme-color)]"
+                        "character-card cursor-pointer rounded-[10px] hover:outline-2 outline-(--theme-color)",
+                        selectedCharacter === c && "outline-2"
                       )}
-                      onClick={() => handleCharacterClick(c)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          handleCharacterClick(c)
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
                     >
-                      <CharacterCard data={c} loading={loading} onClick={() => {}} onEdit={() => {}} />
+                      <CharacterCard
+                        data={c}
+                        loading={loading}
+                        onClick={() => handleCharacterClick(c)}
+                        onEdit={(data) => handleEditCharacter(data, i)}
+                      />
                     </div>
                   ))}
                 </div>
                 <div className="footer-actions flex w-full justify-center">
-                  <div
+                  <LinkButton
                     role="button"
                     tabIndex={0}
                     onClick={loading ? undefined : updateCharacters}
@@ -889,15 +1166,98 @@ export const StepCreateDialog = React.forwardRef<
                         updateCharacters()
                       }
                     }}
+                    disabled={loading}
                     className={clsx(
-                      "flex cursor-pointer items-center gap-2 text-[var(--bg-editor-save)]",
-                      loading && "cursor-not-allowed opacity-50"
+                      "flex items-center gap-2 text-gray-500",
                     )}
                   >
                     <span className={clsx("iconfont", loading && "animate-spin")}>&#xe66f;</span>
                     <span>换一批</span>
-                  </div>
+                  </LinkButton>
                 </div>
+                {isCharacterEditOpen && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center">
+                    <div className="w-full max-w-[900px] rounded-xl bg-[#fff6d9] p-6">
+                      <div className="mb-4 text-lg font-semibold">编辑角色</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">角色名</label>
+                          <input
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={5}
+                            value={editingCharacter.name}
+                            onChange={(e) =>
+                              setEditingCharacter((prev) => ({ ...prev, name: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">性别</label>
+                          <select
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            value={editingCharacter.gender}
+                            onChange={(e) =>
+                              setEditingCharacter((prev) => ({ ...prev, gender: e.target.value }))
+                            }
+                          >
+                            <option value="">请选择</option>
+                            <option value="男">男</option>
+                            <option value="女">女</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">人物标签</label>
+                          <input
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={100}
+                            value={editingCharacter.abilities}
+                            onChange={(e) =>
+                              setEditingCharacter((prev) => ({ ...prev, abilities: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-700">人物身份</label>
+                          <input
+                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={50}
+                            value={editingCharacter.identity}
+                            onChange={(e) =>
+                              setEditingCharacter((prev) => ({ ...prev, identity: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="mb-2 block text-sm text-gray-700">人物小传</label>
+                          <textarea
+                            className="h-32 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2"
+                            maxLength={300}
+                            value={editingCharacter.experiences}
+                            onChange={(e) =>
+                              setEditingCharacter((prev) => ({ ...prev, experiences: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-5 flex justify-end gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setIsCharacterEditOpen(false)
+                            setEditingCharacter(EMPTY_CHARACTER)
+                            setEditingCharacterIndex(null)
+                          }}
+                        >
+                          取消
+                        </Button>
+                        <Button type="button" onClick={handleSaveCharacterEdit}>
+                          确定
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -906,7 +1266,7 @@ export const StepCreateDialog = React.forwardRef<
                 <div
                   className={clsx(
                     "editor-layout rounded-lg bg-[#f9eece] pt-2",
-                    isOutlineEditing && "outline outline-2 outline-[#ce644c]"
+                    isOutlineEditing && "outline-2 outline-[#ce644c]"
                   )}
                 >
                   <div className="header px-2 text-3xl font-semibold leading-10 text-black">大纲</div>
@@ -964,29 +1324,23 @@ export const StepCreateDialog = React.forwardRef<
           </div>
 
           {/* Footer：与 Vue 一致 - 退出 + 下一步/保存至作品 */}
-          <footer className="flex flex-row-reverse items-center gap-3 border-t border-gray-200 px-6 py-4">
-            <div
+          <footer className="flex flex-row-reverse items-center gap-3 px-12 py-4">
+            <Button
               role="button"
-              tabIndex={0}
               onClick={nextStepAble ? handleNextStepConfirm : undefined}
+              disabled={!nextStepAble}
               onKeyDown={(e) => {
                 if (nextStepAble && (e.key === "Enter" || e.key === " ")) {
                   e.preventDefault()
                   handleNextStepConfirm()
                 }
               }}
-              className={clsx(
-                "inline-flex cursor-pointer items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                nextStepAble
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "cursor-not-allowed bg-gray-200 text-gray-500"
-              )}
             >
               {stepActive === 4 ? "保存至作品" : "下一步"}
-            </div>
-            <div
+            </Button>
+            <Button
+              variant="outline"
               role="button"
-              tabIndex={0}
               onClick={handleClose}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -994,10 +1348,9 @@ export const StepCreateDialog = React.forwardRef<
                   handleClose()
                 }
               }}
-              className="inline-flex cursor-pointer items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
             >
               退出
-            </div>
+            </Button>
           </footer>
         </div>
       </DialogContent>
