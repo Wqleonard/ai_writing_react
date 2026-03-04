@@ -43,4 +43,8 @@ export const ORDER_CODE_VALUE: Record<string, string> = {
   USE_COURSE: '新手指南-查看写作课程',
   USE_SHARE: '新手指南-查看分享信息',
   USE_PROMPTS: '新手指南-查看提示词工具',
+  INSPIRATION_THEME: '画布创作-灵感选题',
+  INSPIRATION_INTRODUCTION: '画布创作-故事梗概',
+  INSPIRATION_STORY_SETTING: '画布创作-故事设定',
+  INSPIRATION_STORY_OUTLINE: '画布创作-大纲'
 }
