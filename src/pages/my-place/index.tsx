@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
-import { debounce } from 'lodash-es'
+import debounce from 'lodash-es/debounce'
 import {
   batchDeleteWorkReq,
   createWorkReq,
