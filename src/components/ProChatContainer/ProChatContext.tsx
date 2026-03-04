@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useMemo } from "react"
+import React, { createContext, useContext } from "react"
 import type { ChatMessage, ChatTabType } from "@/stores/chatStore"
 import type { QuillChatInputStatus } from "@/components/QuillChatInput"
 
@@ -57,6 +57,15 @@ const ProChatContainerContext = createContext<ProChatContainerContextValue | nul
 
 export const useProChatContainer = (): ProChatContainerContextValue | null =>
   useContext(ProChatContainerContext)
+
+/** 在 ProChatContainer 内部强依赖 context 的组件使用；缺少 Provider 会直接抛错。 */
+export const useProChatContainerRequired = (): ProChatContainerContextValue => {
+  const ctx = useContext(ProChatContainerContext)
+  if (!ctx) {
+    throw new Error("useProChatContainerRequired must be used within ProChatContainer")
+  }
+  return ctx
+}
 
 /** 在 ProChatContainer 内部使用，获取上下文；不在内部使用时返回 null */
 export const useProChatContainerOrNull = useProChatContainer

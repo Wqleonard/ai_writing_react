@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
 import mermaid from "mermaid";
@@ -120,6 +120,21 @@ type WorkVersion = {
   isAutoSaved?: string;
   updatedTime?: string;
 };
+
+type EditorInitialParams = {
+  message?: string;
+  isAnswerOnly?: boolean;
+  modelLLM?: string;
+  selectedWritingStyle?: string;
+  associationTags?: string[];
+  selectedNotes?: import("@/api/notes").Note[];
+  selectedFiles?: FileItemType[];
+  selectedTexts?: import("@/stores/chatStore").SelectedText[];
+  selectedTools?: import("@/stores/chatInputStore/types").AgentTalkToolValue[];
+  isShowAnswerTip?: boolean;
+};
+
+const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
 
 type FileChangesMap = Record<string, EditorChangeItem[]>;
 
@@ -322,6 +337,7 @@ function RoleTablePreview({ markdown }: { markdown: string }) {
 
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
 
@@ -350,7 +366,7 @@ const MarkdownEditorPage = () => {
         ? faqCurrentSession?.id ?? ""
         : "";
 
-  const { modelLLM, selectedWritingStyle } = useLLM();
+  const { modelLLM, selectedWritingStyle, setModelLLM, setSelectedWritingStyle } = useLLM();
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
   const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
@@ -543,6 +559,90 @@ const MarkdownEditorPage = () => {
     return "ready";
   }, [langGraphStream.error, langGraphStream.isStreaming]);
   const isStreamingOverlayVisible = chatInputStatus === "streaming";
+  const associationTags = useChatInputStore((s) => s.associationTags);
+  const selectedNotes = useChatInputStore((s) => s.selectedNotes);
+  const selectedFiles = useChatInputStore((s) => s.selectedFiles);
+  const selectedTexts = useChatInputStore((s) => s.selectedTexts);
+  const selectedTools = useChatInputStore((s) => s.selectedTools);
+  const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
+  const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
+  const [pendingInitialMessage, setPendingInitialMessage] = useState("");
+  const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+
+  const sendChatText = useCallback(
+    (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
+      const message = text.trim();
+      if (!message && !options?.command) return;
+      let sessionId = chatCurrentSession?.id ?? "";
+      if (!chatCurrentSession) {
+        const session = createNewSession("chat");
+        sessionId = session.id;
+      }
+
+      if (options?.addUserMessage !== false) {
+        const userMessage: ChatMessage = {
+          id: `user_${Date.now()}`,
+          role: "user",
+          content: message,
+          createdAt: new Date(),
+          messageType: "normal",
+          mode: "chat",
+          files: selectedFiles.length > 0 ? [...selectedFiles] : undefined,
+          selectedTexts: selectedTexts.length > 0 ? [...selectedTexts] : undefined,
+        };
+        addMessageToDualTab("chat", userMessage as DualTabChatMessage);
+      }
+
+      if (workId && sessionId) {
+        guideRequestRef.current = { sessionId, workId };
+        const placeholderId = `assistant_${Date.now()}`;
+        streamingMessageIdRef.current = placeholderId;
+        const placeholder: ChatMessage = {
+          id: placeholderId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date(),
+          messageType: "normal",
+          mode: "chat",
+          customMessage: [],
+        };
+        streamingMessageRef.current = placeholder;
+        setStreamingMessage(placeholder);
+        const attachments =
+          selectedFiles.length > 0
+            ? selectedFiles.map((file) => ({
+                name: file.serverFileName,
+                remoteAddress: file.putFilePath,
+              }))
+            : undefined;
+        langGraphStream.submit(
+          message,
+          sessionId,
+          workId,
+          isAnswerOnly ? "chat" : "agent",
+          selectedTools,
+          attachments,
+          options?.reload,
+          options?.command,
+          modelLLM,
+          selectedWritingStyle
+        );
+      }
+    },
+    [
+      addMessageToDualTab,
+      chatCurrentSession,
+      createNewSession,
+      isAnswerOnly,
+      langGraphStream,
+      modelLLM,
+      selectedWritingStyle,
+      selectedFiles,
+      selectedTexts,
+      selectedTools,
+      workId,
+    ]
+  );
 
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
@@ -575,7 +675,6 @@ const MarkdownEditorPage = () => {
   const dragStartRightPx = useRef(RIGHT_DEFAULT_REM * REM_BASE);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
   const [showAssociationSelector, setShowAssociationSelector] = useState(false);
-  const [isAnswerOnly, setIsAnswerOnly] = useState(true);
   const [relationViewMode, setRelationViewMode] = useState<"edit" | "preview">("edit");
   const [showSearchReplaceDialog, setShowSearchReplaceDialog] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -597,8 +696,6 @@ const MarkdownEditorPage = () => {
     }
   });
 
-  const associationTags = useChatInputStore((s) => s.associationTags);
-  const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
   const sidebarTreeData = useMemo(
     () => serverDataToTree(serverData),
     [serverData]
@@ -619,6 +716,41 @@ const MarkdownEditorPage = () => {
     lastInitWorkIdRef.current = workId;
     void initEditorData(workId);
   }, [workId, initEditorData]);
+
+  useEffect(() => {
+    let storageParams: EditorInitialParams | null = null;
+    if (typeof window !== "undefined") {
+      const paramsStr = sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY);
+      if (paramsStr) {
+        try {
+          storageParams = JSON.parse(paramsStr) as EditorInitialParams;
+        } catch (e) {
+          console.error("解析 editorInitialParams 失败:", e);
+        } finally {
+          sessionStorage.removeItem(EDITOR_INITIAL_PARAMS_KEY);
+        }
+      }
+    }
+    const stateParams = (location.state as EditorInitialParams | null) ?? null;
+    const initialParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
+
+    if (initialParams.modelLLM) setModelLLM(initialParams.modelLLM);
+    if (initialParams.selectedWritingStyle) setSelectedWritingStyle(initialParams.selectedWritingStyle);
+    if (typeof initialParams.isAnswerOnly === "boolean") {
+      setIsAnswerOnly(initialParams.isAnswerOnly);
+    }
+    initializeChatInputFromParams({
+      associationTags: initialParams.associationTags,
+      selectedNotes: initialParams.selectedNotes,
+      selectedFiles: initialParams.selectedFiles,
+      selectedTexts: initialParams.selectedTexts,
+      selectedTools: initialParams.selectedTools,
+      isShowAnswerTip: initialParams.isShowAnswerTip,
+    });
+    if (initialParams.message?.trim()) {
+      setPendingInitialMessage(initialParams.message.trim());
+    }
+  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams]);
 
   // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
   useEffect(() => {
@@ -1753,6 +1885,9 @@ const MarkdownEditorPage = () => {
                 <ProChatContainer
                   workId={workId ?? undefined}
                   activeTab="chat"
+                  initialMessage={pendingInitialMessage}
+                  autoSubmitInitialMessage={Boolean(pendingInitialMessage)}
+                  initialIsAnswerOnly={isAnswerOnly}
                   inputStatus={chatInputStatus}
                   onStopStreaming={handleStopStreaming}
                   messages={
@@ -1762,40 +1897,7 @@ const MarkdownEditorPage = () => {
                   }
                   sessionId={chatCurrentSession?.id ?? ""}
                   onSendMessage={(msg: ChatMessage) => {
-                    let sessionId = chatCurrentSession?.id ?? "";
-                    if (!chatCurrentSession) {
-                      const session = createNewSession("chat");
-                      sessionId = session.id;
-                    }
-                    addMessageToDualTab("chat", msg as DualTabChatMessage);
-                    if (workId && sessionId) {
-                      guideRequestRef.current = { sessionId, workId };
-                      const placeholderId = `assistant_${Date.now()}`;
-                      streamingMessageIdRef.current = placeholderId;
-                      const placeholder: ChatMessage = {
-                        id: placeholderId,
-                        role: "assistant",
-                        content: "",
-                        createdAt: new Date(),
-                        messageType: "normal",
-                        mode: "chat",
-                        customMessage: [],
-                      };
-                      streamingMessageRef.current = placeholder;
-                      setStreamingMessage(placeholder);
-                      langGraphStream.submit(
-                        msg.content ?? "",
-                        sessionId,
-                        workId,
-                        isAnswerOnly ? "chat" : "agent",
-                        undefined,
-                        undefined,
-                        undefined,
-                        undefined,
-                        modelLLM,
-                        selectedWritingStyle
-                      );
-                    }
+                    sendChatText(msg.content ?? "", { addUserMessage: true });
                   }}
                   onSaveCurrentSession={() => saveCurrentSession("chat")}
                   checkStreamingStatusAndConfirm={async () => true}
@@ -1903,80 +2005,10 @@ const MarkdownEditorPage = () => {
                                     ),
                                   };
                                 });
-                                const sessionId = chatCurrentSession?.id ?? "";
-                                if (!sessionId || !workId) return;
-                                guideRequestRef.current = null;
-                                const placeholderId = `assistant_${Date.now()}`;
-                                streamingMessageIdRef.current = placeholderId;
-                                const placeholder: ChatMessage = {
-                                  id: placeholderId,
-                                  role: "assistant",
-                                  content: "",
-                                  createdAt: new Date(),
-                                  messageType: "normal",
-                                  mode: "chat",
-                                  customMessage: [],
-                                };
-                                streamingMessageRef.current = placeholder;
-                                setStreamingMessage(placeholder);
-                                langGraphStream.submit(
-                                  "",
-                                  sessionId,
-                                  workId,
-                                  isAnswerOnly ? "chat" : "agent",
-                                  undefined,
-                                  undefined,
-                                  false,
-                                  "approve",
-                                  modelLLM,
-                                  selectedWritingStyle
-                                );
+                                sendChatText("", { command: "approve", addUserMessage: false });
                               }}
                               onSendMessage={(text, reload = false) => {
-                                const synthetic: ChatMessage = {
-                                  id: `user_${Date.now()}`,
-                                  role: "user",
-                                  content: text,
-                                  createdAt: new Date(),
-                                  messageType: "normal",
-                                  mode: "chat",
-                                };
-                                let sid = chatCurrentSession?.id ?? "";
-                                if (!chatCurrentSession) {
-                                  const session = createNewSession("chat");
-                                  sid = session.id;
-                                }
-                                if (!reload) {
-                                  addMessageToDualTab("chat", synthetic as DualTabChatMessage);
-                                }
-                                if (workId && sid) {
-                                  guideRequestRef.current = { sessionId: sid, workId };
-                                  const placeholderId = `assistant_${Date.now()}`;
-                                  streamingMessageIdRef.current = placeholderId;
-                                  const placeholder: ChatMessage = {
-                                    id: placeholderId,
-                                    role: "assistant",
-                                    content: "",
-                                    createdAt: new Date(),
-                                    messageType: "normal",
-                                    mode: "chat",
-                                    customMessage: [],
-                                  };
-                                  streamingMessageRef.current = placeholder;
-                                  setStreamingMessage(placeholder);
-                                  langGraphStream.submit(
-                                    text,
-                                    sid,
-                                    workId,
-                                    isAnswerOnly ? "agent" : "chat",
-                                    undefined,
-                                    undefined,
-                                    reload,
-                                    undefined,
-                                    modelLLM,
-                                    selectedWritingStyle
-                                  );
-                                }
+                                sendChatText(text, { reload, addUserMessage: !reload });
                               }}
                             />
                           ) : (

@@ -2,6 +2,7 @@ export { default as ProChatContainer } from "./ProChatContainer";
 export { ProChatPanel } from "./ProChatPanel";
 export {
   useProChatContainer,
+  useProChatContainerRequired,
   useProChatContainerOrNull,
   ProChatContainerContext,
 } from "./ProChatContext";

@@ -11,13 +11,6 @@ import {
 } from "lucide-react"
 import { Iconfont } from "@/components/IconFont"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select"
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -28,18 +21,12 @@ import { Button } from "@/components/ui/Button"
 import { useChatInputStore } from "@/stores/chatInputStore"
 import { useModels } from "@/hooks/useModels"
 import { useLLM } from "@/hooks/useLLM"
-import type {
-  QuickChatInputChannel,
-  QuickChatInputChannelValue,
-} from "../../types/quickChat"
-import { getKeywords } from "@/api/tools-square"
-import { handleUploadFile } from "@/api/files"
-import type { FileItem } from "@/api/files"
-import { showNotesSelectorDialog } from "@/utils/showNotesSelectorDialog"
-import { openLoginDialog } from "@/components/LoginDialog"
 import { useLoginStore } from "@/stores/loginStore"
 import { getWritingStylesListReq } from "@/api/writing-styles"
 import { WritingStyleDialog } from "@/components/Community/WritingStyleDialog"
+import { useMemeWords } from "@/hooks/useMemeWords"
+import { useQuickToolComposer } from "@/hooks/useQuickToolComposer"
+import { useChatInputActions } from "@/hooks/useChatInputActions"
 
 export type QuillChatInputStatus = "ready" | "error" | "submitted" | "streaming"
 
@@ -119,18 +106,26 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   } = useLLM()
 
   const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
+  const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
   const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
-  const [selectedTool, setSelectedTool] = useState<string | null>(null)
 
   const openToolPopover = useCallback(() => setToolPopoverOpen(true), [])
   const openFilePopover = useCallback(() => setFilePopoverOpen(true), [])
   const [isMemeWordsExpanded, setIsMemeWordsExpanded] = useState(true)
-  const [memeWords, setMemeWords] = useState<
-    { name: string; description?: string; workReference?: string }[]
-  >([])
-  const [isLoadingMemeWords, setIsLoadingMemeWords] = useState(false)
+  const { memeWords, leftColumnWords, rightColumnWords, collapsedPreviewWords } = useMemeWords({
+    disabled: hideAssistUI,
+    collapsedPreviewCount: 5,
+  })
+  const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null)
+  const [hoveredNoteDeleteIndex, setHoveredNoteDeleteIndex] = useState<number | null>(null)
+  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<string | null>(null)
+  const [hoveredSelectedTextDeleteIndex, setHoveredSelectedTextDeleteIndex] = useState<string | null>(null)
+  const [isDeleteIconHovered, setIsDeleteIconHovered] = useState(false)
+  const [isNoteDeleteIconHovered, setIsNoteDeleteIconHovered] = useState(false)
+  const [isFileDeleteIconHovered, setIsFileDeleteIconHovered] = useState(false)
+  const [isSelectedTextDeleteIconHovered, setIsSelectedTextDeleteIconHovered] = useState(false)
 
   const [hovered, setHovered] = useState(false)
 
@@ -139,46 +134,27 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const isButtonClickable = status === "streaming" ? !!onStopStreaming : canMove
   // 富文本容器引用（工具模式下使用 contenteditable + span + input-tag）
   const richTextRef = useRef<HTMLDivElement | null>(null)
-
-  const currentChannel: QuickChatInputChannel | null = selectedTool
-    ? quickChatInputChannels.find((c) => c.title === selectedTool) ?? null
-    : null
-
-  // 根据当前快捷工具的模板（tip + span）初始化基础文本内容
-  useEffect(() => {
-    if (!currentChannel) return
-    const baseText = currentChannel.value
-      .filter((item) => item.mold === "tip" || item.mold === "span")
-      .map((item) => item.value || "")
-      .join("")
-    onChange(baseText)
-  }, [currentChannel, onChange])
+  const clearRichTextDom = useCallback(() => {
+    if (richTextRef.current) {
+      richTextRef.current.innerHTML = ""
+    }
+  }, [])
+  const {
+    selectedTool,
+    currentChannel,
+    closeToolMode: closeRichTextMode,
+    handleToolTagClick,
+  } = useQuickToolComposer({
+    channels: quickChatInputChannels,
+    onChange,
+    onCloseMode: clearRichTextDom,
+  })
 
   const hasTags =
     associationTags.length > 0 ||
     selectedNotes.length > 0 ||
     selectedFiles.length > 0 ||
     selectedTexts.length > 0
-
-  useEffect(() => {
-    if (hideAssistUI) return
-    let cancelled = false
-    setIsLoadingMemeWords(true)
-    getKeywords()
-      .then((req: unknown) => {
-        const r = req as { keywords?: { name: string; description?: string; workReference?: string }[] }
-        if (!cancelled && r?.keywords && Array.isArray(r.keywords)) {
-          setMemeWords(r.keywords)
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setIsLoadingMemeWords(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [hideAssistUI])
 
   useEffect(() => {
     if (!hasTags || !isAnswerOnly) return
@@ -256,31 +232,6 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     onChange(fullText)
   }, [onChange])
 
-  const closeRichTextMode = useCallback(() => {
-    setSelectedTool(null)
-    // 清空富文本 DOM
-    if (richTextRef.current) {
-      richTextRef.current.innerHTML = ""
-    }
-    onChange("")
-  }, [onChange])
-
-  // 点击工具标签：进入/退出富文本模板模式（contenteditable + span + input-tag）
-  const handleToolTagClick = useCallback(
-    (channelTitle: string) => {
-      const channel = quickChatInputChannels.find((c) => c.title === channelTitle)
-      if (!channel) return
-
-      if (selectedTool === channelTitle) {
-        // 再次点击同一工具：退出富文本模式并清空
-        closeRichTextMode()
-      } else {
-        setSelectedTool(channelTitle)
-      }
-    },
-    [quickChatInputChannels, selectedTool, closeRichTextMode]
-  )
-
   const handleRichTextInput = useCallback(() => {
     updateRichTextContent()
   }, [updateRichTextContent])
@@ -304,73 +255,21 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     [value, onChange, isAnswerOnly, setShowAnswerTip]
   )
 
-  const handleLocalFileSelect = useCallback(() => {
-    if (!isLoggedIn) {
-      openLoginDialog()
-      return
-    }
-    handleUploadFile((file: FileItem) => addFile(file), {
-      onError: (msg) => console.warn(msg),
-    })
-  }, [isLoggedIn, addFile])
-
-  const handleOpenAssociationSelector = useCallback(() => {
-    if (!isLoggedIn) {
-      openLoginDialog()
-      return
-    }
-    onOpenAssociationSelector?.()
-  }, [isLoggedIn, onOpenAssociationSelector])
-
-  const handleOpenNotesSelector = useCallback(async () => {
-    if (!isLoggedIn) {
-      openLoginDialog()
-      return
-    }
-    try {
-      const { notes, success } = await showNotesSelectorDialog()
-      if (success && notes?.length) {
-        notes.forEach((n) => addNote(n))
-      } else if (success && (!notes || notes.length === 0)) {
-        clearSelectedNotes()
-      }
-    } catch {
-      // 用户取消
-    }
-  }, [isLoggedIn, addNote, clearSelectedNotes])
+  const {
+    handleLocalFileSelect,
+    handleOpenAssociationSelector,
+    handleOpenNotesSelector,
+  } = useChatInputActions({
+    isLoggedIn,
+    addFile,
+    addNote,
+    clearSelectedNotes,
+    onOpenAssociationSelector,
+  })
 
   const isSubmitting = status !== "ready" && status !== "error"
-
-  // 创作热点：左右两列 + 折叠预览
-  const collapsedPreviewCount = 5
-  const leftColumnWords = React.useMemo(
-    () => {
-      const halfCount = Math.ceil(memeWords.length / 2)
-      const words = memeWords.slice(0, halfCount)
-      return words.map((text, index) => ({
-        name: text.name,
-        originalIndex: index,
-      }))
-    },
-    [memeWords]
-  )
-
-  const rightColumnWords = React.useMemo(
-    () => {
-      const halfCount = Math.ceil(memeWords.length / 2)
-      const words = memeWords.slice(halfCount)
-      return words.map((text, index) => ({
-        name: text.name,
-        originalIndex: index + halfCount,
-      }))
-    },
-    [memeWords]
-  )
-
-  const collapsedPreviewWords = React.useMemo(
-    () => memeWords.slice(0, collapsedPreviewCount),
-    [memeWords]
-  )
+  const currentModelName =
+    modelsLLM.find((m) => m.id === modelLLM)?.name || "模型"
 
   const getMemeNumberClass = (index: number) => {
     if (index === 0) return "number-gold"
@@ -586,21 +485,51 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
             </div>
           )}
 
-        {/* 模型选择 */}
-        <div className="min-w-[60px]">
-          <Select value={modelLLM} onValueChange={setModelLLM}>
-            <SelectTrigger className="h-7 text-xs border-0 bg-transparent shadow-none px-0 focus:ring-0 focus:ring-offset-0">
-              <SelectValue placeholder="模型" />
-            </SelectTrigger>
-            <SelectContent>
-              {modelsLLM.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* 模型选择（对齐 Vue SimpleSelect 结构） */}
+        <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className="simple-select-trigger inline-flex items-center gap-1 cursor-pointer select-none">
+              <span className="text-xs text-[#333333]">{currentModelName}</span>
+              <ChevronDown
+                className={clsx(
+                  "trigger-arrow h-3.5 w-3.5 text-[#909399] transition-transform duration-300",
+                  modelPopoverOpen && "rotate-180"
+                )}
+              />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            side="top"
+            sideOffset={8}
+            className="simple-select-popover w-[200px] p-1 border-0 bg-[var(--bg-primary-overlay,white)] shadow-md"
+          >
+            <div className="simple-select-content flex flex-col max-h-[220px]">
+              <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
+                {modelsLLM.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={clsx(
+                      "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
+                      m.id === modelLLM
+                        ? "is-selected bg-[var(--bg-editor-save)] text-white"
+                        : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                    )}
+                    onClick={() => {
+                      setModelLLM(m.id)
+                      setModelPopoverOpen(false)
+                    }}
+                  >
+                    <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-[var(--text-primary,#303133)]")}>
+                      {m.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* 仅回答 */}
         {onAnswerOnlyChange && (
@@ -691,9 +620,28 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     <span
                       key={`assoc-${tag}-${index}`}
                       className="association-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-                      onClick={() => removeAssociationTag(index)}
+                      onMouseEnter={() => setHoveredDeleteIndex(index)}
+                      onMouseLeave={() => {
+                        setHoveredDeleteIndex(null)
+                        setIsDeleteIconHovered(false)
+                      }}
                     >
-                      <FileText className="h-3 w-3 shrink-0" />
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredDeleteIndex === index && "delete-mode",
+                          isDeleteIconHovered && hoveredDeleteIndex === index && "delete-hover"
+                        )}
+                        onClick={() => hoveredDeleteIndex === index ? removeAssociationTag(index) : null}
+                        onMouseEnter={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(false) : null}
+                      >
+                        {hoveredDeleteIndex === index ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
                       <span className="tag-text truncate max-w-[120px]">{tag}</span>
                     </span>
                   ))}
@@ -711,21 +659,32 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     <span
                       key={`note-${note.id}`}
                       className="note-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredNoteDeleteIndex(note.id)}
+                      onMouseLeave={() => {
+                        setHoveredNoteDeleteIndex(null)
+                        setIsNoteDeleteIconHovered(false)
+                      }}
                     >
-                      <FileText className="h-3 w-3 shrink-0" />
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredNoteDeleteIndex === note.id && "delete-mode",
+                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "delete-hover"
+                        )}
+                        onClick={() => hoveredNoteDeleteIndex === note.id ? removeNote(note.id) : null}
+                        onMouseEnter={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(false) : null}
+                      >
+                        {hoveredNoteDeleteIndex === note.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
                       <span className="tag-text truncate max-w-[120px]">
                         {((note.title ?? note.content) || "").length > 20
                           ? `${((note.title ?? note.content) || "").slice(0, 20)}...`
                           : (note.title ?? note.content) || ""}
-                      </span>
-                      <span
-                        className="cursor-pointer hover:opacity-80"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeNote(note.id)
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
                       </span>
                     </span>
                   ))}
@@ -743,18 +702,37 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     <span
                       key={file.id}
                       className="file-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredFileDeleteIndex(file.id)}
+                      onMouseLeave={() => {
+                        setHoveredFileDeleteIndex(null)
+                        setIsFileDeleteIconHovered(false)
+                      }}
                     >
-                      <FileText className="h-3 w-3 shrink-0" />
-                      <span className="tag-text truncate max-w-[120px]">{file.originalName}</span>
                       <span
-                        className="cursor-pointer hover:opacity-80"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeFile(file.id)
-                        }}
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredFileDeleteIndex === file.id && "delete-mode",
+                          isFileDeleteIconHovered &&
+                            hoveredFileDeleteIndex === file.id &&
+                            "delete-hover"
+                        )}
+                        onClick={() =>
+                          hoveredFileDeleteIndex === file.id ? removeFile(file.id) : null
+                        }
+                        onMouseEnter={() =>
+                          hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(true) : null
+                        }
+                        onMouseLeave={() =>
+                          hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(false) : null
+                        }
                       >
-                        <Trash2 className="h-3 w-3" />
+                        {hoveredFileDeleteIndex === file.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
                       </span>
+                      <span className="tag-text truncate max-w-[120px]">{file.originalName}</span>
                     </span>
                   ))}
                   {selectedFiles.length > 7 && (
@@ -771,19 +749,44 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     <span
                       key={text.id}
                       className="selected-text-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredSelectedTextDeleteIndex(text.id)}
+                      onMouseLeave={() => {
+                        setHoveredSelectedTextDeleteIndex(null)
+                        setIsSelectedTextDeleteIconHovered(false)
+                      }}
                     >
-                      <FileText className="h-3 w-3 shrink-0" />
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredSelectedTextDeleteIndex === text.id && "delete-mode",
+                          isSelectedTextDeleteIconHovered &&
+                            hoveredSelectedTextDeleteIndex === text.id &&
+                            "delete-hover"
+                        )}
+                        onClick={() =>
+                          hoveredSelectedTextDeleteIndex === text.id
+                            ? removeSelectedText(text.id)
+                            : null
+                        }
+                        onMouseEnter={() =>
+                          hoveredSelectedTextDeleteIndex === text.id
+                            ? setIsSelectedTextDeleteIconHovered(true)
+                            : null
+                        }
+                        onMouseLeave={() =>
+                          hoveredSelectedTextDeleteIndex === text.id
+                            ? setIsSelectedTextDeleteIconHovered(false)
+                            : null
+                        }
+                      >
+                        {hoveredSelectedTextDeleteIndex === text.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
                       <span className="tag-text truncate max-w-[120px]">
                         {text.content.length > 20 ? `${text.content.slice(0, 20)}...` : text.content}
-                      </span>
-                      <span
-                        className="cursor-pointer hover:opacity-80"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeSelectedText(text.id)
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
                       </span>
                     </span>
                   ))}

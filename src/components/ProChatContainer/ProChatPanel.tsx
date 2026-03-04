@@ -5,7 +5,7 @@ import clsx from "clsx"
 import { AutoScrollArea, type AutoScrollAreaRef } from "@/components/AutoScrollArea"
 import { QuillChatInput } from "@/components/QuillChatInput"
 import type { ChatMessage } from "@/stores/chatStore"
-import { useProChatContainer } from "./ProChatContext"
+import { useProChatContainerRequired } from "./ProChatContext"
 import titleLogo from "@/assets/images/logo.webp"
 
 /**
@@ -14,11 +14,9 @@ import titleLogo from "@/assets/images/logo.webp"
  * 必须在 ProChatContainer 内部使用。
  */
 export const ProChatPanel = () => {
-  const ctx = useProChatContainer()
+  const ctx = useProChatContainerRequired()
   const panelRootRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef<AutoScrollAreaRef | null>(null)
-
-  if (!ctx) return null
 
   const {
     inputValue,

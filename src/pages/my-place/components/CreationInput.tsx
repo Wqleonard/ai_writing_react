@@ -2,24 +2,25 @@ import * as React from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLLM } from '@/hooks/useLLM'
 import { useProChatContainer } from '@/components/ProChatContainer'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/Select'
-import { FileText, Link, X } from 'lucide-react'
+import { ChevronDown, FileText, Link, Loader2, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
-import type { QuickChatInputChannel, QuickChatInputChannelValue } from '../types'
+import type { QuickChatInputChannel } from '../types'
 import { Button } from '@/components/ui/Button'
 import { Iconfont } from '@/components/IconFont'
 import { Checkbox } from '@/components/ui/Checkbox'
-import { getKeywords } from '@/api/tools-square'
-import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/Popover.tsx";
+import { Popover, PopoverContent, PopoverAnchor, PopoverTrigger } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 import { useLoginStore } from "@/stores/loginStore";
 import debounce from 'lodash-es/debounce';
+import { useMemeWords } from '@/hooks/useMemeWords'
+import { useQuickToolComposer } from '@/hooks/useQuickToolComposer'
+import { useChatInputStore } from '@/stores/chatInputStore'
+import { useChatInputActions } from '@/hooks/useChatInputActions'
+import { getWritingStylesListReq } from '@/api/writing-styles'
+import {
+  buildQuickChannelFullText,
+  getQuickChannelInputCount,
+} from '@/services/quickChatComposerService'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 
@@ -36,12 +37,6 @@ export interface CreationInputProps {
   isButtonDisabled?: boolean
   showToolTags?: boolean
   onSelectTool?: (toolTitle: string) => void
-}
-
-interface MemeWordItem {
-  name: string
-  description?: string
-  workReference?: string
 }
 
 const QUICK_CHAT_INPUT_CHANNELS: QuickChatInputChannel[] = [
@@ -148,17 +143,29 @@ export const CreationInput = (props: CreationInputProps) => {
   }))
   const onSubmit = ctx ? ctx.onSubmit : (onSubmitProp ?? (() => {
   }))
+  const hideAssociationFeature = ctx?.hideAssociationFeature ?? true
+  const onOpenAssociationSelector = ctx?.onOpenAssociationSelector
 
-  const [selectedTool, setSelectedTool] = useState<string | null>(null)
   /** 富文本模式下每个 mold===input 的当前值，与 Vue 中 input-tag-input 的 value 对应 */
   const [richInputValues, setRichInputValues] = useState<string[]>([])
-  /** 创作热点梗词，与 Vue memeWords 一致 */
-  const [memeWords, setMemeWords] = useState<MemeWordItem[]>([])
   /** 创作热点是否展开，首页可折叠 */
   const [isMemeWordsExpanded, setIsMemeWordsExpanded] = useState(true)
+  const { memeWords, collapsedPreviewWords, leftColumnWords, rightColumnWords } = useMemeWords({
+    collapsedPreviewCount: 3,
+  })
+  const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null)
+  const [hoveredNoteDeleteIndex, setHoveredNoteDeleteIndex] = useState<number | null>(null)
+  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<string | null>(null)
+  const [hoveredSelectedTextDeleteIndex, setHoveredSelectedTextDeleteIndex] = useState<string | null>(null)
+  const [isDeleteIconHovered, setIsDeleteIconHovered] = useState(false)
+  const [isNoteDeleteIconHovered, setIsNoteDeleteIconHovered] = useState(false)
+  const [isFileDeleteIconHovered, setIsFileDeleteIconHovered] = useState(false)
+  const [isSelectedTextDeleteIconHovered, setIsSelectedTextDeleteIconHovered] = useState(false)
 
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
+  const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
+  const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
 
   const openToolPopover = useCallback(() => {
     setToolPopoverOpen(true)
@@ -175,68 +182,103 @@ export const CreationInput = (props: CreationInputProps) => {
     setSelectedWritingStyle,
     modelsLLM,
     writingStyles,
+    setWritingStyles,
   } = useLLM()
+
+  const {
+    associationTags,
+    selectedNotes,
+    selectedFiles,
+    selectedTexts,
+    addFile,
+    addNote,
+    clearSelectedNotes,
+    isShowWritingStyleTip,
+    setShowWritingStyleTip,
+    removeAssociationTag,
+    removeNote,
+    removeFile,
+    removeSelectedText,
+  } = useChatInputStore()
 
   const writingStyleOptions =
     writingStyles.length > 0 ? writingStyles : [{ id: selectedWritingStyle, name: '默认' }]
+  const currentModelName = modelsLLM.find((m) => m.id === modelLLM)?.name || '模型'
 
   const completeNewbieMissionByCode = useLoginStore(s => s.completeNewbieMissionByCode)
+  const userInfo = useLoginStore(s => s.userInfo)
+  const isLoggedIn = Boolean(userInfo?.id)
+  const onSubmitRef = useRef(onSubmit)
+  const onRetryRef = useRef(onRetry)
+  const statusRef = useRef(status)
 
-  const handleSubmit = useRef(
-    debounce(async () => {
-      if (status === 'error' && onRetry) {
-        onRetry()
-      } else {
-        await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
-        onSubmit?.()
-      }
-    }, 2000, { leading: true, trailing: false })
-  ).current
+  const {
+    handleLocalFileSelect,
+    handleOpenAssociationSelector,
+    handleOpenNotesSelector,
+  } = useChatInputActions({
+    isLoggedIn,
+    addFile,
+    addNote,
+    clearSelectedNotes,
+    onOpenAssociationSelector,
+  })
+
+  useEffect(() => {
+    onSubmitRef.current = onSubmit
+    onRetryRef.current = onRetry
+    statusRef.current = status
+  }, [onSubmit, onRetry, status])
+
+  const handleSubmit = useMemo(
+    () =>
+      debounce(async () => {
+        if (statusRef.current === 'error' && onRetryRef.current) {
+          onRetryRef.current()
+        } else {
+          await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
+          onSubmitRef.current?.()
+        }
+      }, 2000, { leading: true, trailing: false }),
+    [completeNewbieMissionByCode]
+  )
+
+  useEffect(() => {
+    return () => {
+      handleSubmit.cancel()
+    }
+  }, [handleSubmit])
 
   const disabled = isButtonDisabled || status === 'submitted' || status === 'streaming'
+  const canMove = value.trim() && !disabled
+  const isButtonClickable = !!canMove
+  const hasTags =
+    associationTags.length > 0 ||
+    selectedNotes.length > 0 ||
+    selectedFiles.length > 0 ||
+    selectedTexts.length > 0
 
-  const currentChannel = selectedTool
-    ? QUICK_CHAT_INPUT_CHANNELS.find(c => c.title === selectedTool)
-    : null
-
-  /** 根据模板 + 当前 input 值拼接成提交用纯文本（与 Vue updateRichTextContent 的 fullText 一致） */
-  const buildFullTextFromRich = (channel: QuickChatInputChannel, inputValues: string[]): string => {
-    let inputIndex = 0
-    return channel.value
-      .map((item: QuickChatInputChannelValue) => {
-        if (item.mold === 'tip' || item.mold === 'span') return item.value
-        if (item.mold === 'input') return inputValues[inputIndex++] ?? ''
-        return ''
-      })
-      .join('')
-  }
+  const {
+    selectedTool,
+    currentChannel,
+    closeToolMode,
+    handleToolTagClick,
+  } = useQuickToolComposer({
+    channels: QUICK_CHAT_INPUT_CHANNELS,
+    onChange,
+    onSelectTool,
+    onCloseMode: () => setRichInputValues([]),
+  })
 
   const syncRichToValue = (channel: QuickChatInputChannel, inputValues: string[]) => {
-    onChange?.(buildFullTextFromRich(channel, inputValues))
+    onChange?.(buildQuickChannelFullText(channel, inputValues))
   }
 
-  const closeRichTextMode = () => {
-    setSelectedTool(null)
-    setRichInputValues([])
-    onChange?.('')
-  }
-
-  const handleToolTagClick = (toolTitle: string) => {
-    if (selectedTool === toolTitle) {
-      closeRichTextMode()
-      return
-    }
-    const channel = QUICK_CHAT_INPUT_CHANNELS.find(c => c.title === toolTitle)
-    if (!channel) return
-    const inputCount = channel.value.filter(i => i.mold === 'input').length
-    setSelectedTool(toolTitle)
-    setRichInputValues(Array.from({ length: inputCount }, () => ''))
-    syncRichToValue(
-      channel,
-      Array.from({ length: inputCount }, () => '')
-    )
-    onSelectTool?.(toolTitle)
-  }
+  useEffect(() => {
+    if (!currentChannel) return
+    const inputCount = getQuickChannelInputCount(currentChannel)
+    setRichInputValues(Array.from({ length: inputCount }, () => ""))
+  }, [currentChannel])
 
   const setRichInputAt = (index: number, next: string) => {
     setRichInputValues(prev => {
@@ -247,43 +289,22 @@ export const CreationInput = (props: CreationInputProps) => {
     })
   }
 
-  const handleRichKeyDown = useRef(
-    debounce((e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        if (!disabled) handleSubmit()
-      }
-    }, 2000, { leading: true, trailing: false })
-  ).current
-
-  /** 获取创作热点数据，与 Vue fetchMemeWords 一致 */
-  useEffect(() => {
-    const fetchMemeWords = async () => {
-      try {
-        const req: any = await getKeywords()
-        if (req && Array.isArray(req.keywords)) {
-          setMemeWords(req.keywords)
+  const handleRichKeyDown = useMemo(
+    () =>
+      debounce((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          if (!disabled) handleSubmit()
         }
-      } catch (err) {
-        console.error('获取梗词失败:', err)
-      }
-    }
-    fetchMemeWords()
-  }, [])
-
-  const COLLAPSED_PREVIEW_COUNT = 3
-  const collapsedPreviewWords = useMemo(
-    () => memeWords.slice(0, COLLAPSED_PREVIEW_COUNT),
-    [memeWords]
+      }, 2000, { leading: true, trailing: false }),
+    [disabled, handleSubmit]
   )
-  const leftColumnWords = useMemo(() => {
-    const half = Math.ceil(memeWords.length / 2)
-    return memeWords.slice(0, half).map((item, i) => ({ name: item.name, originalIndex: i }))
-  }, [memeWords])
-  const rightColumnWords = useMemo(() => {
-    const half = Math.ceil(memeWords.length / 2)
-    return memeWords.slice(half).map((item, i) => ({ name: item.name, originalIndex: half + i }))
-  }, [memeWords])
+
+  useEffect(() => {
+    return () => {
+      handleRichKeyDown.cancel()
+    }
+  }, [handleRichKeyDown])
 
   const getNumberClass = (index: number) => {
     if (index === 0) return 'text-[#fbbf24]! font-bold!'
@@ -299,13 +320,217 @@ export const CreationInput = (props: CreationInputProps) => {
   const handleMemeWordClick = (memeWord: string, e?: React.MouseEvent) => {
     e?.preventDefault()
     e?.stopPropagation()
-    closeRichTextMode()
+    closeToolMode()
     onChange(`请为我生成一篇主题为${memeWord}的小说`)
   }
+
+  const loadWritingStyles = useCallback(async () => {
+    try {
+      const res = await getWritingStylesListReq()
+      const list = Array.isArray(res)
+        ? res.map((item: { id?: string; name?: string; isPublic?: boolean }) => ({
+          id: String(item?.id ?? ''),
+          name: String(item?.name ?? ''),
+          isPublic: item?.isPublic !== false,
+        }))
+        : []
+      setWritingStyles(list)
+      if (list.length > 0 && !list.some((s) => s.id === selectedWritingStyle)) {
+        setSelectedWritingStyle(list[0].id)
+      }
+    } catch {
+      // ignore
+    }
+  }, [selectedWritingStyle, setSelectedWritingStyle, setWritingStyles])
+
+  useEffect(() => {
+    if (!isShowWritingStyleTip) return
+    const close = () => setShowWritingStyleTip(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [isShowWritingStyleTip, setShowWritingStyleTip])
 
   return (
     <div className="relative z-1 flex w-full flex-1 flex-col px-4">
       <div id="newbiew-tour-step-2" className="z-1 ">
+        {hasTags && (
+          <div className="floating-tags-container mb-2 space-y-1.5">
+            {associationTags.length > 0 && (
+              <div className="association-hints-inline">
+                <div className="association-hints-content flex flex-wrap gap-1.5">
+                  {associationTags.slice(0, 7).map((tag, index) => (
+                    <span
+                      key={`assoc-${tag}-${index}`}
+                      className="association-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredDeleteIndex(index)}
+                      onMouseLeave={() => {
+                        setHoveredDeleteIndex(null)
+                        setIsDeleteIconHovered(false)
+                      }}
+                    >
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredDeleteIndex === index && "delete-mode",
+                          isDeleteIconHovered && hoveredDeleteIndex === index && "delete-hover"
+                        )}
+                        onClick={() => hoveredDeleteIndex === index ? removeAssociationTag(index) : null}
+                        onMouseEnter={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(false) : null}
+                      >
+                        {hoveredDeleteIndex === index ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
+                      <span className="tag-text truncate max-w-[120px]">{tag}</span>
+                    </span>
+                  ))}
+                  {associationTags.length > 7 && (
+                    <span className="association-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedNotes.length > 0 && (
+              <div className="notes-hints-inline">
+                <div className="notes-hints-content flex flex-wrap gap-1.5">
+                  {selectedNotes.slice(0, 7).map((note) => (
+                    <span
+                      key={`note-${note.id}`}
+                      className="note-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredNoteDeleteIndex(note.id)}
+                      onMouseLeave={() => {
+                        setHoveredNoteDeleteIndex(null)
+                        setIsNoteDeleteIconHovered(false)
+                      }}
+                    >
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredNoteDeleteIndex === note.id && "delete-mode",
+                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "delete-hover"
+                        )}
+                        onClick={() => hoveredNoteDeleteIndex === note.id ? removeNote(note.id) : null}
+                        onMouseEnter={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(false) : null}
+                      >
+                        {hoveredNoteDeleteIndex === note.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
+                      <span className="tag-text truncate max-w-[120px]">
+                        {((note.title ?? note.content) || "").length > 20
+                          ? `${((note.title ?? note.content) || "").slice(0, 20)}...`
+                          : (note.title ?? note.content) || ""}
+                      </span>
+                    </span>
+                  ))}
+                  {selectedNotes.length > 7 && (
+                    <span className="notes-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedFiles.length > 0 && (
+              <div className="files-hints-inline">
+                <div className="files-hints-content flex flex-wrap gap-1.5">
+                  {selectedFiles.slice(0, 7).map((file) => (
+                    <span
+                      key={file.id}
+                      className="file-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredFileDeleteIndex(file.id)}
+                      onMouseLeave={() => {
+                        setHoveredFileDeleteIndex(null)
+                        setIsFileDeleteIconHovered(false)
+                      }}
+                    >
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredFileDeleteIndex === file.id && "delete-mode",
+                          isFileDeleteIconHovered && hoveredFileDeleteIndex === file.id && "delete-hover"
+                        )}
+                        onClick={() => hoveredFileDeleteIndex === file.id ? removeFile(file.id) : null}
+                        onMouseEnter={() => hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(false) : null}
+                      >
+                        {hoveredFileDeleteIndex === file.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
+                      <span className="tag-text truncate max-w-[120px]">{file.originalName}</span>
+                    </span>
+                  ))}
+                  {selectedFiles.length > 7 && (
+                    <span className="files-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedTexts.length > 0 && (
+              <div className="selected-texts-hints-inline">
+                <div className="selected-texts-hints-content flex flex-wrap gap-1.5">
+                  {selectedTexts.slice(0, 7).map((text) => (
+                    <span
+                      key={text.id}
+                      className="selected-text-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      onMouseEnter={() => setHoveredSelectedTextDeleteIndex(text.id)}
+                      onMouseLeave={() => {
+                        setHoveredSelectedTextDeleteIndex(null)
+                        setIsSelectedTextDeleteIconHovered(false)
+                      }}
+                    >
+                      <span
+                        className={clsx(
+                          "tag-icon cursor-pointer",
+                          hoveredSelectedTextDeleteIndex === text.id && "delete-mode",
+                          isSelectedTextDeleteIconHovered &&
+                            hoveredSelectedTextDeleteIndex === text.id &&
+                            "delete-hover"
+                        )}
+                        onClick={() =>
+                          hoveredSelectedTextDeleteIndex === text.id ? removeSelectedText(text.id) : null
+                        }
+                        onMouseEnter={() =>
+                          hoveredSelectedTextDeleteIndex === text.id
+                            ? setIsSelectedTextDeleteIconHovered(true)
+                            : null
+                        }
+                        onMouseLeave={() =>
+                          hoveredSelectedTextDeleteIndex === text.id
+                            ? setIsSelectedTextDeleteIconHovered(false)
+                            : null
+                        }
+                      >
+                        {hoveredSelectedTextDeleteIndex === text.id ? (
+                          <Trash2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                      </span>
+                      <span className="tag-text truncate max-w-[120px]">
+                        {text.content.length > 20 ? `${text.content.slice(0, 20)}...` : text.content}
+                      </span>
+                    </span>
+                  ))}
+                  {selectedTexts.length > 7 && (
+                    <span className="selected-texts-ellipsis text-muted-foreground text-xs">...</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 顶部工具标签 - 对应 Vue tool-tags-container-top / tool-tag-top */}
         {showToolTags && (
           <div className="tool-tags-container-top mb-3 flex flex-wrap gap-1.5">
@@ -384,7 +609,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         className="tip-close-icon absolute -right-0.5 top-0.5 flex h-2.5 w-2.5 cursor-pointer items-center justify-center rounded-full bg-(--bg-quaternary) text-(--bg-secondary) transition-all hover:scale-110 hover:bg-[#333]"
                         onClick={e => {
                           e.stopPropagation()
-                          closeRichTextMode()
+                          closeToolMode()
                         }}
                         title="切换回普通输入模式"
                         aria-label="关闭并切换回普通输入"
@@ -407,7 +632,11 @@ export const CreationInput = (props: CreationInputProps) => {
                       .filter(i => i.mold === 'input').length
                     const inputWidth = item.width ?? '120px'
                     return (
-                      <span key={index} className="input-tag mx-0.5 inline-block align-middle">
+                      <span
+                        key={index}
+                        className="input-tag mx-0.5 inline-block align-middle"
+                        contentEditable={false}
+                      >
                       <input
                         type="text"
                         className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:border-[#ff9500] focus:bg-white focus:text-(--text-primary) focus:ring-2 focus:ring-[#ff9500]/20"
@@ -441,9 +670,10 @@ export const CreationInput = (props: CreationInputProps) => {
                   <PopoverAnchor asChild>
                     <TooltipTrigger asChild>
                       <Button
+                        type="button"
                         variant='outline'
                         size="icon-sm"
-                        className="size-6 rounded-full"
+                        className="size-8 rounded-full"
                         onClick={openToolPopover}
                       >
                         <Iconfont unicode="&#xe614;" className="text-sm"/>
@@ -452,11 +682,11 @@ export const CreationInput = (props: CreationInputProps) => {
                   </PopoverAnchor>
                   <TooltipContent side="top">选择工具</TooltipContent>
                 </Tooltip>
-                <PopoverContent className="w-40 p-3" align="center" side='top' sideOffset={8}>
+                <PopoverContent className="w-56 p-2" align="center" side='top' sideOffset={8}>
                   {QUICK_CHAT_INPUT_CHANNELS.map((channel) => (
                     <div
                       key={channel.title}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                       onClick={() => {
                         handleToolTagClick(channel.title)
                         setToolPopoverOpen(false)
@@ -480,9 +710,10 @@ export const CreationInput = (props: CreationInputProps) => {
                   <PopoverAnchor asChild>
                     <TooltipTrigger asChild>
                       <Button
+                        type="button"
                         variant='outline'
                         size="icon-sm"
-                        className="size-6 rounded-full"
+                        className="size-8 rounded-full"
                         onClick={openFilePopover}
                       >
                         <Iconfont unicode="&#xe613;" className="text-sm"/>
@@ -491,58 +722,170 @@ export const CreationInput = (props: CreationInputProps) => {
                   </PopoverAnchor>
                   <TooltipContent side="top">关联文件或更多内容</TooltipContent>
                 </Tooltip>
-                <PopoverContent className="w-44 p-3" align="center" side="top" sideOffset={8}>
+                <PopoverContent className="w-48 p-2" align="center" side="top" sideOffset={8}>
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                    // onClick={handleLocalFileSelect}
+                    onClick={() => {
+                      handleLocalFileSelect()
+                      setFilePopoverOpen(false)
+                    }}
                   >
                     <Iconfont unicode="&#xe643;" className="size-4 leading-4"/>
                     <span>从本地文件添加</span>
                   </div>
-                  <div
+                  {!hideAssociationFeature && (
+                    <div
+                      className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
+                      onClick={() => {
+                        handleOpenAssociationSelector()
+                        setFilePopoverOpen(false)
+                      }}
+                    >
+                      <Link className="size-4" />
+                      <span>关联本书内容</span>
+                    </div>
+                  )}
+                  {/* <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                    // onClick={handleOpenNotesSelector}
+                    onClick={() => {
+                      void handleOpenNotesSelector()
+                      setFilePopoverOpen(false)
+                    }}
                   >
                     <Iconfont unicode="&#xe644;" className="size-4 leading-4"/>
                     <span>使用全局笔记</span>
-                  </div>
+                  </div> */}
                 </PopoverContent>
               </Popover>
             </div>
             <div className="control-right flex h-full items-center gap-3">
               {/* 文风选择器 */}
               <div className="answer-only-wrap relative">
-                <Select
-                  value={selectedWritingStyle}
-                  onValueChange={setSelectedWritingStyle}
-                  disabled={isAnswerOnly}
+                {isShowWritingStyleTip && (
+                  <div className="answer-tip-box">
+                    <div className="answer-tip-content">
+                      <div className="answer-tip-line1">保存的文风在这</div>
+                      <div className="answer-tip-line2">里使用哦！</div>
+                    </div>
+                  </div>
+                )}
+                <Popover
+                  open={writingStylePopoverOpen}
+                  onOpenChange={(open) => {
+                    setWritingStylePopoverOpen(open)
+                    if (open) void loadWritingStyles()
+                  }}
                 >
-                  <SelectTrigger className="h-8 min-w-[80px] border-0 text-sm text-(--text-secondary)">
-                    <SelectValue placeholder="文风"/>
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    {writingStyleOptions.map(opt => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isAnswerOnly}
+                      title={isAnswerOnly ? "关闭仅回答后可选择文风" : "选择文风"}
+                      className={clsx(
+                        "writing-style-trigger inline-flex items-center gap-1 rounded-md outline-none transition-[transform,opacity]",
+                        "text-xs text-[var(--text-primary,#333)]",
+                        "cursor-pointer hover:opacity-80",
+                        "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50"
+                      )}
+                    >
+                      <span className="max-w-[90px] truncate text-left">
+                        {writingStyleOptions.find((s) => s.id === selectedWritingStyle)?.name || "默认文风"}
+                      </span>
+                      <ChevronDown className={clsx("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", writingStylePopoverOpen && "rotate-180")} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    side="top"
+                    sideOffset={8}
+                    className="w-[200px] p-1 rounded-lg border bg-[var(--bg-primary-overlay,white)] shadow-md"
+                  >
+                    <div className="writing-style-content flex flex-col max-h-[220px]">
+                      <div className="style-options overflow-y-auto flex-1 min-h-0 max-h-[180px] py-0.5">
+                        {writingStyleOptions.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={clsx(
+                              "style-option w-full h-9 rounded-lg flex items-center justify-between gap-2 px-3 text-left text-sm transition-colors",
+                              opt.id === selectedWritingStyle
+                                ? "bg-[var(--bg-hover,#f5f5f5)]"
+                                : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                            )}
+                            onClick={() => {
+                              setSelectedWritingStyle(opt.id)
+                              setWritingStylePopoverOpen(false)
+                            }}
+                          >
+                            <span className="option-label text-[var(--text-primary,#303133)] truncate">
+                              {opt.name || "未命名"}
+                            </span>
+                            {(opt as { isPublic?: boolean }).isPublic && (
+                              <span className="option-tag shrink-0 text-xs text-muted-foreground">官方</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="create-writing-style-btn mt-1 h-8 flex items-center justify-center w-full rounded border border-border text-xs hover:bg-muted/80 transition-colors"
+                        onClick={() => {
+                          setWritingStylePopoverOpen(false)
+                        }}
+                      >
+                        <span className="mr-1">+</span>
+                        <span>创建专属文风</span>
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* 模型选择器 */}
-              <Select value={modelLLM} onValueChange={setModelLLM}>
-                <SelectTrigger className="h-8 min-w-[100px] border-0 text-sm text-(--text-secondary)">
-                  <SelectValue placeholder="模型"/>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {modelsLLM.map(opt => (
-                    <SelectItem key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" className="simple-select-trigger inline-flex items-center gap-1 cursor-pointer select-none">
+                    <span className="text-xs text-[#333333]">{currentModelName}</span>
+                    <ChevronDown
+                      className={clsx(
+                        "trigger-arrow h-3.5 w-3.5 text-[#909399] transition-transform duration-300",
+                        modelPopoverOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="top"
+                  sideOffset={8}
+                  className="simple-select-popover w-[200px] p-1 border-0 bg-[var(--bg-primary-overlay,white)] shadow-md"
+                >
+                  <div className="simple-select-content flex flex-col max-h-[220px]">
+                    <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
+                      {modelsLLM.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className={clsx(
+                            "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
+                            m.id === modelLLM
+                              ? "is-selected bg-[var(--bg-editor-save)] text-white"
+                              : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                          )}
+                          onClick={() => {
+                            setModelLLM(m.id)
+                            setModelPopoverOpen(false)
+                          }}
+                        >
+                          <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-[var(--text-primary,#303133)]")}>
+                            {m.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               {/* 仅回答 + 提示 */}
               <div className="answer-only-wrap flex items-center" title="直接成文需要关闭仅回答哦！">
@@ -563,9 +906,19 @@ export const CreationInput = (props: CreationInputProps) => {
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !disabled) handleSubmit()
                 }}
-                className="w-7.5 h-7.5 rounded-full"
+                disabled={!isButtonClickable}
+                className={clsx(
+                  "w-8 h-8 rounded-full",
+                  isButtonClickable
+                    ? "cursor-pointer bg-[var(--bg-editor-save)] text-white"
+                    : "cursor-not-allowed bg-[#e5e5e5] text-[#b7b7b7]"
+                )}
               >
-                <Iconfont unicode="&#xe615;" className="text-lg"/>
+                {status === 'submitted' || status === 'streaming' ? (
+                  <Loader2 className="h-4 w-4 animate-spin [color:inherit]" />
+                ) : (
+                  <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]"/>
+                )}
               </Button>
             </div>
           </div>

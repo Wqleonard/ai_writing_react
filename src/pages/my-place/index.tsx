@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/Dialog'
 import { Input } from '@/components/ui/Input'
 import { useLLM } from '@/hooks/useLLM'
+import { useChatInputStore } from '@/stores/chatInputStore'
 import { MyWorks } from './components/MyWorks'
 import { AddNewWorkPopover } from './components/AddNewWorkPopover'
 import { MessageDetailDialog } from './components/MessageDetailDialog'
@@ -60,6 +61,12 @@ export default function MyPlacePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { setSelectedWritingStyle, modelLLM, selectedWritingStyle } = useLLM()
+  const associationTags = useChatInputStore((s) => s.associationTags)
+  const selectedNotes = useChatInputStore((s) => s.selectedNotes)
+  const selectedFiles = useChatInputStore((s) => s.selectedFiles)
+  const selectedTexts = useChatInputStore((s) => s.selectedTexts)
+  const selectedTools = useChatInputStore((s) => s.selectedTools)
+  const isShowAnswerTip = useChatInputStore((s) => s.isShowAnswerTip)
 
   const [loading, setLoading] = useState(false)
   const [bannerConfig, setBannerConfig] = useState<{
@@ -184,6 +191,12 @@ export default function MyPlacePage() {
               modelLLM,
               selectedWritingStyle,
               isAnswerOnly,
+              associationTags,
+              selectedNotes,
+              selectedFiles,
+              selectedTexts,
+              selectedTools,
+              isShowAnswerTip,
             })
           )
           navigate(`/editor/${req.id}`)
@@ -192,7 +205,18 @@ export default function MyPlacePage() {
         toast.error('创建作品失败，请重试')
       }
     },
-    [modelLLM, selectedWritingStyle, isAnswerOnly, navigate]
+    [
+      modelLLM,
+      selectedWritingStyle,
+      isAnswerOnly,
+      associationTags,
+      selectedNotes,
+      selectedFiles,
+      selectedTexts,
+      selectedTools,
+      isShowAnswerTip,
+      navigate,
+    ]
   )
 
   const onSubmitCreation = useMemo(

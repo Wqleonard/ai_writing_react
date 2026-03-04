@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
-import { useChatStore } from "@/stores/chatStore"
 import type { ChatMessage, ChatTabType } from "@/stores/chatStore"
 import {
   ProChatContainerContext,
@@ -16,7 +15,10 @@ export interface ProChatContainerSlots {
   /** 完全自定义空状态；不传则用默认占位 + 输入框 */
   emptyState?: React.ReactNode
   /** 自定义单条消息渲染；不传则用默认气泡 */
-  renderMessage?: (message: ChatMessage) => React.ReactNode
+  renderMessage?: (
+    message: ChatMessage,
+    options?: { isLastMessage?: boolean }
+  ) => React.ReactNode
   /** 消息列表上方插入内容（如提示、快捷入口） */
   beforeMessages?: React.ReactNode
   /** 输入框上方展示（如任务列表 Todos，参照 Vue NuxtUIProChatContainer #todos） */
@@ -30,8 +32,11 @@ export interface ProChatContainerSlots {
 export interface ProChatContainerProps {
   workId?: string
   activeTab: ChatTabType
+  /** 消息列表统一由外部传入；容器内部不再直接读写 chatStore。 */
   messages?: ChatMessage[]
   initialMessage?: string
+  /** 当 initialMessage 有值时，自动触发一次发送（用于 workspace 跳 editor 场景） */
+  autoSubmitInitialMessage?: boolean
   initialIsAnswerOnly?: boolean
   sessionId?: string
   checkStreamingStatusAndConfirm?: (
@@ -42,7 +47,7 @@ export interface ProChatContainerProps {
   onSendMessage?: (message: ChatMessage) => void
   onMessageReceived?: (message: ChatMessage) => void
   onSaveCurrentSession?: () => void
-  /** 自定义提交：例如 workspace 的「创建作品并跳转」。传入当前输入文本，不传则使用默认（写入 store + onSendMessage） */
+  /** 自定义提交：例如 workspace 的「创建作品并跳转」。传入当前输入文本。 */
   onSubmit?: (text: string) => void | Promise<void>
   onDrop?: (event: DragEvent) => void
   onUpdateFiles?: (
@@ -75,8 +80,8 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     activeTab,
     messages: propsMessages,
     initialMessage = "",
+    autoSubmitInitialMessage = false,
     initialIsAnswerOnly = true,
-    sessionId: propsSessionId,
     checkStreamingStatusAndConfirm,
     onSendMessage,
     onSaveCurrentSession,
@@ -106,39 +111,18 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     [onAnswerOnlyChange, propsIsAnswerOnly]
   )
 
-  const {
-    workId: storeWorkId,
-    chatCurrentSession,
-    faqCurrentSession,
-    chatMessages,
-    faqMessages,
-    setWorkId,
-    addMessage,
-    createNewSession,
-    saveCurrentSession,
-  } = useChatStore()
-
-  const currentSession =
-    activeTab === "faq" ? faqCurrentSession : chatCurrentSession
-  const currentMessages = activeTab === "chat" ? chatMessages : faqMessages
-  const displayMessages = propsMessages ?? currentMessages
-  const sessionId = propsSessionId ?? currentSession?.id ?? ""
+  const displayMessages = propsMessages ?? []
   const hasMessages = displayMessages.length > 0
   const scrollToBottomRef = useRef<(() => void) | null>(null)
-
-  useEffect(() => {
-    if (workId) setWorkId(workId)
-    return () => {
-      if (workId && storeWorkId === workId) setWorkId(null)
-    }
-  }, [workId, storeWorkId, setWorkId])
+  const autoSubmittedMessageRef = useRef<string>("")
+  const pendingAutoSubmitMessageRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (initialMessage?.trim()) setInputValue(initialMessage)
   }, [initialMessage])
 
-  const handleSubmit = useCallback(async () => {
-    const text = inputValue.trim()
+  const submitText = useCallback(async (rawText: string) => {
+    const text = rawText.trim()
     if (!text) return
     if (checkStreamingStatusAndConfirm) {
       const can = await checkStreamingStatusAndConfirm()
@@ -149,9 +133,6 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       setInputValue("")
       return
     }
-    if (!currentSession && workId) {
-      createNewSession(activeTab)
-    }
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       role: "user",
@@ -160,28 +141,41 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       messageType: "normal",
       mode: activeTab,
     }
-    const isControlled = propsMessages != null
-    if (!isControlled) {
-      addMessage(activeTab, userMessage)
-    }
     setInputValue("")
     onSendMessage?.(userMessage)
     onSaveCurrentSession?.()
     // 发送后滚动对话到底部（与 Vue 版 NuxtUIProChatContainer 一致）；短延迟确保 DOM 已更新
     setTimeout(() => scrollToBottomRef.current?.(), 100)
   }, [
-    inputValue,
     checkStreamingStatusAndConfirm,
     customOnSubmit,
-    currentSession,
-    workId,
-    createNewSession,
     activeTab,
-    addMessage,
     onSendMessage,
     onSaveCurrentSession,
-    propsMessages,
   ])
+
+  const handleSubmit = useCallback(async () => {
+    await submitText(inputValue)
+  }, [inputValue, submitText])
+
+  useEffect(() => {
+    if (!autoSubmitInitialMessage) return
+    const message = initialMessage.trim()
+    if (!message) return
+    if (autoSubmittedMessageRef.current === message) return
+    autoSubmittedMessageRef.current = message
+    pendingAutoSubmitMessageRef.current = message
+    setInputValue(message)
+  }, [autoSubmitInitialMessage, initialMessage])
+
+  // 等 inputValue 完成同步后，再统一走 onSubmit 提交流程
+  useEffect(() => {
+    const pending = pendingAutoSubmitMessageRef.current
+    if (!pending) return
+    if (inputValue.trim() !== pending.trim()) return
+    pendingAutoSubmitMessageRef.current = null
+    void handleSubmit()
+  }, [inputValue, handleSubmit])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

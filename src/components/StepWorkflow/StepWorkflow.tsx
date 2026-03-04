@@ -1,9 +1,8 @@
 "use client"
 
 import React, { useCallback, useImperativeHandle, useRef, useState, useEffect } from "react"
-import { CreateRecommendDialog } from "./components/CreateRecommendDialog"
 import { StepCreateDialog, type StepCreateDialogRef } from "./components/StepCreateDialog"
-import type { Template, StepSaveData, Mode } from "./types"
+import type { StepSaveData, Mode } from "./types"
 import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
@@ -43,7 +42,6 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   },
   ref
 ) {
-  const [recommendDialogShow, setRecommendDialogShow] = useState(true)
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
   const showQuickStart = isEditorEmpty ?? totalMdContentLength === 0
@@ -53,18 +51,6 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: () => setStepCreateDialogShow(true),
   }), [])
-
-  const handleCreateWithTags = useCallback(() => {
-    setRecommendDialogShow(false)
-    setStepCreateDialogShow(true)
-    stepCreateDialogRef.current?.startMode("tag")
-  }, [])
-
-  const handleCreateTemplate = useCallback((template: Template) => {
-    setRecommendDialogShow(false)
-    setStepCreateDialogShow(true)
-    stepCreateDialogRef.current?.startTemplateCreate(template)
-  }, [])
 
   const handleStepConfirm = useCallback(
     (data: StepSaveData) => {
@@ -102,13 +88,6 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
 
   return (
     <>
-      <CreateRecommendDialog
-        open={recommendDialogShow}
-        onOpenChange={setRecommendDialogShow}
-        onCreateWithTags={handleCreateWithTags}
-        onCreateTemplate={handleCreateTemplate}
-      />
-
       <StepCreateDialog
         ref={stepCreateDialogRef}
         open={stepCreateDialogShow}
