@@ -16,11 +16,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
-import { updateWorkInfoReq } from "@/api/works"
+import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
 import { serverDataToTree } from "@/stores/editorStore/utils"
 import type { FileTreeNode, ServerData } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
+import {
+  TagSelector as WorkflowTagSelector,
+  type TagCategoryDataItem,
+} from "@/components/StepWorkflow/components/TagSelector"
+import type { Tag as WorkflowTag } from "@/components/StepWorkflow/types"
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
@@ -343,6 +348,10 @@ export const EditorTreeSidebar = ({
   const [renameTarget, setRenameTarget] = useState<FileTreeNode | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tagSelectDialogOpen, setTagSelectDialogOpen] = useState(false)
+  const [tagCategories, setTagCategories] = useState<TagCategoryDataItem[]>([])
+  const [selectedTags, setSelectedTags] = useState<WorkflowTag[]>([])
+  const [tagSaving, setTagSaving] = useState(false)
   const [exportPopoverOpen, setExportPopoverOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
   const [dragState, setDragState] = useState<{
@@ -383,6 +392,82 @@ export const EditorTreeSidebar = ({
     document.addEventListener("click", onDocClick)
     return () => document.removeEventListener("click", onDocClick)
   }, [hideContextMenu])
+
+  const updateTagCategories = useCallback(async () => {
+    try {
+      const response: any = await getWorkTagsReq()
+      if (!Array.isArray(response)) {
+        setTagCategories([])
+        return
+      }
+      const next = response.map((group: any) => ({
+        category: String(group?.category ?? ""),
+        categoryId: String(group?.categoryId ?? ""),
+        max: Number(group?.max ?? 0),
+        tags: Array.isArray(group?.tags)
+          ? group.tags.map((tag: any) => ({
+              id: tag?.id,
+              name: String(tag?.name ?? ""),
+              isOfficial: String(tag?.userId ?? "") === "1",
+              category: String(group?.category ?? ""),
+              categoryId: String(group?.categoryId ?? ""),
+              max: Number(group?.max ?? 0),
+              userId: tag?.userId,
+            }))
+          : [],
+      }))
+      setTagCategories(next)
+    } catch (error) {
+      console.error("获取标签数据失败:", error)
+      setTagCategories([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!tagSelectDialogOpen) {
+      setSelectedTags([])
+      return
+    }
+    void (async () => {
+      await updateTagCategories()
+      setSelectedTags(
+        (workInfo.workTags ?? []).map((tag) => ({
+          id: tag.id,
+          name: tag.name,
+          userId: tag.userId,
+          isOfficial: String(tag.userId ?? "") === "1",
+          categoryId: tag.categoryId,
+        }))
+      )
+    })()
+  }, [tagSelectDialogOpen, updateTagCategories, workInfo.workTags])
+
+  const handleSaveTags = useCallback(async () => {
+    if (!workId || tagSaving) return
+    try {
+      setTagSaving(true)
+      const selectedTagIds = selectedTags
+        .map((tag) => Number(tag.id))
+        .filter((id) => Number.isFinite(id))
+      await updateWorkInfoReq(workId, { tagIds: selectedTagIds })
+      setWorkInfo({
+        workTags: selectedTags
+          .map((tag) => ({
+            id: Number(tag.id),
+            name: tag.name,
+            userId: String(tag.userId ?? ""),
+            categoryId: tag.categoryId,
+          }))
+          .filter((tag) => Number.isFinite(tag.id)),
+      })
+      setTagSelectDialogOpen(false)
+    } catch (error) {
+      console.error(error)
+      toast.error("保存失败,请稍后重试")
+    } finally {
+      setTagSaving(false)
+    }
+  }, [selectedTags, setWorkInfo, tagSaving, workId])
 
   const handleFinishTitle = useCallback(() => {
     const v = editingTitleValue.trim()
@@ -714,7 +799,13 @@ export const EditorTreeSidebar = ({
               role="button"
               tabIndex={0}
               className="shrink-0 cursor-pointer text-xs underline"
-              onClick={() => toast.info("暂未开放，敬请期待")}
+              onClick={() => setTagSelectDialogOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setTagSelectDialogOpen(true)
+                }
+              }}
             >
               编辑标签
             </div>
@@ -935,6 +1026,31 @@ export const EditorTreeSidebar = ({
             >
               确定删除
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tagSelectDialogOpen} onOpenChange={setTagSelectDialogOpen}>
+        <DialogContent
+          className="flex h-[80vh] max-h-[80vh] w-[820px] max-w-[95vw] flex-col overflow-hidden p-0"
+          showCloseButton
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-1 flex-col overflow-hidden p-[50px_32px]">
+            <WorkflowTagSelector
+              categories={tagCategories}
+              updateTagCategories={updateTagCategories}
+              selectedTags={selectedTags}
+              onSelectedTagsChange={setSelectedTags}
+            />
+          </div>
+          <DialogFooter className="flex flex-row-reverse gap-3 px-6 py-4">
+            <Button type="button" onClick={handleSaveTags} disabled={tagSaving}>
+              确定
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setTagSelectDialogOpen(false)}>
+              取消
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
