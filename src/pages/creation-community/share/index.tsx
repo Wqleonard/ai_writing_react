@@ -22,6 +22,7 @@ import {
 import { ShareCard } from './components/ShareCard'
 import { MyShareCard } from './components/MyShareCard'
 import type { ShareData } from './types'
+import { useLoginStore } from "@/stores/loginStore";
 
 const transformShareData = (item: {
   id: number
@@ -143,8 +144,11 @@ const SharePage = () => {
     return () => viewport.removeEventListener('scroll', onScroll)
   }, [onScroll])
 
+  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
   useEffect(() => {
     loadShares(0, false)
+    completeNewbieMissionByCode('USE_SHARE')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMyShares = useCallback(async (page: number, append: boolean) => {

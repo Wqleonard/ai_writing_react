@@ -19,7 +19,7 @@ import { getKeywords } from '@/api/tools-square'
 import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 import { useLoginStore } from "@/stores/loginStore";
-import debounce from 'lodash-es/debounce';
+import { debounce } from 'lodash-es';
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 
