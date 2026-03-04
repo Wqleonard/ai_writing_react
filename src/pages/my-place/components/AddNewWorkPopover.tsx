@@ -7,8 +7,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/Popover'
-import { Button } from '@/components/ui/Button'
 import { ChevronRight } from 'lucide-react'
+import { useLoginStore } from "@/stores/loginStore";
 
 type From = 'Sidebar' | 'Workspace'
 type Placement = 'top' | 'bottom' | 'left' | 'right'
@@ -34,14 +34,6 @@ export interface AddNewWorkPopoverProps {
   children: React.ReactNode
 }
 
-const requireLogin = (callback: () => void) => {
-  if (!localStorage.getItem('token')) {
-    toast.error('请先登录')
-    return
-  }
-  callback()
-}
-
 export const AddNewWorkPopover = ({
   from = 'Workspace',
   placement = 'bottom',
@@ -51,6 +43,7 @@ export const AddNewWorkPopover = ({
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const requireLogin = useLoginStore(s=>s.requireLogin)
 
   const addNewWork = useCallback(async () => {
     setLoading(true)
@@ -87,23 +80,25 @@ export const AddNewWorkPopover = ({
   }, [])
 
   const handleCreate = useCallback(
-    (type: WorkTypeItem) => {
+    async (type: WorkTypeItem) => {
       switch (type.id) {
         case 'short-story':
-          requireLogin(addNewWork)
+          await requireLogin(addNewWork)
           break
         case 'short-story-quick':
-          requireLogin(addNewQuickWork)
+          toast.info('敬请期待')
+          // requireLogin(addNewQuickWork)
           break
         case 'short-play-quick':
-          requireLogin(addNewScript)
+          toast.info('敬请期待')
+          // requireLogin(addNewScript)
           break
         default:
           requireLogin(addNewWork)
       }
       setOpen(false)
     },
-    [addNewWork, addNewQuickWork, addNewScript]
+    [addNewWork, requireLogin]
   )
 
   return (

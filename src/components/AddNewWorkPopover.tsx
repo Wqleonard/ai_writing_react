@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/Button"
 import { createWorkReq } from "@/api/works"
 import { cn } from "@/lib/utils"
+import { useLoginStore } from "@/stores/loginStore";
 
 type Placement = "top" | "bottom" | "left" | "right" | "top-start" | "top-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end" | "right-start" | "right-end"
 
@@ -41,16 +42,6 @@ const WORK_TYPES: WorkType[] = [
     isQuick: true,
   },
 ]
-
-const isLoggedIn = () => !!localStorage.getItem("token")
-
-const requireLogin = (callback: () => void) => {
-  if (isLoggedIn()) {
-    callback()
-  } else {
-    window.location.href = "/workspace/my-place"
-  }
-}
 
 function useDebouncedCallback<T extends (...args: any[]) => any>(
   fn: T,
@@ -113,6 +104,8 @@ export const AddNewWorkPopover = ({
 
   const { side, align } = getPopoverSideAndAlign(placement)
 
+  const requireLogin = useLoginStore(s=>s.requireLogin)
+
   const addNewWork = useCallback(async () => {
     try {
       setLoading(true)
@@ -167,10 +160,12 @@ export const AddNewWorkPopover = ({
           debouncedAddNewWork()
           break
         case "short-story-quick":
-          debouncedAddNewQuickWork()
+          toast.info('敬请期待')
+          // debouncedAddNewQuickWork()
           break
         case "short-play-quick":
-          debouncedAddNewScript()
+          toast.info('敬请期待')
+          // debouncedAddNewScript()
           break
         default:
           debouncedAddNewWork()
@@ -178,7 +173,7 @@ export const AddNewWorkPopover = ({
       }
       setOpen(false)
     },
-    [debouncedAddNewWork, debouncedAddNewQuickWork, debouncedAddNewScript]
+    [debouncedAddNewWork]
   )
 
   const triggerButton = children ?? (
