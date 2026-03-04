@@ -317,7 +317,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const handleMemeWordClick = useCallback(
     (word: { name: string }) => {
-      onChange(value ? `${value}\n${word.name}` : word.name)
+      onChange(`请为我生成一篇主题为${word.name}的小说`)
       if (isAnswerOnly) setShowAnswerTip(true)
     },
     [value, onChange, isAnswerOnly, setShowAnswerTip]

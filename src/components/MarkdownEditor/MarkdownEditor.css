@@ -186,3 +186,156 @@
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
 }
+
+/* Selection toolbar (align Vue style) */
+.selection-toolbar-popover {
+  border: 1px solid #b4b4b4;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 128px;
+}
+
+.selection-toolbar-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selection-toolbar-action {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #61616f;
+  cursor: pointer;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.selection-toolbar-action:hover {
+  background: #e8e8e8;
+}
+
+.selection-toolbar-action-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #61616f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.selection-toolbar-action-label {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.selection-toolbar-panel {
+  width: 420px;
+  padding: 10px 12px 8px;
+}
+
+.selection-toolbar-panel-header {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #61616f;
+}
+
+.selection-toolbar-header-icon {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #61616f;
+  cursor: pointer;
+}
+
+.selection-toolbar-header-icon:hover {
+  background: #e8e8e8;
+}
+
+.selection-toolbar-panel-title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.selection-toolbar-panel-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selection-toolbar-textarea {
+  width: 100%;
+  min-height: 56px;
+  border: 1px solid #c4c4c4;
+  border-radius: 8px;
+  padding: 8px;
+  resize: vertical;
+  outline: none;
+  font-size: 14px;
+}
+
+.selection-toolbar-textarea:focus {
+  border-color: #a8a8a8;
+}
+
+.selection-toolbar-result {
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #f5f5f5;
+  color: #303133;
+  padding: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.selection-toolbar-image-preview {
+  width: 150px;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.selection-toolbar-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.selection-toolbar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  font-size: 12px;
+}
+
+.selection-toolbar-btn.primary {
+  background: #fa9e00;
+}
+
+.selection-toolbar-btn.secondary {
+  background: #b6b6b6;
+}
+
+.selection-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

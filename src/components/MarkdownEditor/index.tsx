@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlock from '@tiptap/extension-code-block'
@@ -13,6 +14,7 @@ import FontFamily from '@tiptap/extension-font-family'
 import EmptyParagraph from '@/extensions/EmptyParagraph'
 import Mermaid from '@/extensions/Mermaid'
 import { StreamIndicator } from '@/components/StreamIndicator'
+import SelectionToolbarComponent, { type SelectionToolbarAction } from '@/components/editor/SelectionToolbarComponent'
 import './MarkdownEditor.css'
 
 export interface MarkdownEditorProps {
@@ -34,6 +36,29 @@ export interface MarkdownEditorProps {
   onKeyDown?: (e: KeyboardEvent) => void
   /** 编辑器内容区最小高度（px），传 0 可避免在卡片等场景撑高容器 */
   minHeight?: number
+  /** 是否展示选中文本工具栏 */
+  needSelectionToolbar?: boolean
+  /** 对齐 Vue 版 btns */
+  btns?: Array<'edit' | 'expand' | 'add' | 'note'>
+  /** 选中文本工具栏按钮 */
+  selectionToolbarBtns?: Array<'edit' | 'expand' | 'add' | 'note'>
+  /** 选区工具栏统一动作回调 */
+  onSelectionAction?: (payload: {
+    action: 'edit' | 'expand' | 'add' | 'note'
+    selectedText: string
+    from: number
+    to: number
+  }) => void
+  /** 对齐 Vue 版 @add */
+  onSelectionAdd?: (selectedText: string) => void
+  /** 对齐 Vue 版 @note */
+  onSelectionNote?: (selectedText: string) => void
+  /** 可选：扩写按钮回调 */
+  onSelectionExpand?: (selectedText: string) => void
+  /** 可选：改写按钮回调 */
+  onSelectionEdit?: (selectedText: string) => void
+  /** 可选：配图按钮回调 */
+  onSelectionImage?: (selectedText: string) => void
 }
 
 export interface MarkdownEditorRef {
@@ -66,6 +91,15 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       onBlur,
       onKeyDown,
       minHeight = 200,
+      needSelectionToolbar = true,
+      btns,
+      selectionToolbarBtns = ['edit', 'expand', 'add', 'note'],
+      onSelectionAction,
+      onSelectionAdd,
+      onSelectionNote,
+      onSelectionExpand,
+      onSelectionEdit,
+      onSelectionImage,
     },
     ref
   ) {
@@ -74,6 +108,11 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const onChangeRef = useRef(onChange)
     const onKeyDownRef = useRef(onKeyDown)
     const isComposingRef = useRef(false)
+    const [isSelectionToolbarPinned, setIsSelectionToolbarPinned] = useState(false)
+    const effectiveSelectionBtns = useMemo(
+      () => (btns && btns.length > 0 ? btns : selectionToolbarBtns),
+      [btns, selectionToolbarBtns]
+    )
 
     useEffect(() => {
       readonlyRef.current = readonly
@@ -268,6 +307,45 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         style={{ width: '100%', height: '100%' }}
       >
         <EditorContent editor={editor} className="editor-content markdown-editor-content" />
+        {editor && needSelectionToolbar && (
+          <BubbleMenu
+            editor={editor}
+            shouldShow={({ editor }) => {
+              if (isSelectionToolbarPinned) return true
+              const { from, to } = editor.state.selection
+              if (from === to) return false
+              const text = editor.state.doc.textBetween(from, to).trim()
+              return text.length > 0
+            }}
+            options={{
+              placement: 'top',
+              strategy: 'fixed',
+            }}
+            className="z-[9999] selection-toolbar-popover"
+          >
+            <SelectionToolbarComponent
+              editor={editor}
+              btns={effectiveSelectionBtns}
+              onPinnedChange={setIsSelectionToolbarPinned}
+              onAdd={(selectedText) => onSelectionAdd?.(selectedText)}
+              onNote={(selectedText) => onSelectionNote?.(selectedText)}
+              onAction={(action, selectedText) => {
+                if (action === 'edit') onSelectionEdit?.(selectedText)
+                if (action === 'expand') onSelectionExpand?.(selectedText)
+                // if (action === 'image') onSelectionImage?.(selectedText)
+                const { from, to } = editor.state.selection
+                if (from < to) {
+                  onSelectionAction?.({
+                    action: action as SelectionToolbarAction,
+                    selectedText,
+                    from,
+                    to,
+                  })
+                }
+              }}
+            />
+          </BubbleMenu>
+        )}
         {loading && <StreamIndicator className="ml-3.5" />}
       </div>
     )

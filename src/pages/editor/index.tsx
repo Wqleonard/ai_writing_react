@@ -40,6 +40,7 @@ import {
   createWorkReq,
   updateWorkVersionReq,
 } from "@/api/works";
+import { addNote } from "@/api/notes";
 import {
   useEditorStore,
   DEFAULT_EDITING_FILE_KEY,
@@ -588,6 +589,7 @@ const MarkdownEditorPage = () => {
   const selectedFiles = useChatInputStore((s) => s.selectedFiles);
   const selectedTexts = useChatInputStore((s) => s.selectedTexts);
   const selectedTools = useChatInputStore((s) => s.selectedTools);
+  const addSelectedText = useChatInputStore((s) => s.addSelectedText);
   const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
   const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
   const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
@@ -735,6 +737,7 @@ const MarkdownEditorPage = () => {
   const [isChangesPanelVisible, setIsChangesPanelVisible] = useState(false);
   const centerRequiredRem = CENTER_EDITOR_MIN_REM + (isChangesPanelVisible ? CHANGES_PANEL_WIDTH_REM : 0);
   const [fileChangesMap, setFileChangesMap] = useState<FileChangesMap>({});
+
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
     try {
       const raw = localStorage.getItem(EDITOR_SETTINGS_STORAGE_KEY);
@@ -1317,6 +1320,51 @@ const MarkdownEditorPage = () => {
     [currentContent]
   );
 
+  const handleEditorSelectionAdd = useCallback(
+    (text: string) => {
+      const content = text.trim();
+      if (!content) {
+        toast.warning("选中的内容为空，无法添加");
+        return;
+      }
+      const exists = selectedTexts.some(
+        (item) => item.file === fileKey && item.content.trim() === content
+      );
+      if (exists) {
+        toast.info("该引用内容已在对话输入区");
+        return;
+      }
+      addSelectedText({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        file: fileKey || currentEditingId || "",
+        content,
+      });
+      toast.success("已添加到对话引用");
+    },
+    [addSelectedText, currentEditingId, fileKey, selectedTexts]
+  );
+
+  const handleEditorSelectionNote = useCallback(
+    async (text: string) => {
+      const content = text.trim();
+      if (!content) {
+        toast.warning("选中的内容为空，无法添加笔记");
+        return;
+      }
+      const workTitle = workInfo?.title || "作品";
+      const fileName = currentLabel || currentEditingId || "未命名文件";
+      const noteTitle = `${workTitle}-${fileName}`;
+      try {
+        await addNote(noteTitle, content, "PC_WORD_HIGHLIGHT");
+        toast.success("笔记添加成功");
+      } catch (error) {
+        console.error("添加笔记失败:", error);
+        toast.error("添加笔记失败，请重试");
+      }
+    },
+    [currentEditingId, currentLabel, workInfo?.title]
+  );
+
   useEffect(() => {
     const editorInstance = markdownEditorRef.current?.editor;
     if (editorInstance) {
@@ -1765,6 +1813,9 @@ const MarkdownEditorPage = () => {
                               onChange={(markdown) => setServerDataFile(fileKey, markdown)}
                               placeholder={EDITOR_PLACEHOLDER}
                               readonly={!isEditorEditable}
+                              btns={["edit", "expand", "add", "note"]}
+                              onSelectionAdd={handleEditorSelectionAdd}
+                              onSelectionNote={handleEditorSelectionNote}
                             />
                           )}
                         </div>
