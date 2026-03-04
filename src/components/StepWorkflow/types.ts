@@ -29,9 +29,11 @@ export interface StoryStorm {
 export interface Tag {
   id: string | number
   name: string
+  isOfficial: boolean
   category?: string
   categoryId?: string
   max?: number
+  userId?: string | number
 }
 
 export interface StepSaveData {
@@ -42,4 +44,5 @@ export interface StepSaveData {
   story: StoryStorm | null
   outline: string
   description: string
+  saveTarget?: "default" | "current" | "new"
 }

@@ -124,13 +124,9 @@ export const CharacterCard = ({
           {data.identity}
         </div>
       </div>
-      <Button
+      <button
         type="button"
-        variant="link"
-        size="sm"
-        className={clsx(
-          "absolute top-1 right-3 opacity-0 transition-opacity group-hover:opacity-100"
-        )}
+        className="absolute cursor-pointer right-2 top-2 ml-auto text-lg leading-none opacity-0 transition-opacity hover:text-(--theme-color) group-hover:opacity-100"
         onClick={handleEdit}
       >
         <span
@@ -139,7 +135,7 @@ export const CharacterCard = ({
         >
           &#xea48;
         </span>
-      </Button>
+      </button>
     </div>
   )
 }

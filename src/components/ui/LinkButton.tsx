@@ -17,13 +17,14 @@ const LinkButton = React.forwardRef<
   return (
     <Comp
       ref={ref}
+      type="button"
       data-slot="link-button"
       data-variant={variant}
       data-size={size}
       className={cn(
         className,
-        "transition-[filter] ",
-        disabled ? "cursor-disabled brightness-70" : "hover:brightness-120 active:brightness-80"
+        "transition-[filter] cursor-pointer",
+        disabled ? "cursor-not-allowed opacity-60" : "hover:brightness-110 active:brightness-90"
       )}
       disabled={disabled}
       {...props}
