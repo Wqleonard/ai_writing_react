@@ -564,10 +564,29 @@ const MarkdownEditorPage = () => {
   const selectedFiles = useChatInputStore((s) => s.selectedFiles);
   const selectedTexts = useChatInputStore((s) => s.selectedTexts);
   const selectedTools = useChatInputStore((s) => s.selectedTools);
+  const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
+  const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
   const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
   const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+
+  const handleMessageFileClick = useCallback((file: FileItemType) => {
+    const fileUrl = file.displayUrl || file.putFilePath;
+    if (!fileUrl) {
+      toast.error("文件地址不存在，暂无法下载");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.download = file.originalName || file.serverFileName || "download";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
 
   const sendChatText = useCallback(
     (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
@@ -627,6 +646,9 @@ const MarkdownEditorPage = () => {
           modelLLM,
           selectedWritingStyle
         );
+        // 请求发出后清空当前已选引用内容，避免继续展示在输入区
+        clearSelectedNotes();
+        clearSelectedFiles();
       }
     },
     [
@@ -636,6 +658,8 @@ const MarkdownEditorPage = () => {
       isAnswerOnly,
       langGraphStream,
       modelLLM,
+      clearSelectedFiles,
+      clearSelectedNotes,
       selectedWritingStyle,
       selectedFiles,
       selectedTexts,
@@ -2023,7 +2047,7 @@ const MarkdownEditorPage = () => {
                                   {hasFiles && (
                                     <FileMessageDisplay
                                       files={msg.files as FileItemType[]}
-                                      onFileClick={() => {}}
+                                      onFileClick={handleMessageFileClick}
                                     />
                                   )}
                                   <div className="message-content-wrapper text-right">

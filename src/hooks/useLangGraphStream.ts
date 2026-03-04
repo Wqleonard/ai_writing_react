@@ -5,6 +5,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { AgentCustomMessage } from "../types/chat";
 import { apiClient, STREAM_CHAT_URL } from "@/api";
+import { useChatInputStore } from "@/stores/chatInputStore";
 
 type TodoStatus = "pending" | "in_progress" | "completed";
 type StreamTodo = { content: string; status: TodoStatus };
@@ -206,6 +207,30 @@ export function useLangGraphStream(
           ? Number(writingStyleId) || 1
           : 1;
 
+      const {
+        associationTags = [],
+        selectedNotes = [],
+        selectedTexts = [],
+        selectedFiles = [],
+      } = useChatInputStore.getState();
+
+      const quotedFiles = associationTags;
+      const quotedContents = selectedTexts.map((t) => ({
+        file: t.file,
+        content: t.content,
+      }));
+      const notes = selectedNotes.map((note) => ({
+        name: note.title,
+        content: note.content,
+      }));
+      const requestAttachments =
+        attachments && attachments.length > 0
+          ? attachments
+          : selectedFiles.map((file) => ({
+              name: file.serverFileName,
+              remoteAddress: file.putFilePath,
+            }));
+
       const body = {
         query: message,
         workId: String(workId),
@@ -215,10 +240,10 @@ export function useLangGraphStream(
         stream_subgraphs: true,
         model: model ?? "",
         tools: tools ?? [],
-        quotedFiles: [],
-        quotedContents: [],
-        notes: [],
-        attachments: attachments ?? [],
+        quotedFiles,
+        quotedContents,
+        notes,
+        attachments: requestAttachments,
         chatMode: chatMode ?? "agent",
         reload: reload ?? false,
         auto: false,

@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLLM } from '@/hooks/useLLM'
 import { useProChatContainer } from '@/components/ProChatContainer'
-import { ChevronDown, FileText, Link, Loader2, Trash2, X } from 'lucide-react'
+import { ChevronDown, FileText, Link, Loader2, Trash2, Upload, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { QuickChatInputChannel } from '../types'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +17,9 @@ import { useQuickToolComposer } from '@/hooks/useQuickToolComposer'
 import { useChatInputStore } from '@/stores/chatInputStore'
 import { useChatInputActions } from '@/hooks/useChatInputActions'
 import { getWritingStylesListReq } from '@/api/writing-styles'
+import { uploadFileReq } from '@/api/files'
+import { openLoginDialog } from '@/components/LoginDialog'
+import { toast } from 'sonner'
 import {
   buildQuickChannelFullText,
   getQuickChannelInputCount,
@@ -155,12 +158,15 @@ export const CreationInput = (props: CreationInputProps) => {
   })
   const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null)
   const [hoveredNoteDeleteIndex, setHoveredNoteDeleteIndex] = useState<number | null>(null)
-  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<string | null>(null)
+  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<number | null>(null)
   const [hoveredSelectedTextDeleteIndex, setHoveredSelectedTextDeleteIndex] = useState<string | null>(null)
   const [isDeleteIconHovered, setIsDeleteIconHovered] = useState(false)
   const [isNoteDeleteIconHovered, setIsNoteDeleteIconHovered] = useState(false)
   const [isFileDeleteIconHovered, setIsFileDeleteIconHovered] = useState(false)
   const [isSelectedTextDeleteIconHovered, setIsSelectedTextDeleteIconHovered] = useState(false)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [dragCounter, setDragCounter] = useState(0)
+  const [isDropUploading, setIsDropUploading] = useState(false)
 
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
@@ -193,6 +199,7 @@ export const CreationInput = (props: CreationInputProps) => {
     addFile,
     addNote,
     clearSelectedNotes,
+    clearSelectedFiles,
     isShowWritingStyleTip,
     setShowWritingStyleTip,
     removeAssociationTag,
@@ -237,6 +244,8 @@ export const CreationInput = (props: CreationInputProps) => {
           onRetryRef.current()
         } else {
           await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
+          // clearSelectedNotes()
+          // clearSelectedFiles()
           onSubmitRef.current?.()
         }
       }, 2000, { leading: true, trailing: false }),
@@ -324,6 +333,63 @@ export const CreationInput = (props: CreationInputProps) => {
     onChange(`请为我生成一篇主题为${memeWord}的小说`)
   }
 
+  const isExternalFileDrag = useCallback((e: React.DragEvent) => {
+    const transfer = e.dataTransfer
+    if (!transfer) return false
+    if (transfer.files && transfer.files.length > 0) return true
+    return Array.from(transfer.types || []).includes('Files')
+  }, [])
+
+  const validateDragFileType = useCallback((file: File) => {
+    const allowedTypes = [
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ]
+    const allowedExtensions = ['.doc', '.docx', '.txt']
+    if (allowedTypes.includes(file.type)) return true
+    const lowerName = file.name.toLowerCase()
+    return allowedExtensions.some((ext) => lowerName.endsWith(ext))
+  }, [])
+
+  const handleDroppedFile = useCallback(
+    async (file: File) => {
+      if (!isLoggedIn) {
+        await openLoginDialog()
+        return
+      }
+      if (!validateDragFileType(file)) {
+        toast.error('不支持的文件格式，请选择 doc、docx 或 txt 文件')
+        return
+      }
+      const maxSize = 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        toast.error('文件大小不能超过10MB')
+        return
+      }
+      try {
+        setIsDropUploading(true)
+        const result = await uploadFileReq(file)
+        addFile({
+          id: `file_${Date.now()}`,
+          originalName: file.name,
+          serverFileName: result.fileName,
+          putFilePath: result.putFilePath,
+          displayUrl: result.putFilePath,
+          type: file.type,
+          size: file.size,
+          extension: file.name.split('.').pop() || '',
+        })
+        toast.success(`文件 "${file.name}" 上传成功`)
+      } catch {
+        toast.error('文件上传失败，请重试')
+      } finally {
+        setIsDropUploading(false)
+      }
+    },
+    [addFile, isLoggedIn, validateDragFileType]
+  )
+
   const loadWritingStyles = useCallback(async () => {
     try {
       const res = await getWritingStylesListReq()
@@ -351,7 +417,46 @@ export const CreationInput = (props: CreationInputProps) => {
   }, [isShowWritingStyleTip, setShowWritingStyleTip])
 
   return (
-    <div className="relative z-1 flex w-full flex-1 flex-col px-4">
+    <div
+      className="z-1 flex w-full flex-1 flex-col px-4"
+      onDragEnter={(e) => {
+        if (!isExternalFileDrag(e)) return
+        e.preventDefault()
+        e.stopPropagation()
+        setDragCounter((prev) => prev + 1)
+        setIsDraggingOver(true)
+      }}
+      onDragOver={(e) => {
+        if (!isExternalFileDrag(e)) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'copy'
+      }}
+      onDragLeave={(e) => {
+        if (!isDraggingOver) return
+        e.preventDefault()
+        e.stopPropagation()
+        setDragCounter((prev) => {
+          const next = prev - 1
+          if (next <= 0) {
+            setIsDraggingOver(false)
+            return 0
+          }
+          return next
+        })
+      }}
+      onDrop={async (e) => {
+        if (!isExternalFileDrag(e)) return
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDraggingOver(false)
+        setDragCounter(0)
+        const file = e.dataTransfer.files?.[0]
+        if (!file || isDropUploading) return
+        await handleDroppedFile(file)
+      }}
+    >
+
       <div id="newbiew-tour-step-2" className="z-1 ">
         {hasTags && (
           <div className="floating-tags-container mb-2 space-y-1.5">
@@ -370,9 +475,9 @@ export const CreationInput = (props: CreationInputProps) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredDeleteIndex === index && "delete-mode",
-                          isDeleteIconHovered && hoveredDeleteIndex === index && "delete-hover"
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredDeleteIndex === index && "bg-[var(--bg-editor-save)] text-white",
+                          isDeleteIconHovered && hoveredDeleteIndex === index && "brightness-95"
                         )}
                         onClick={() => hoveredDeleteIndex === index ? removeAssociationTag(index) : null}
                         onMouseEnter={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(true) : null}
@@ -400,7 +505,12 @@ export const CreationInput = (props: CreationInputProps) => {
                   {selectedNotes.slice(0, 7).map((note) => (
                     <span
                       key={`note-${note.id}`}
-                      className="note-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      className={clsx(
+                        "note-tag inline-flex items-center gap-1 rounded-[.75rem] border px-2 py-0.5 text-xs transition-colors",
+                        hoveredNoteDeleteIndex === note.id
+                          ? "bg-[#fde68a] border-[#d97706] text-[#92400e]"
+                          : "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
+                      )}
                       onMouseEnter={() => setHoveredNoteDeleteIndex(note.id)}
                       onMouseLeave={() => {
                         setHoveredNoteDeleteIndex(null)
@@ -409,9 +519,9 @@ export const CreationInput = (props: CreationInputProps) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredNoteDeleteIndex === note.id && "delete-mode",
-                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "delete-hover"
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredNoteDeleteIndex === note.id && "text-red-500",
+                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "brightness-95"
                         )}
                         onClick={() => hoveredNoteDeleteIndex === note.id ? removeNote(note.id) : null}
                         onMouseEnter={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(true) : null}
@@ -440,11 +550,17 @@ export const CreationInput = (props: CreationInputProps) => {
             {selectedFiles.length > 0 && (
               <div className="files-hints-inline">
                 <div className="files-hints-content flex flex-wrap gap-1.5">
-                  {selectedFiles.slice(0, 7).map((file) => (
+                  {selectedFiles.slice(0, 7).map((file, index) => (
                     <span
                       key={file.id}
-                      className="file-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-                      onMouseEnter={() => setHoveredFileDeleteIndex(file.id)}
+                      className={clsx(
+                        "file-tag inline-flex items-center gap-1 rounded-md border border-[#0891b2] px-2 py-0.5 text-xs transition-all duration-200",
+                        hoveredFileDeleteIndex === index
+                          ? "bg-gradient-to-r from-[#e0f2fe] to-[#bae6fd]"
+                          : "bg-[#e0f2fe]",
+                        "text-foreground"
+                      )}
+                      onMouseEnter={() => setHoveredFileDeleteIndex(index)}
                       onMouseLeave={() => {
                         setHoveredFileDeleteIndex(null)
                         setIsFileDeleteIconHovered(false)
@@ -452,15 +568,15 @@ export const CreationInput = (props: CreationInputProps) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredFileDeleteIndex === file.id && "delete-mode",
-                          isFileDeleteIconHovered && hoveredFileDeleteIndex === file.id && "delete-hover"
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredFileDeleteIndex === index && "text-red-500",
+                          isFileDeleteIconHovered && hoveredFileDeleteIndex === index && "brightness-95"
                         )}
-                        onClick={() => hoveredFileDeleteIndex === file.id ? removeFile(file.id) : null}
-                        onMouseEnter={() => hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(true) : null}
-                        onMouseLeave={() => hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(false) : null}
+                        onClick={() => hoveredFileDeleteIndex === index ? removeFile(file.id) : null}
+                        onMouseEnter={() => hoveredFileDeleteIndex === index ? setIsFileDeleteIconHovered(true) : null}
+                        onMouseLeave={() => hoveredFileDeleteIndex === index ? setIsFileDeleteIconHovered(false) : null}
                       >
-                        {hoveredFileDeleteIndex === file.id ? (
+                        {hoveredFileDeleteIndex === index ? (
                           <Trash2 className="h-3 w-3 shrink-0" />
                         ) : (
                           <FileText className="h-3 w-3 shrink-0" />
@@ -491,11 +607,11 @@ export const CreationInput = (props: CreationInputProps) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredSelectedTextDeleteIndex === text.id && "delete-mode",
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredSelectedTextDeleteIndex === text.id && "bg-[var(--bg-editor-save)] text-white",
                           isSelectedTextDeleteIconHovered &&
-                            hoveredSelectedTextDeleteIndex === text.id &&
-                            "delete-hover"
+                          hoveredSelectedTextDeleteIndex === text.id &&
+                          "brightness-95"
                         )}
                         onClick={() =>
                           hoveredSelectedTextDeleteIndex === text.id ? removeSelectedText(text.id) : null
@@ -563,11 +679,16 @@ export const CreationInput = (props: CreationInputProps) => {
         )}
         <div
           className={clsx(
-            "z-1 flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_0.5rem_#0000001a] transition-shadow duration-200",
+            "creation-input-container z-1 relative  flex flex-col w-full h-35 rounded-[20px] overflow-hidden px-4 pb-1.5 bg-white shadow-[0px_0px_0.5rem_#0000001a] transition-shadow duration-200",
+            isDraggingOver && "drag-over",
           )}
           id='newbiew-tour-step-1'
         >
-          <div className="flex-1 overflow-y-auto min-h-0 py-4 text-sm">
+          <div
+            className="flex-1 overflow-y-auto min-h-0 py-4 text-sm"
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !disabled) handleSubmit()
+            }}>
             {currentChannel ? (
               /* 富文本区域：与 Vue rich-text-content 一致，tip + span + 内联 input */
               <div
@@ -601,29 +722,29 @@ export const CreationInput = (props: CreationInputProps) => {
                   if (item.mold === 'tip') {
                     return (
                       <span key={index} className="tip-text-wrapper relative mr-2 inline-block">
-                      <span className="tip-text inline text-sm font-semibold text-(--bg-editor-save)">
-                        {item.value}
+                        <span className="tip-text inline text-sm font-semibold text-(--bg-editor-save)">
+                          {item.value}
+                        </span>
+                        <div
+                          role="button"
+                          className="tip-close-icon absolute -right-0.5 top-0.5 flex h-2.5 w-2.5 cursor-pointer items-center justify-center rounded-full bg-(--bg-quaternary) text-(--bg-secondary) transition-all hover:scale-110 hover:bg-[#333]"
+                          onClick={e => {
+                            e.stopPropagation()
+                            closeToolMode()
+                          }}
+                          title="切换回普通输入模式"
+                          aria-label="关闭并切换回普通输入"
+                        >
+                          <X className="size-2.5" strokeWidth={2.5} />
+                        </div>
                       </span>
-                      <div
-                        role="button"
-                        className="tip-close-icon absolute -right-0.5 top-0.5 flex h-2.5 w-2.5 cursor-pointer items-center justify-center rounded-full bg-(--bg-quaternary) text-(--bg-secondary) transition-all hover:scale-110 hover:bg-[#333]"
-                        onClick={e => {
-                          e.stopPropagation()
-                          closeToolMode()
-                        }}
-                        title="切换回普通输入模式"
-                        aria-label="关闭并切换回普通输入"
-                      >
-                        <X className="size-2.5" strokeWidth={2.5}/>
-                      </div>
-                    </span>
                     )
                   }
                   if (item.mold === 'span') {
                     return (
                       <span key={index} className="text-part inline">
-                      {item.value}
-                    </span>
+                        {item.value}
+                      </span>
                     )
                   }
                   if (item.mold === 'input') {
@@ -637,15 +758,15 @@ export const CreationInput = (props: CreationInputProps) => {
                         className="input-tag mx-0.5 inline-block align-middle"
                         contentEditable={false}
                       >
-                      <input
-                        type="text"
-                        className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:border-[#ff9500] focus:bg-white focus:text-(--text-primary) focus:ring-2 focus:ring-[#ff9500]/20"
-                        style={{ width: inputWidth }}
-                        placeholder={item.value}
-                        value={richInputValues[inputIndex] ?? ''}
-                        onChange={e => setRichInputAt(inputIndex, e.target.value)}
-                      />
-                    </span>
+                        <input
+                          type="text"
+                          className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:border-[#ff9500] focus:bg-white focus:text-(--text-primary) focus:ring-2 focus:ring-[#ff9500]/20"
+                          style={{ width: inputWidth }}
+                          placeholder={item.value}
+                          value={richInputValues[inputIndex] ?? ''}
+                          onChange={e => setRichInputAt(inputIndex, e.target.value)}
+                        />
+                      </span>
                     )
                   }
                   return null
@@ -660,7 +781,15 @@ export const CreationInput = (props: CreationInputProps) => {
               />
             )}
           </div>
-
+          {isDraggingOver && (
+            <div className="drag-overlay">
+              <div className="drag-hint">
+                <Upload className="drag-icon h-12 w-12" />
+                <p className="drag-text">释放以上传文件</p>
+                <p className="drag-subtext">支持 doc、docx、txt 格式，最大 10MB</p>
+              </div>
+            </div>
+          )}
           {/* 底部控制栏 */}
           <div className="h-8 shrink-0 flex items-center justify-between gap-4">
             <div className="flex gap-2">
@@ -676,7 +805,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         className="size-8 rounded-full"
                         onClick={openToolPopover}
                       >
-                        <Iconfont unicode="&#xe614;" className="text-sm"/>
+                        <Iconfont unicode="&#xe614;" className="text-sm" />
                       </Button>
                     </TooltipTrigger>
                   </PopoverAnchor>
@@ -716,7 +845,7 @@ export const CreationInput = (props: CreationInputProps) => {
                         className="size-8 rounded-full"
                         onClick={openFilePopover}
                       >
-                        <Iconfont unicode="&#xe613;" className="text-sm"/>
+                        <Iconfont unicode="&#xe613;" className="text-sm" />
                       </Button>
                     </TooltipTrigger>
                   </PopoverAnchor>
@@ -730,10 +859,10 @@ export const CreationInput = (props: CreationInputProps) => {
                       setFilePopoverOpen(false)
                     }}
                   >
-                    <Iconfont unicode="&#xe643;" className="size-4 leading-4"/>
+                    <Iconfont unicode="&#xe643;" className="size-4 leading-4" />
                     <span>从本地文件添加</span>
                   </div>
-                  {!hideAssociationFeature && (
+                  {/* {!hideAssociationFeature && (
                     <div
                       className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                       onClick={() => {
@@ -744,17 +873,17 @@ export const CreationInput = (props: CreationInputProps) => {
                       <Link className="size-4" />
                       <span>关联本书内容</span>
                     </div>
-                  )}
-                  {/* <div
+                  )} */}
+                  <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                     onClick={() => {
                       void handleOpenNotesSelector()
                       setFilePopoverOpen(false)
                     }}
                   >
-                    <Iconfont unicode="&#xe644;" className="size-4 leading-4"/>
+                    <Iconfont unicode="&#xe644;" className="size-4 leading-4" />
                     <span>使用全局笔记</span>
-                  </div> */}
+                  </div>
                 </PopoverContent>
               </Popover>
             </div>
@@ -903,9 +1032,6 @@ export const CreationInput = (props: CreationInputProps) => {
               <Button
                 role="button"
                 onClick={handleSubmit}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !disabled) handleSubmit()
-                }}
                 disabled={!isButtonClickable}
                 className={clsx(
                   "w-8 h-8 rounded-full",
@@ -917,7 +1043,7 @@ export const CreationInput = (props: CreationInputProps) => {
                 {status === 'submitted' || status === 'streaming' ? (
                   <Loader2 className="h-4 w-4 animate-spin [color:inherit]" />
                 ) : (
-                  <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]"/>
+                  <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]" />
                 )}
               </Button>
             </div>
@@ -938,7 +1064,7 @@ export const CreationInput = (props: CreationInputProps) => {
             <div className="meme-words-container-bottom-content">
               <div className="h-[30px] mt-3 flex items-center justify-between">
                 <div className="meme-words-title ml-3 flex items-center gap-1 text-base font-bold text-black">
-                  <Iconfont unicode="&#xe63b;" className="text-[#ff5801]!"/>
+                  <Iconfont unicode="&#xe63b;" className="text-[#ff5801]!" />
                   <span>创作热点</span>
                 </div>
                 <div
@@ -947,7 +1073,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   onClick={toggleMemeWordsExpanded}
                   aria-label="折叠创作热点"
                 >
-                  <Iconfont unicode="&#xeaa6;" className="text-xl text-[#898989]"/>
+                  <Iconfont unicode="&#xeaa6;" className="text-xl text-[#898989]" />
                 </div>
               </div>
               <div className="flex gap-0 pt-3">
@@ -961,7 +1087,7 @@ export const CreationInput = (props: CreationInputProps) => {
                     />
                   ))}
                 </div>
-                <div className="w-px self-stretch bg-black/10 mx-3 shrink-0" aria-hidden/>
+                <div className="w-px self-stretch bg-black/10 mx-3 shrink-0" aria-hidden />
                 <div className="w-1/2 min-w-0 flex-1 flex-col items-start pl-3.2">
                   {rightColumnWords.map(memeWord => (
                     <MemeWordItem
@@ -978,7 +1104,7 @@ export const CreationInput = (props: CreationInputProps) => {
             <div className="h-[30px] mt-3 flex items-center gap-3 rounded-[20px]">
               <div
                 className="meme-words-title-collapsed flex shrink-0 items-center gap-1 text-base font-bold text-black">
-                <Iconfont unicode="&#xe63b;" className="text-[#ff5801]! ml-3"/>
+                <Iconfont unicode="&#xe63b;" className="text-[#ff5801]! ml-3" />
                 <span>创作热点</span>
               </div>
               <div className="meme-words-preview-tags flex min-w-0 flex-1 flex-nowrap items-center">
@@ -994,7 +1120,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       {memeWord.name}
                     </div>
                     {index < collapsedPreviewWords.length - 1 && (
-                      <div className="meme-words-preview-separator h-4 w-px shrink-0 bg-black/10"/>
+                      <div className="meme-words-preview-separator h-4 w-px shrink-0 bg-black/10" />
                     )}
                   </React.Fragment>
                 ))}
@@ -1005,7 +1131,7 @@ export const CreationInput = (props: CreationInputProps) => {
                 onClick={toggleMemeWordsExpanded}
                 aria-label="展开创作热点"
               >
-                <Iconfont unicode="&#xeaa1;" className="text-xl text-[#898989]"/>
+                <Iconfont unicode="&#xeaa1;" className="text-xl text-[#898989]" />
               </div>
             </div>
           )}
