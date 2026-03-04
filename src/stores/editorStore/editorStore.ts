@@ -63,6 +63,33 @@ const initialState: EditorState = {
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
 };
 
+let htmlEntityDecoder: HTMLTextAreaElement | null = null;
+const decodeHtmlEntities = (text: string): string => {
+  if (!text) return "";
+  if (typeof document === "undefined") return text;
+  if (!htmlEntityDecoder) htmlEntityDecoder = document.createElement("textarea");
+  htmlEntityDecoder.innerHTML = text;
+  return htmlEntityDecoder.value;
+};
+
+const normalizeServerContent = (content: string): string => {
+  if (typeof content !== "string") return "";
+  const compact = decodeHtmlEntities(content)
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "");
+  return compact.length === 0 ? "" : content;
+};
+
+const normalizeServerData = (data: ServerData): ServerData => {
+  const next: ServerData = {};
+  Object.keys(data ?? {}).forEach((key) => {
+    const value = data[key];
+    next[key] = typeof value === "string" ? normalizeServerContent(value) : "";
+  });
+  return next;
+};
+
 export const useEditorStore = create<EditorState & EditorActions>((set, get) => ({
   ...initialState,
 
@@ -74,16 +101,16 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
         typeof info === "function" ? info(state.workInfo) : { ...state.workInfo, ...info },
     })),
 
-  setServerData: (data) => set({ serverData: data }),
+  setServerData: (data) => set({ serverData: normalizeServerData(data) }),
 
   setServerDataFile: (path, content) =>
     set((state) => ({
-      serverData: { ...state.serverData, [path]: content },
+      serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
     })),
 
   addServerDataPath: (path, content = "") =>
     set((state) => ({
-      serverData: { ...state.serverData, [path]: content },
+      serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
     })),
 
   deleteServerDataPath: (path) =>
@@ -155,7 +182,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
           serverData = {};
         }
       }
-      set({ serverData });
+      set({ serverData: normalizeServerData(serverData) });
 
       const sessions = req?.sessions;
       if (Array.isArray(sessions)) {
