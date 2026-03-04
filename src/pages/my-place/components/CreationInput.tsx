@@ -680,9 +680,13 @@ export const CreationInput = (props: CreationInputProps) => {
         >
           <div
             className="flex-1 overflow-y-auto min-h-0 py-4 text-sm"
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !disabled) handleSubmit()
-            }}>
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !disabled) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+          >
             {currentChannel ? (
               /* 富文本区域：与 Vue rich-text-content 一致，tip + span + 内联 input */
               <div
