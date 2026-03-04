@@ -54,6 +54,8 @@ import { getWorkTagsReq } from "@/api/works"
 import { cn } from "@/lib/utils"
 import { LinkButton } from "@/components/ui/LinkButton"
 import { Link } from "react-router-dom"
+import { useEditorStore } from "@/stores/editorStore";
+import { AutoScrollArea } from "@/components/AutoScrollArea";
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -87,7 +89,6 @@ export interface StepCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm?: (data: StepSaveData) => void
-  workId?: string
 }
 
 export interface StepCreateDialogRef {
@@ -114,7 +115,7 @@ export const StepCreateDialog = React.forwardRef<
   StepCreateDialogRef,
   StepCreateDialogProps
 >(function StepCreateDialog(
-  { open, onOpenChange, onConfirm, workId = "" },
+  { open, onOpenChange, onConfirm },
   ref
 ) {
   const { recommendConfig, updateRecommendConfig } = useOptionsStore()
@@ -163,6 +164,8 @@ export const StepCreateDialog = React.forwardRef<
   const [isCharacterEditOpen, setIsCharacterEditOpen] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<CharacterCardData>(EMPTY_CHARACTER)
   const [editingCharacterIndex, setEditingCharacterIndex] = useState<number | null>(null)
+
+  const workId = useEditorStore(s=>s.workId)
 
   useEffect(() => {
     if (selectedMode === "template") setSteps(STEPS_TEMPLATE)
@@ -723,6 +726,30 @@ export const StepCreateDialog = React.forwardRef<
     setEditingCharacterIndex(null)
   }, [editingCharacter, editingCharacterIndex, selectedCharacter, characters, updateStepSnapshot])
 
+  const FormMap = new Map([
+    ['prompt', '提示词'],
+    ['coreMeme', '核心梗'],
+    ['background', '故事背景'],
+    ['persona', '主角人设'],
+    ['wordCount', '字数'],
+    ['perspective', '人称'],
+  ])
+
+  const generateCustomDesc = (formData: Record<string, any> | null) => {
+    let description = ''
+    if (!formData) return description
+
+    const keys = Object.keys(formData)
+    for (const key of keys) {
+      const customItem = formData[key]
+      if (FormMap.has(key) && customItem != '') {
+        description += FormMap.get(key) + ':' + customItem + ';'
+      }
+      console.log('description', description)
+    }
+    return description
+  }
+
   const updateOutlineStream = useCallback(() => {
     if (!selectedStory?.title || !selectedCharacter?.name) return
     if (outlineStreamAbortControllerRef.current) outlineStreamAbortControllerRef.current.abort()
@@ -738,14 +765,26 @@ export const StepCreateDialog = React.forwardRef<
         if (text != null) setOutlineContent(text)
       }
     }
+
+    const requestData = {
+      workId: workId || "0",
+      targetStage: "outline",
+      brainStorm: { title: selectedStory.title, intro: selectedStory.intro },
+      roleCard: selectedCharacter,
+      theme: selectedStory.theme,
+      chapterNumber,
+      description: ''
+    }
+
+    if (selectedMode === 'template' && selectedTemplate) {
+      requestData.description = selectedTemplate.description
+    } else if (selectedMode === 'tag') {
+      requestData.description = selectedTags.map(tag => tag.name).join(',')
+    } else if (selectedMode == 'custom') {
+      requestData.description = generateCustomDesc(historyStepSnapshots[1]?.snapshot)
+    }
     postTemplateStream(
-      {
-        workId: workId || "0",
-        targetStage: "outline",
-        brainStorm: { title: selectedStory.title, intro: selectedStory.intro },
-        roleCard: selectedCharacter,
-        chapterNumber,
-      },
+      requestData,
       onData,
       () => {
         setLoading(false)
@@ -819,7 +858,7 @@ export const StepCreateDialog = React.forwardRef<
       <DialogContent
         showCloseButton
         className={clsx(
-          "flex max-h-[80vh] min-h-[680px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:!max-w-[1020px]",
+          "flex max-h-[80vh] min-h-[728px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:!max-w-[1020px]",
           "left-1/2 top-[10vh] -translate-x-1/2 translate-y-0"
         )}
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -1136,8 +1175,8 @@ export const StepCreateDialog = React.forwardRef<
             )}
 
             {stepActive === 3 && (
-              <div className="character-step step-content relative flex min-h-[540px] flex-col justify-center gap-6">
-                <div className="character-grid flex w-full justify-center gap-6 px-12">
+              <div className="character-step w-full step-content relative flex min-h-[540px] flex-col justify-center gap-6">
+                <div className="character-grid flex w-full justify-center gap-6 px-20">
                   {characters.map((c, i) => (
                     <div
                       key={`${c.name}-${c.mbti}-${i}`}
@@ -1262,28 +1301,29 @@ export const StepCreateDialog = React.forwardRef<
             )}
 
             {stepActive === 4 && (
-              <div className="step-outline step-content min-h-[540px] px-12 pt-6">
+              <div className="step-outline w-full step-content min-h-[540px] px-15 pt-6 flex flex-col">
                 <div
                   className={clsx(
-                    "editor-layout rounded-lg bg-[#f9eece] pt-2",
+                    "editor-layout rounded-lg bg-[#f9eece] p-2 flex-1",
                     isOutlineEditing && "outline-2 outline-[#ce644c]"
                   )}
                 >
                   <div className="header px-2 text-3xl font-semibold leading-10 text-black">大纲</div>
-                  <div className="markdown-editor-scrollbar max-h-[420px] overflow-y-auto">
+                  <AutoScrollArea
+                    className="markdown-editor-scrollbar max-h-[420px] overflow-y-auto"
+                    maxHeight={420}
+                  >
                     <MarkdownEditor
                       ref={markdownEditorRef}
                       value={outlineContent}
                       onChange={setOutlineContent}
                       readonly={!isOutlineEditing || loading}
                       placeholder="正在生成大纲…"
-                      loading={loading}
                     />
-                  </div>
+                  </AutoScrollArea>
                 </div>
                 <div className="footer-actions mt-4 flex h-8 w-full justify-center gap-4">
-                  <div
-                    role="button"
+                  <LinkButton
                     tabIndex={0}
                     onClick={loading ? undefined : updateOutlineStream}
                     onKeyDown={(e) => {
@@ -1292,16 +1332,13 @@ export const StepCreateDialog = React.forwardRef<
                         updateOutlineStream()
                       }
                     }}
-                    className={clsx(
-                      "flex cursor-pointer items-center gap-2 text-[var(--bg-editor-save)]",
-                      loading && "cursor-not-allowed opacity-50"
-                    )}
+                    disabled={loading}
+                    className="flex cursor-pointer items-center gap-2 text-gray-500"
                   >
                     <span className={clsx("iconfont", loading && "animate-spin")}>&#xe66f;</span>
                     <span>重新生成</span>
-                  </div>
-                  <div
-                    role="button"
+                  </LinkButton>
+                  <LinkButton
                     tabIndex={0}
                     onClick={loading ? undefined : () => setIsOutlineEditing((v) => !v)}
                     onKeyDown={(e) => {
@@ -1310,14 +1347,12 @@ export const StepCreateDialog = React.forwardRef<
                         setIsOutlineEditing((v) => !v)
                       }
                     }}
-                    className={clsx(
-                      "flex cursor-pointer items-center gap-2 text-[var(--bg-editor-save)]",
-                      loading && "cursor-not-allowed opacity-50"
-                    )}
+                    disabled={loading}
+                    className="flex cursor-pointer items-center gap-2 text-gray-500"
                   >
                     <span className="iconfont">&#xea48;</span>
                     <span>{isOutlineEditing ? "完成编辑" : "编辑"}</span>
-                  </div>
+                  </LinkButton>
                 </div>
               </div>
             )}
