@@ -71,12 +71,15 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
   ) {
     const isInternalUpdate = useRef(false)
     const readonlyRef = useRef(readonly)
-    readonlyRef.current = readonly
     const onChangeRef = useRef(onChange)
-    onChangeRef.current = onChange
     const onKeyDownRef = useRef(onKeyDown)
-    onKeyDownRef.current = onKeyDown
     const isComposingRef = useRef(false)
+
+    useEffect(() => {
+      readonlyRef.current = readonly
+      onChangeRef.current = onChange
+      onKeyDownRef.current = onKeyDown
+    }, [readonly, onChange, onKeyDown])
 
     const extensions = useMemo(
       () => [

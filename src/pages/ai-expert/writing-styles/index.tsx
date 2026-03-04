@@ -237,6 +237,7 @@ const WritingStylesPage = () => {
   }, [historyId, markdownContent, fetchHistoryList])
 
   const handleDoAnalysis = useCallback(async () => {
+    trackEvent('Dashboard', 'Generate', 'Style Analysis')
     if (!uploadedFile?.raw) {
       toast.error('请先上传文件')
       return
@@ -314,6 +315,7 @@ const WritingStylesPage = () => {
   }, [])
 
   const openNameDialog = useCallback(() => {
+    trackEvent('Dashboard', 'Use', 'Style Analysis')
     setStyleName('')
     setStyleNameError('')
     setNameDialogOpen(true)
@@ -401,7 +403,7 @@ const WritingStylesPage = () => {
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                   <img src={EMPTY_IMG} alt="" className="h-30 w-30 object-contain"/>
-                  <p className="mt-2 text-sm">暂无文风历史记录</p>
+                  <p className="mt-2 text-sm">暂无历史记录</p>
                 </div>
               )}
             </div>
