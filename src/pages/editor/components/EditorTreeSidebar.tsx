@@ -152,6 +152,7 @@ interface TreeNodeRowProps {
   node: FileTreeNode
   level: number
   currentKey: string
+  onMarkNodeAsRead: (id: string) => void
   onSelect: (node: FileTreeNode) => void
   onAddFile: (node: FileTreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
@@ -173,6 +174,7 @@ const TreeNodeRow = ({
   node,
   level,
   currentKey,
+  onMarkNodeAsRead,
   onSelect,
   onAddFile,
   onContextMenu,
@@ -194,9 +196,10 @@ const TreeNodeRow = ({
   const showDropLine = dragState.dropTargetId === node.id
 
   const handleClick = useCallback(() => {
+    onMarkNodeAsRead(node.id)
     if (isMd) onSelect(node)
     else if (isDir) onToggleExpand(node.id)
-  }, [isMd, isDir, node, onSelect, onToggleExpand])
+  }, [isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
 
   return (
     <div className="w-full group/node">
@@ -262,10 +265,16 @@ const TreeNodeRow = ({
           unicode={getTreeIcon(node)}
           className="ml-1 shrink-0 text-sm text-[var(--text-secondary)]"
         />
-        <div className="ml-1 min-w-0 flex-1 truncate max-w-[calc(100%-50px)]">{node.label}</div>
-        {node.new && !isDir && (
-          <span className="shrink-0 text-[10px] text-red-500 font-medium">new</span>
-        )}
+        <div className="ml-1 min-w-0 flex-1 flex items-center gap-1 overflow-hidden">
+          <div className="inline-block min-w-0 max-w-[calc(100%-50px)] truncate align-top text-[14px] leading-[1.4]">
+            {node.label}
+          </div>
+          {node.new && !isDir && (
+            <span className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
+              new
+            </span>
+          )}
+        </div>
         {/* “+” 新增：仅目录节点显示，悬浮时可见 */}
         {isDir && (
           <div
@@ -295,6 +304,7 @@ const TreeNodeRow = ({
               node={child}
               level={level + 1}
               currentKey={currentKey}
+              onMarkNodeAsRead={onMarkNodeAsRead}
               onSelect={onSelect}
               onAddFile={onAddFile}
               onContextMenu={onContextMenu}
@@ -328,6 +338,8 @@ export const EditorTreeSidebar = ({
   const workId = useEditorStore((s) => s.workId)
   const serverData = useEditorStore((s) => s.serverData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
+  const newNodeIds = useEditorStore((s) => s.newNodeIds)
+  const clearNewNodeId = useEditorStore((s) => s.clearNewNodeId)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
@@ -375,7 +387,16 @@ export const EditorTreeSidebar = ({
   const [tagsDragging, setTagsDragging] = useState(false)
   const dragStart = useRef({ x: 0, scrollLeft: 0 })
 
-  const treeData = useMemo(() => serverDataToTree(serverData), [serverData])
+  const treeData = useMemo(() => {
+    const newNodeIdSet = new Set(newNodeIds)
+    const attachNewFlags = (nodes: FileTreeNode[]): FileTreeNode[] =>
+      nodes.map((node) => ({
+        ...node,
+        new: !node.isDirectory && newNodeIdSet.has(node.id),
+        children: attachNewFlags(node.children ?? []),
+      }))
+    return attachNewFlags(serverDataToTree(serverData))
+  }, [newNodeIds, serverData])
 
   useEffect(() => {
     setEditingTitleValue(workInfo.title)
@@ -821,6 +842,7 @@ export const EditorTreeSidebar = ({
               node={node}
               level={0}
               currentKey={currentEditingId}
+              onMarkNodeAsRead={clearNewNodeId}
               onSelect={(n) => setCurrentEditingId(n.id)}
               onAddFile={handleAddFileUnder}
               onContextMenu={(e, node) => {

@@ -28,6 +28,8 @@ interface EditorState {
   workInfo: WorkInfo;
   /** 服务端文件数据：路径 -> 内容，与 Vue serverData 一致 */
   serverData: ServerData;
+  /** 树节点 new 标记（与 Vue 节点 data.new 对齐） */
+  newNodeIds: string[];
   /** 当前编辑中的文件路径 key */
   currentEditingId: string;
 }
@@ -38,6 +40,8 @@ interface EditorActions {
   setServerData: (data: ServerData) => void;
   /** 更新单个文件内容（对应 Vue updateNodeContentById 的简化） */
   setServerDataFile: (path: string, content: string) => void;
+  setNewNodeIds: (ids: string[]) => void;
+  clearNewNodeId: (id: string) => void;
   /** 新增路径（文件或目录）。目录 path 需以 / 结尾，内容传空；文件为完整路径如 "正文/正文.md" */
   addServerDataPath: (path: string, content?: string) => void;
   /** 删除路径及其下所有键 */
@@ -60,6 +64,7 @@ const initialState: EditorState = {
   workId: "",
   workInfo: defaultWorkInfo,
   serverData: {},
+  newNodeIds: [],
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
 };
 
@@ -108,6 +113,13 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
     })),
 
+  setNewNodeIds: (ids) => set({ newNodeIds: Array.from(new Set(ids)) }),
+
+  clearNewNodeId: (id) =>
+    set((state) => ({
+      newNodeIds: state.newNodeIds.filter((nodeId) => nodeId !== id),
+    })),
+
   addServerDataPath: (path, content = "") =>
     set((state) => ({
       serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
@@ -120,7 +132,10 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       Object.keys(state.serverData).forEach((k) => {
         if (k !== path && k !== path + "/" && !k.startsWith(prefix)) next[k] = state.serverData[k];
       });
-      return { serverData: next };
+      const nextNewNodeIds = state.newNodeIds.filter(
+        (nodeId) => nodeId !== path && !nodeId.startsWith(prefix)
+      );
+      return { serverData: next, newNodeIds: nextNewNodeIds };
     }),
 
   renameServerDataPath: (oldPath, newPath) =>
@@ -142,7 +157,14 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       if (state.currentEditingId === oldPath) currentEditingId = newPath;
       else if (state.currentEditingId.startsWith(oldPrefix))
         currentEditingId = newPrefix + state.currentEditingId.slice(oldPrefix.length);
-      return { serverData: next, currentEditingId };
+      const newNodeIds = state.newNodeIds.map((nodeId) => {
+        if (nodeId === oldPath) return newPath;
+        if (nodeId.startsWith(oldPrefix)) {
+          return newPrefix + nodeId.slice(oldPrefix.length);
+        }
+        return nodeId;
+      });
+      return { serverData: next, currentEditingId, newNodeIds };
     }),
 
   setCurrentEditingId: (id) => set({ currentEditingId: id }),
@@ -183,6 +205,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
         }
       }
       set({ serverData: normalizeServerData(serverData) });
+      set({ newNodeIds: [] });
 
       const sessions = req?.sessions;
       if (Array.isArray(sessions)) {
