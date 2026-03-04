@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Dialog, DialogContent, DialogTitle, DialogClose, VisuallyHidden } from '@/components/ui/Dialog'
-import { Iconfont } from '@/components/IconFont'
+import { Dialog, DialogContent, DialogTitle, VisuallyHidden } from '@/components/ui/Dialog'
 import { useLoginStore } from '@/stores/loginStore'
 import { isMobileDevice } from '@/utils/isMobileDevice'
 import clsx from 'clsx'
+import { toast } from "sonner";
 
 const IFRAME_URL = 'https://www.baowenmao.com/login/login'
 const ALLOWED_ORIGIN = 'https://www.baowenmao.com'
@@ -26,8 +26,10 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
 
   const onSuccessRef = useRef(onLoginSuccess)
   const onFailedRef = useRef(onLoginFailed)
-  onSuccessRef.current = onLoginSuccess
-  onFailedRef.current = onLoginFailed
+  useEffect(() => {
+    onSuccessRef.current = onLoginSuccess
+    onFailedRef.current = onLoginFailed
+  }, [onLoginSuccess, onLoginFailed])
 
   const handleMessage = useCallback(async (event: MessageEvent) => {
     if (event.origin !== ALLOWED_ORIGIN) return
@@ -41,6 +43,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
         if (req?.success) {
           onSuccessRef.current?.()
         } else {
+          toast.error(req?.message || '登录失败')
           onFailedRef.current?.()
         }
       }

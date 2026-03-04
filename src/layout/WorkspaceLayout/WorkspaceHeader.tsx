@@ -111,15 +111,23 @@ export function WorkspaceHeader() {
       {/* 用户头像 / 登录按钮（对应 Vue MainHeader 已登录 el-popover + 账号/额度/退出） */}
       <div className="ml-3">
         {!isLoggedIn ? (
-          <div
-            role="button"
-            title="登录"
-            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-xl transition-colors hover:opacity-80"
-            onClick={handleUserClick}
-            onKeyDown={(e) => e.key === 'Enter' && handleUserClick()}
-          >
-            <Iconfont unicode="&#xe60b;" />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                role="button"
+                title="登录"
+                className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-xl transition-colors hover:opacity-80"
+                onClick={handleUserClick}
+                onKeyDown={(e) => e.key === 'Enter' && handleUserClick()}
+              >
+                <Iconfont unicode="&#xe60b;" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              登录
+            </TooltipContent>
+          </Tooltip>
+
         ) : (
           <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
             <PopoverTrigger asChild>
