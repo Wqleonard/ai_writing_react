@@ -32,6 +32,7 @@ import type { TemplateCardData, HistoryItem } from './types'
 import EMPTY_IMG from '@/assets/images/empty.webp'
 import { Iconfont } from "@/components/IconFont";
 import { useLoginStore } from '@/stores/loginStore'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 const SIZE_LIMIT = 8 * 1024 * 1024 // 8MB
 const TEMPLATE_PAGE_SIZE = 20
@@ -154,6 +155,10 @@ const BookAnalysisPage = () => {
   const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
   const requireLogin = useLoginStore((s) => s.requireLogin)
 
+  useEffect(()=>{
+    trackEvent('Dashboard', 'Click', 'Book Analysis')
+  }, [])
+
   useEffect(() => {
     (async () => {
       loadMoreTemplates()
@@ -203,6 +208,7 @@ const BookAnalysisPage = () => {
   )
 
   const handleDoBookAnalysis = useCallback(async () => {
+    trackEvent('Dashboard', 'Generate', 'Book Analysis')
     if (!uploadedFile?.response) return
     const response = uploadedFile.response as any
     const filePath = response?.putFilePath
@@ -252,6 +258,7 @@ const BookAnalysisPage = () => {
   }, [uploadedFile, markdownContent])
 
   const handleCopyNow = useCallback(async () => {
+    trackEvent('Dashboard', 'Use', 'Book Analysis')
     try {
       setLoading(true)
       const req: any = await createWorkReq()
@@ -436,7 +443,7 @@ const BookAnalysisPage = () => {
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                       <img src={EMPTY_IMG} alt="" className="h-30 w-30 object-contain" />
-                      <p className="text-sm">暂无文风历史记录</p>
+                      <p className="text-sm">暂无历史记录</p>
                     </div>
                   )}
                 </div>

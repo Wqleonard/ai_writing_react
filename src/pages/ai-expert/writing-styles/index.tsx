@@ -37,6 +37,7 @@ import EMPTY_IMG from '@/assets/images/empty.webp'
 import './writing-styles.css'
 import { Iconfont } from "@/components/IconFont";
 import { useLoginStore } from '@/stores/loginStore'
+import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
 
@@ -123,6 +124,10 @@ const WritingStylesPage = () => {
   }, [])
 
   const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+
+  useEffect(()=>{
+    trackEvent('Dashboard', 'Click', 'Style Analysis')
+  },[])
 
   useEffect(() => {
     (async () => {
