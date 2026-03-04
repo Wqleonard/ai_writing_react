@@ -123,6 +123,7 @@ type WorkVersion = {
 
 type EditorInitialParams = {
   message?: string;
+  autoSubmitInitialMessage?: boolean;
   isAnswerOnly?: boolean;
   modelLLM?: string;
   selectedWritingStyle?: string;
@@ -209,6 +210,29 @@ const findRangeIgnoringWhitespace = (source: string, target: string) => {
   const end = sourcePacked.indexMap[packedEnd];
   if (start === undefined || end === undefined) return null;
   return { start, endExclusive: end + 1 };
+};
+
+const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string, string> => {
+  const normalized: Record<string, string> = { ...files };
+  const hasMainDir = Object.keys(normalized).some(
+    (k) => k === "正文/" || k.startsWith("正文/"),
+  );
+  const hasKnowledgeDir = Object.keys(normalized).some(
+    (k) => k === "知识库/" || k.startsWith("知识库/"),
+  );
+  if (!hasMainDir) {
+    normalized["正文/"] = "";
+  }
+  if (!hasKnowledgeDir) {
+    normalized["知识库/"] = "";
+  }
+  const hasMainMd = Object.keys(normalized).some(
+    (k) => k.startsWith("正文/") && k.endsWith(".md"),
+  );
+  if (!hasMainMd) {
+    normalized[DEFAULT_EDITING_FILE_KEY] = normalized[DEFAULT_EDITING_FILE_KEY] ?? "";
+  }
+  return normalized;
 };
 
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
@@ -564,10 +588,30 @@ const MarkdownEditorPage = () => {
   const selectedFiles = useChatInputStore((s) => s.selectedFiles);
   const selectedTexts = useChatInputStore((s) => s.selectedTexts);
   const selectedTools = useChatInputStore((s) => s.selectedTools);
+  const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
+  const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
   const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
   const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
+  const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+
+  const handleMessageFileClick = useCallback((file: FileItemType) => {
+    const fileUrl = file.displayUrl || file.putFilePath;
+    if (!fileUrl) {
+      toast.error("文件地址不存在，暂无法下载");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.download = file.originalName || file.serverFileName || "download";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
 
   const sendChatText = useCallback(
     (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
@@ -627,6 +671,9 @@ const MarkdownEditorPage = () => {
           modelLLM,
           selectedWritingStyle
         );
+        // 请求发出后清空当前已选引用内容，避免继续展示在输入区
+        clearSelectedNotes();
+        clearSelectedFiles();
       }
     },
     [
@@ -636,6 +683,8 @@ const MarkdownEditorPage = () => {
       isAnswerOnly,
       langGraphStream,
       modelLLM,
+      clearSelectedFiles,
+      clearSelectedNotes,
       selectedWritingStyle,
       selectedFiles,
       selectedTexts,
@@ -749,6 +798,13 @@ const MarkdownEditorPage = () => {
     });
     if (initialParams.message?.trim()) {
       setPendingInitialMessage(initialParams.message.trim());
+      if (typeof initialParams.autoSubmitInitialMessage === "boolean") {
+        setShouldAutoSubmitInitialMessage(initialParams.autoSubmitInitialMessage);
+      } else {
+        setShouldAutoSubmitInitialMessage(true);
+      }
+    } else {
+      setShouldAutoSubmitInitialMessage(false);
     }
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams]);
 
@@ -1326,7 +1382,10 @@ const MarkdownEditorPage = () => {
   const handleCanvasCreateHere = useCallback(
     async (files: Record<string, string>, chain: { data?: { content?: string } } | null) => {
       if (!workId) return;
-      const merged = { ...useEditorStore.getState().serverData, ...files };
+      const merged = ensureCanvasTreeSkeleton({
+        ...useEditorStore.getState().serverData,
+        ...files,
+      });
       setServerData(merged);
 
       let title = chain?.data?.content || "";
@@ -1348,61 +1407,15 @@ const MarkdownEditorPage = () => {
       }
 
       setActiveTab("chat");
-      let sessionId = chatCurrentSession?.id ?? "";
-      if (!sessionId) {
-        const session = createNewSession("chat");
-        sessionId = session.id;
-      }
-
       const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
-      const synthetic: ChatMessage = {
-        id: `user_${Date.now()}`,
-        role: "user",
-        content: prompt,
-        createdAt: new Date(),
-        messageType: "normal",
-        mode: "chat",
-      };
-      addMessageToDualTab("chat", synthetic as DualTabChatMessage);
-
-      guideRequestRef.current = { sessionId, workId };
-      const placeholderId = `assistant_${Date.now()}`;
-      streamingMessageIdRef.current = placeholderId;
-      const placeholder: ChatMessage = {
-        id: placeholderId,
-        role: "assistant",
-        content: "",
-        createdAt: new Date(),
-        messageType: "normal",
-        mode: "chat",
-        customMessage: [],
-      };
-      streamingMessageRef.current = placeholder;
-      setStreamingMessage(placeholder);
-      await langGraphStream.submit(
-        prompt,
-        sessionId,
-        workId,
-        "agent",
-        undefined,
-        undefined,
-        false,
-        undefined,
-        modelLLM,
-        selectedWritingStyle
-      );
+      setPendingInitialMessage(prompt);
+      setShouldAutoSubmitInitialMessage(false);
     },
     [
       workId,
       setServerData,
       setWorkInfo,
       saveEditorData,
-      chatCurrentSession?.id,
-      createNewSession,
-      addMessageToDualTab,
-      langGraphStream,
-      modelLLM,
-      selectedWritingStyle,
     ]
   );
 
@@ -1424,7 +1437,16 @@ const MarkdownEditorPage = () => {
           ...(title ? { title } : {}),
           stage: "final",
         });
-        await updateWorkVersionReq(newWorkId, JSON.stringify(files), "1");
+        const normalizedFiles = ensureCanvasTreeSkeleton(files);
+        await updateWorkVersionReq(newWorkId, JSON.stringify(normalizedFiles), "1");
+        const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
+        sessionStorage.setItem(
+          EDITOR_INITIAL_PARAMS_KEY,
+          JSON.stringify({
+            message: prompt,
+            autoSubmitInitialMessage: false,
+          }),
+        );
         navigate(`/editor/${newWorkId}`);
       } catch {
         toast.error("创建作品失败，请重试");
@@ -1886,7 +1908,7 @@ const MarkdownEditorPage = () => {
                   workId={workId ?? undefined}
                   activeTab="chat"
                   initialMessage={pendingInitialMessage}
-                  autoSubmitInitialMessage={Boolean(pendingInitialMessage)}
+                  autoSubmitInitialMessage={shouldAutoSubmitInitialMessage}
                   initialIsAnswerOnly={isAnswerOnly}
                   inputStatus={chatInputStatus}
                   onStopStreaming={handleStopStreaming}
@@ -2023,7 +2045,7 @@ const MarkdownEditorPage = () => {
                                   {hasFiles && (
                                     <FileMessageDisplay
                                       files={msg.files as FileItemType[]}
-                                      onFileClick={() => {}}
+                                      onFileClick={handleMessageFileClick}
                                     />
                                   )}
                                   <div className="message-content-wrapper text-right">
@@ -2037,7 +2059,7 @@ const MarkdownEditorPage = () => {
                               {!hasFilesOrSelected && (
                                 <div className="message-content-wrapper whitespace-pre-wrap break-words">
                                   <MarkdownRenderer
-                                    content={msg.content || "(无文本)"}
+                                    content={msg.content || ""}
                                     onFileNameClick={() => {}}
                                   />
                                 </div>

@@ -8,6 +8,8 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Link,
+  Upload,
 } from "lucide-react"
 import { Iconfont } from "@/components/IconFont"
 import {
@@ -27,6 +29,9 @@ import { WritingStyleDialog } from "@/components/Community/WritingStyleDialog"
 import { useMemeWords } from "@/hooks/useMemeWords"
 import { useQuickToolComposer } from "@/hooks/useQuickToolComposer"
 import { useChatInputActions } from "@/hooks/useChatInputActions"
+import { uploadFileReq } from "@/api/files"
+import { openLoginDialog } from "@/components/LoginDialog"
+import { toast } from "sonner"
 
 export type QuillChatInputStatus = "ready" | "error" | "submitted" | "streaming"
 
@@ -89,6 +94,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     addNote,
     removeNote,
     clearSelectedNotes,
+    clearSelectedFiles,
     removeAssociationTag,
     removeFile,
     removeSelectedText,
@@ -120,14 +126,74 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   })
   const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null)
   const [hoveredNoteDeleteIndex, setHoveredNoteDeleteIndex] = useState<number | null>(null)
-  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<string | null>(null)
+  const [hoveredFileDeleteIndex, setHoveredFileDeleteIndex] = useState<number | null>(null)
   const [hoveredSelectedTextDeleteIndex, setHoveredSelectedTextDeleteIndex] = useState<string | null>(null)
   const [isDeleteIconHovered, setIsDeleteIconHovered] = useState(false)
   const [isNoteDeleteIconHovered, setIsNoteDeleteIconHovered] = useState(false)
   const [isFileDeleteIconHovered, setIsFileDeleteIconHovered] = useState(false)
   const [isSelectedTextDeleteIconHovered, setIsSelectedTextDeleteIconHovered] = useState(false)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [dragCounter, setDragCounter] = useState(0)
+  const [isDropUploading, setIsDropUploading] = useState(false)
 
   const [hovered, setHovered] = useState(false)
+
+  const isExternalFileDrag = useCallback((e: React.DragEvent) => {
+    const transfer = e.dataTransfer
+    if (!transfer) return false
+    if (transfer.files && transfer.files.length > 0) return true
+    return Array.from(transfer.types || []).includes("Files")
+  }, [])
+
+  const validateDragFileType = useCallback((file: File) => {
+    const allowedTypes = [
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+    ]
+    const allowedExtensions = [".doc", ".docx", ".txt"]
+    if (allowedTypes.includes(file.type)) return true
+    const lowerName = file.name.toLowerCase()
+    return allowedExtensions.some((ext) => lowerName.endsWith(ext))
+  }, [])
+
+  const handleDroppedFile = useCallback(
+    async (file: File) => {
+      if (!isLoggedIn) {
+        await openLoginDialog()
+        return
+      }
+      if (!validateDragFileType(file)) {
+        toast.error("不支持的文件格式，请选择 doc、docx 或 txt 文件")
+        return
+      }
+      const maxSize = 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        toast.error("文件大小不能超过10MB")
+        return
+      }
+      try {
+        setIsDropUploading(true)
+        const result = await uploadFileReq(file)
+        addFile({
+          id: `file_${Date.now()}`,
+          originalName: file.name,
+          serverFileName: result.fileName,
+          putFilePath: result.putFilePath,
+          displayUrl: result.putFilePath,
+          type: file.type,
+          size: file.size,
+          extension: file.name.split(".").pop() || "",
+        })
+        toast.success(`文件 "${file.name}" 上传成功`)
+      } catch {
+        toast.error("文件上传失败，请重试")
+      } finally {
+        setIsDropUploading(false)
+      }
+    },
+    [addFile, isLoggedIn, validateDragFileType]
+  )
 
   const canMove = value.trim() && !disabled
   /** 流式时可点击按钮取消；非流式时仅在有内容且未禁用时可点击发送 */
@@ -179,9 +245,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     if (disabled) return
     const text = value.trim()
     if (!text) return
+    clearSelectedNotes()
+    clearSelectedFiles()
     onSubmit()
     if (clearOnSubmit) onChange("")
-  }, [disabled, value, onSubmit, clearOnSubmit, onChange])
+  }, [disabled, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -334,7 +402,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     className="size-8 rounded-full"
                     onClick={openFilePopover}
                   >
-                    <Iconfont unicode="&#xe613;" className="text-sm"/>
+                    <Iconfont unicode="&#xe613;" className="text-sm" />
                   </Button>
                 </TooltipTrigger>
               </PopoverAnchor>
@@ -348,10 +416,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   setFilePopoverOpen(false)
                 }}
               >
-                <Iconfont unicode="&#xe643;" className="size-4 leading-4"/>
+                <Iconfont unicode="&#xe643;" className="size-4 leading-4" />
                 <span>从本地文件添加</span>
               </div>
-              {/* {!hideAssociationFeature && (
+              {!hideAssociationFeature && (
                 <div
                   className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                   onClick={() => {
@@ -362,7 +430,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   <Link className="h-4 w-4" />
                   关联本书内容
                 </div>
-              )} */}
+              )}
               <div
                 className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                 onClick={() => {
@@ -370,8 +438,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   setFilePopoverOpen(false)
                 }}
               >
-                 <Iconfont unicode="&#xe644;" className="size-4 leading-4"/>
-                 <span>使用全局笔记</span>
+                <Iconfont unicode="&#xe644;" className="size-4 leading-4" />
+                <span>使用全局笔记</span>
               </div>
             </PopoverContent>
           </Popover>
@@ -397,10 +465,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                       .then((res: unknown) => {
                         const list = Array.isArray(res)
                           ? res.map((item: { id?: string; name?: string; isPublic?: boolean }) => ({
-                              id: String(item?.id ?? ""),
-                              name: String(item?.name ?? ""),
-                              isPublic: item?.isPublic !== false,
-                            }))
+                            id: String(item?.id ?? ""),
+                            name: String(item?.name ?? ""),
+                            isPublic: item?.isPublic !== false,
+                          }))
                           : []
                         setWritingStyles(list)
                         if (list.length > 0 && !selectedWritingStyle) {
@@ -413,7 +481,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                           setSelectedWritingStyle(list[0].id)
                         }
                       })
-                      .catch(() => {})
+                      .catch(() => { })
                   }
                 }}
               >
@@ -485,73 +553,73 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
             </div>
           )}
 
-        {/* 模型选择（对齐 Vue SimpleSelect 结构） */}
-        <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
-          <PopoverTrigger asChild>
-            <button type="button" className="simple-select-trigger inline-flex items-center gap-1 cursor-pointer select-none">
-              <span className="text-xs text-[#333333]">{currentModelName}</span>
-              <ChevronDown
-                className={clsx(
-                  "trigger-arrow h-3.5 w-3.5 text-[#909399] transition-transform duration-300",
-                  modelPopoverOpen && "rotate-180"
-                )}
-              />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            side="top"
-            sideOffset={8}
-            className="simple-select-popover w-[200px] p-1 border-0 bg-[var(--bg-primary-overlay,white)] shadow-md"
-          >
-            <div className="simple-select-content flex flex-col max-h-[220px]">
-              <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
-                {modelsLLM.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={clsx(
-                      "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
-                      m.id === modelLLM
-                        ? "is-selected bg-[var(--bg-editor-save)] text-white"
-                        : "hover:bg-[var(--bg-hover,#f5f5f5)]"
-                    )}
-                    onClick={() => {
-                      setModelLLM(m.id)
-                      setModelPopoverOpen(false)
-                    }}
-                  >
-                    <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-[var(--text-primary,#303133)]")}>
-                      {m.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* 仅回答 */}
-        {onAnswerOnlyChange && (
-          <div className="answer-only-wrap">
-            {isShowAnswerTip && (
-              <div className="answer-tip-box">
-                <div className="answer-tip-content">
-                  <div className="answer-tip-line1">直接成文需要</div>
-                  <div className="answer-tip-line2">关闭仅回答哦！</div>
+          {/* 模型选择（对齐 Vue SimpleSelect 结构） */}
+          <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button type="button" className="simple-select-trigger inline-flex items-center gap-1 cursor-pointer select-none">
+                <span className="text-xs text-[#333333]">{currentModelName}</span>
+                <ChevronDown
+                  className={clsx(
+                    "trigger-arrow h-3.5 w-3.5 text-[#909399] transition-transform duration-300",
+                    modelPopoverOpen && "rotate-180"
+                  )}
+                />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              side="top"
+              sideOffset={8}
+              className="simple-select-popover w-[200px] p-1 border-0 bg-[var(--bg-primary-overlay,white)] shadow-md"
+            >
+              <div className="simple-select-content flex flex-col max-h-[220px]">
+                <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
+                  {modelsLLM.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={clsx(
+                        "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
+                        m.id === modelLLM
+                          ? "is-selected bg-[var(--bg-editor-save)] text-white"
+                          : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                      )}
+                      onClick={() => {
+                        setModelLLM(m.id)
+                        setModelPopoverOpen(false)
+                      }}
+                    >
+                      <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-[var(--text-primary,#303133)]")}>
+                        {m.name}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
-            <label className="answer-only-checkbox flex items-center gap-1.5 cursor-pointer text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={isAnswerOnly}
-                onChange={(e) => onAnswerOnlyChange(e.target.checked)}
-              />
-              <span>仅回答</span>
-            </label>
-          </div>
-        )}
+            </PopoverContent>
+          </Popover>
+
+          {/* 仅回答 */}
+          {onAnswerOnlyChange && (
+            <div className="answer-only-wrap">
+              {isShowAnswerTip && (
+                <div className="answer-tip-box">
+                  <div className="answer-tip-content">
+                    <div className="answer-tip-line1">直接成文需要</div>
+                    <div className="answer-tip-line2">关闭仅回答哦！</div>
+                  </div>
+                </div>
+              )}
+              <label className="answer-only-checkbox flex items-center gap-1.5 cursor-pointer text-xs text-foreground">
+                <input
+                  type="checkbox"
+                  checked={isAnswerOnly}
+                  onChange={(e) => onAnswerOnlyChange(e.target.checked)}
+                />
+                <span>仅回答</span>
+              </label>
+            </div>
+          )}
         </div>
       </div>
 
@@ -572,8 +640,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
           if (status === "streaming") {
             onStopStreaming?.()
           } else if (canMove) {
-            onSubmit()
-            if (clearOnSubmit) onChange("")
+            handleSubmitClick()
           }
         }}
         disabled={!isButtonClickable}
@@ -603,11 +670,6 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   return (
     <div
       className={clsx("quill-chat-input", className)}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault()
-        onDrop?.(e)
-      }}
     >
       <div className="todos-input-wrapper space-y-2">
         {/* 悬浮标签区域：与 Vue 对齐，按关联/笔记/文件/划词分组展示 */}
@@ -619,7 +681,12 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   {associationTags.slice(0, 7).map((tag, index) => (
                     <span
                       key={`assoc-${tag}-${index}`}
-                      className="association-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      className={clsx(
+                        "association-tag inline-flex cursor-pointer items-center gap-1 rounded-[12px] border px-2 py-0.5 text-xs text-[var(--text-primary)] transition-colors",
+                        hoveredDeleteIndex === index
+                          ? "bg-[var(--bg-hover)] border-[var(--border-hover)]"
+                          : "bg-white border-[var(--border-color)]"
+                      )}
                       onMouseEnter={() => setHoveredDeleteIndex(index)}
                       onMouseLeave={() => {
                         setHoveredDeleteIndex(null)
@@ -628,9 +695,9 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredDeleteIndex === index && "delete-mode",
-                          isDeleteIconHovered && hoveredDeleteIndex === index && "delete-hover"
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredDeleteIndex === index && "text-red-500",
+                          isDeleteIconHovered && hoveredDeleteIndex === index && "brightness-95"
                         )}
                         onClick={() => hoveredDeleteIndex === index ? removeAssociationTag(index) : null}
                         onMouseEnter={() => hoveredDeleteIndex === index ? setIsDeleteIconHovered(true) : null}
@@ -658,7 +725,12 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   {selectedNotes.slice(0, 7).map((note) => (
                     <span
                       key={`note-${note.id}`}
-                      className="note-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      className={clsx(
+                        "note-tag inline-flex cursor-pointer items-center gap-1 rounded-[.75rem] border px-2 py-0.5 text-xs transition-colors",
+                        hoveredNoteDeleteIndex === note.id
+                          ? "bg-[#fde68a] border-[#d97706] text-[#92400e]"
+                          : "bg-[#fef3c7] border-[#f59e0b] text-[#92400e]"
+                      )}
                       onMouseEnter={() => setHoveredNoteDeleteIndex(note.id)}
                       onMouseLeave={() => {
                         setHoveredNoteDeleteIndex(null)
@@ -667,9 +739,9 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredNoteDeleteIndex === note.id && "delete-mode",
-                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "delete-hover"
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredNoteDeleteIndex === note.id && "text-red-500",
+                          isNoteDeleteIconHovered && hoveredNoteDeleteIndex === note.id && "brightness-95"
                         )}
                         onClick={() => hoveredNoteDeleteIndex === note.id ? removeNote(note.id) : null}
                         onMouseEnter={() => hoveredNoteDeleteIndex === note.id ? setIsNoteDeleteIconHovered(true) : null}
@@ -698,11 +770,17 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
             {selectedFiles.length > 0 && (
               <div className="files-hints-inline">
                 <div className="files-hints-content flex flex-wrap gap-1.5">
-                  {selectedFiles.slice(0, 7).map((file) => (
+                  {selectedFiles.slice(0, 7).map((file, index) => (
                     <span
                       key={file.id}
-                      className="file-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
-                      onMouseEnter={() => setHoveredFileDeleteIndex(file.id)}
+                      className={clsx(
+                        "file-tag inline-flex items-center cursor-pointer gap-1 rounded-[12px] border px-2 py-0.5 text-xs transition-colors",
+                        hoveredFileDeleteIndex === index
+                          ? "bg-[#bae6fd] border-[#0284c7]"
+                          : "bg-[#e0f2fe] border-[#0891b2]",
+                        "text-[#0c4a6e]"
+                      )}
+                      onMouseEnter={() => setHoveredFileDeleteIndex(index)}
                       onMouseLeave={() => {
                         setHoveredFileDeleteIndex(null)
                         setIsFileDeleteIconHovered(false)
@@ -710,23 +788,23 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredFileDeleteIndex === file.id && "delete-mode",
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredFileDeleteIndex === index && "text-red-500",
                           isFileDeleteIconHovered &&
-                            hoveredFileDeleteIndex === file.id &&
-                            "delete-hover"
+                          hoveredFileDeleteIndex === index &&
+                          "brightness-95"
                         )}
                         onClick={() =>
-                          hoveredFileDeleteIndex === file.id ? removeFile(file.id) : null
+                          hoveredFileDeleteIndex === index ? removeFile(file.id) : null
                         }
                         onMouseEnter={() =>
-                          hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(true) : null
+                          hoveredFileDeleteIndex === index ? setIsFileDeleteIconHovered(true) : null
                         }
                         onMouseLeave={() =>
-                          hoveredFileDeleteIndex === file.id ? setIsFileDeleteIconHovered(false) : null
+                          hoveredFileDeleteIndex === index ? setIsFileDeleteIconHovered(false) : null
                         }
                       >
-                        {hoveredFileDeleteIndex === file.id ? (
+                        {hoveredFileDeleteIndex === index ? (
                           <Trash2 className="h-3 w-3 shrink-0" />
                         ) : (
                           <FileText className="h-3 w-3 shrink-0" />
@@ -748,7 +826,13 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   {selectedTexts.slice(0, 7).map((text) => (
                     <span
                       key={text.id}
-                      className="selected-text-tag inline-flex items-center gap-1 rounded-md bg-muted/80 px-2 py-0.5 text-xs text-foreground"
+                      className={clsx(
+                        "selected-text-tag inline-flex cursor-pointer max-w-[200px] items-center gap-1 rounded-[12px] border px-2 py-0.5 text-xs transition-colors",
+                        hoveredSelectedTextDeleteIndex === text.id
+                          ? "bg-[#bae6fd] border-[#0284c7]"
+                          : "bg-[#e0f2fe] border-[#0891b2]",
+                        "text-[#0c4a6e]"
+                      )}
                       onMouseEnter={() => setHoveredSelectedTextDeleteIndex(text.id)}
                       onMouseLeave={() => {
                         setHoveredSelectedTextDeleteIndex(null)
@@ -757,11 +841,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     >
                       <span
                         className={clsx(
-                          "tag-icon cursor-pointer",
-                          hoveredSelectedTextDeleteIndex === text.id && "delete-mode",
+                          "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+                          hoveredSelectedTextDeleteIndex === text.id && "text-red-500",
                           isSelectedTextDeleteIconHovered &&
-                            hoveredSelectedTextDeleteIndex === text.id &&
-                            "delete-hover"
+                          hoveredSelectedTextDeleteIndex === text.id &&
+                          "brightness-95"
                         )}
                         onClick={() =>
                           hoveredSelectedTextDeleteIndex === text.id
@@ -785,7 +869,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                           <FileText className="h-3 w-3 shrink-0" />
                         )}
                       </span>
-                      <span className="tag-text truncate max-w-[120px]">
+                      <span className="tag-text truncate max-w-[160px]">
                         {text.content.length > 20 ? `${text.content.slice(0, 20)}...` : text.content}
                       </span>
                     </span>
@@ -821,9 +905,61 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
           </div>
         )}
 
-        <div className="input-container-top-normal-container">
+        <div
+          className="input-container-top-normal-container relative"
+          onDragEnter={(e) => {
+            if (!isExternalFileDrag(e)) return
+            e.preventDefault()
+            e.stopPropagation()
+            setDragCounter((prev) => prev + 1)
+            setIsDraggingOver(true)
+          }}
+          onDragOver={(e) => {
+            if (!isExternalFileDrag(e)) return
+            e.preventDefault()
+            e.stopPropagation()
+            e.dataTransfer.dropEffect = "copy"
+          }}
+          onDragLeave={(e) => {
+            if (!isDraggingOver) return
+            e.preventDefault()
+            e.stopPropagation()
+            setDragCounter((prev) => {
+              const next = prev - 1
+              if (next <= 0) {
+                setIsDraggingOver(false)
+                return 0
+              }
+              return next
+            })
+          }}
+          onDrop={async (e) => {
+            if (isExternalFileDrag(e)) {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDraggingOver(false)
+              setDragCounter(0)
+              const files = e.dataTransfer.files
+              const file = files?.[0]
+              if (!file) return
+              if (isDropUploading) return
+              await handleDroppedFile(file)
+              return
+            }
+            e.preventDefault()
+            onDrop?.(e)
+          }}>
           {currentChannel ? (
-            <div className="rich-text-container">
+            <div className={clsx("rich-text-container", isDraggingOver && "drag-over")}>
+              {isDraggingOver && (
+                <div className="drag-overlay">
+                  <div className="drag-hint">
+                    <Upload className="drag-icon h-12 w-12" />
+                    <p className="drag-text">释放以上传文件</p>
+                    <p className="drag-subtext">支持 doc、docx、txt 格式，最大 10MB</p>
+                  </div>
+                </div>
+              )}
               <div className="rich-input-wrapper">
                 <div className={clsx("custom-rich-editor", { "has-error": status === "error" })}>
                   <div
@@ -888,7 +1024,16 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
               {renderBottomControls()}
             </div>
           ) : (
-            <div className="normal-input-container">
+            <div className={clsx("normal-input-container", isDraggingOver && "drag-over")}>
+              {isDraggingOver && (
+                <div className="drag-overlay">
+                  <div className="drag-hint">
+                    <Upload className="drag-icon h-12 w-12" />
+                    <p className="drag-text">释放以上传文件</p>
+                    <p className="drag-subtext">支持 doc、docx、txt 格式，最大 10MB</p>
+                  </div>
+                </div>
+              )}
               <div className="input-wrapper">
                 <textarea
                   value={value}

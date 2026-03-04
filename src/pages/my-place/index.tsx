@@ -61,12 +61,8 @@ export default function MyPlacePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { setSelectedWritingStyle, modelLLM, selectedWritingStyle } = useLLM()
-  const associationTags = useChatInputStore((s) => s.associationTags)
-  const selectedNotes = useChatInputStore((s) => s.selectedNotes)
-  const selectedFiles = useChatInputStore((s) => s.selectedFiles)
-  const selectedTexts = useChatInputStore((s) => s.selectedTexts)
-  const selectedTools = useChatInputStore((s) => s.selectedTools)
-  const isShowAnswerTip = useChatInputStore((s) => s.isShowAnswerTip)
+  const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes)
+  const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles)
 
   const [loading, setLoading] = useState(false)
   const [bannerConfig, setBannerConfig] = useState<{
@@ -180,7 +176,12 @@ export default function MyPlacePage() {
       const value = text.trim()
       if (!value) return
       try {
-        const req: any = await createWorkReq()
+        const selectedSnapshot = useChatInputStore.getState()
+        // 先触发创建作品请求，再清空当前输入区已选附件/笔记
+        const reqPromise = createWorkReq()
+        clearSelectedNotes()
+        clearSelectedFiles()
+        const req: any = await reqPromise
         if (req?.id) {
           sessionStorage.setItem(
             'editorInitialParams',
@@ -189,12 +190,12 @@ export default function MyPlacePage() {
               modelLLM,
               selectedWritingStyle,
               isAnswerOnly,
-              associationTags,
-              selectedNotes,
-              selectedFiles,
-              selectedTexts,
-              selectedTools,
-              isShowAnswerTip,
+              associationTags: selectedSnapshot.associationTags,
+              selectedNotes: selectedSnapshot.selectedNotes,
+              selectedFiles: selectedSnapshot.selectedFiles,
+              selectedTexts: selectedSnapshot.selectedTexts,
+              selectedTools: selectedSnapshot.selectedTools,
+              isShowAnswerTip: selectedSnapshot.isShowAnswerTip,
             })
           )
           navigate(`/editor/${req.id}`)
@@ -207,12 +208,8 @@ export default function MyPlacePage() {
       modelLLM,
       selectedWritingStyle,
       isAnswerOnly,
-      associationTags,
-      selectedNotes,
-      selectedFiles,
-      selectedTexts,
-      selectedTools,
-      isShowAnswerTip,
+      clearSelectedNotes,
+      clearSelectedFiles,
       navigate,
     ]
   )
