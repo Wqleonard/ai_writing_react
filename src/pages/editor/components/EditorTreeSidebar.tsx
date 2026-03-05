@@ -16,11 +16,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
-import { updateWorkInfoReq } from "@/api/works"
+import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
 import { serverDataToTree } from "@/stores/editorStore/utils"
 import type { FileTreeNode, ServerData } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
+import {
+  TagSelector as WorkflowTagSelector,
+  type TagCategoryDataItem,
+} from "@/components/StepWorkflow/components/TagSelector"
+import type { Tag as WorkflowTag } from "@/components/StepWorkflow/types"
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
@@ -147,6 +152,7 @@ interface TreeNodeRowProps {
   node: FileTreeNode
   level: number
   currentKey: string
+  onMarkNodeAsRead: (id: string) => void
   onSelect: (node: FileTreeNode) => void
   onAddFile: (node: FileTreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
@@ -168,6 +174,7 @@ const TreeNodeRow = ({
   node,
   level,
   currentKey,
+  onMarkNodeAsRead,
   onSelect,
   onAddFile,
   onContextMenu,
@@ -189,9 +196,10 @@ const TreeNodeRow = ({
   const showDropLine = dragState.dropTargetId === node.id
 
   const handleClick = useCallback(() => {
+    onMarkNodeAsRead(node.id)
     if (isMd) onSelect(node)
     else if (isDir) onToggleExpand(node.id)
-  }, [isMd, isDir, node, onSelect, onToggleExpand])
+  }, [isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
 
   return (
     <div className="w-full group/node">
@@ -257,10 +265,16 @@ const TreeNodeRow = ({
           unicode={getTreeIcon(node)}
           className="ml-1 shrink-0 text-sm text-[var(--text-secondary)]"
         />
-        <div className="ml-1 min-w-0 flex-1 truncate max-w-[calc(100%-50px)]">{node.label}</div>
-        {node.new && !isDir && (
-          <span className="shrink-0 text-[10px] text-red-500 font-medium">new</span>
-        )}
+        <div className="ml-1 min-w-0 flex-1 flex items-center gap-1 overflow-hidden">
+          <div className="inline-block min-w-0 max-w-[calc(100%-50px)] truncate align-top text-[14px] leading-[1.4]">
+            {node.label}
+          </div>
+          {node.new && !isDir && (
+            <span className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
+              new
+            </span>
+          )}
+        </div>
         {/* “+” 新增：仅目录节点显示，悬浮时可见 */}
         {isDir && (
           <div
@@ -290,6 +304,7 @@ const TreeNodeRow = ({
               node={child}
               level={level + 1}
               currentKey={currentKey}
+              onMarkNodeAsRead={onMarkNodeAsRead}
               onSelect={onSelect}
               onAddFile={onAddFile}
               onContextMenu={onContextMenu}
@@ -323,6 +338,8 @@ export const EditorTreeSidebar = ({
   const workId = useEditorStore((s) => s.workId)
   const serverData = useEditorStore((s) => s.serverData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
+  const newNodeIds = useEditorStore((s) => s.newNodeIds)
+  const clearNewNodeId = useEditorStore((s) => s.clearNewNodeId)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
@@ -343,6 +360,10 @@ export const EditorTreeSidebar = ({
   const [renameTarget, setRenameTarget] = useState<FileTreeNode | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tagSelectDialogOpen, setTagSelectDialogOpen] = useState(false)
+  const [tagCategories, setTagCategories] = useState<TagCategoryDataItem[]>([])
+  const [selectedTags, setSelectedTags] = useState<WorkflowTag[]>([])
+  const [tagSaving, setTagSaving] = useState(false)
   const [exportPopoverOpen, setExportPopoverOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
   const [dragState, setDragState] = useState<{
@@ -366,7 +387,16 @@ export const EditorTreeSidebar = ({
   const [tagsDragging, setTagsDragging] = useState(false)
   const dragStart = useRef({ x: 0, scrollLeft: 0 })
 
-  const treeData = useMemo(() => serverDataToTree(serverData), [serverData])
+  const treeData = useMemo(() => {
+    const newNodeIdSet = new Set(newNodeIds)
+    const attachNewFlags = (nodes: FileTreeNode[]): FileTreeNode[] =>
+      nodes.map((node) => ({
+        ...node,
+        new: !node.isDirectory && newNodeIdSet.has(node.id),
+        children: attachNewFlags(node.children ?? []),
+      }))
+    return attachNewFlags(serverDataToTree(serverData))
+  }, [newNodeIds, serverData])
 
   useEffect(()=>{
     console.log('serverData', serverData)
@@ -387,6 +417,82 @@ export const EditorTreeSidebar = ({
     document.addEventListener("click", onDocClick)
     return () => document.removeEventListener("click", onDocClick)
   }, [hideContextMenu])
+
+  const updateTagCategories = useCallback(async () => {
+    try {
+      const response: any = await getWorkTagsReq()
+      if (!Array.isArray(response)) {
+        setTagCategories([])
+        return
+      }
+      const next = response.map((group: any) => ({
+        category: String(group?.category ?? ""),
+        categoryId: String(group?.categoryId ?? ""),
+        max: Number(group?.max ?? 0),
+        tags: Array.isArray(group?.tags)
+          ? group.tags.map((tag: any) => ({
+              id: tag?.id,
+              name: String(tag?.name ?? ""),
+              isOfficial: String(tag?.userId ?? "") === "1",
+              category: String(group?.category ?? ""),
+              categoryId: String(group?.categoryId ?? ""),
+              max: Number(group?.max ?? 0),
+              userId: tag?.userId,
+            }))
+          : [],
+      }))
+      setTagCategories(next)
+    } catch (error) {
+      console.error("获取标签数据失败:", error)
+      setTagCategories([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!tagSelectDialogOpen) {
+      setSelectedTags([])
+      return
+    }
+    void (async () => {
+      await updateTagCategories()
+      setSelectedTags(
+        (workInfo.workTags ?? []).map((tag) => ({
+          id: tag.id,
+          name: tag.name,
+          userId: tag.userId,
+          isOfficial: String(tag.userId ?? "") === "1",
+          categoryId: tag.categoryId,
+        }))
+      )
+    })()
+  }, [tagSelectDialogOpen, updateTagCategories, workInfo.workTags])
+
+  const handleSaveTags = useCallback(async () => {
+    if (!workId || tagSaving) return
+    try {
+      setTagSaving(true)
+      const selectedTagIds = selectedTags
+        .map((tag) => Number(tag.id))
+        .filter((id) => Number.isFinite(id))
+      await updateWorkInfoReq(workId, { tagIds: selectedTagIds })
+      setWorkInfo({
+        workTags: selectedTags
+          .map((tag) => ({
+            id: Number(tag.id),
+            name: tag.name,
+            userId: String(tag.userId ?? ""),
+            categoryId: tag.categoryId,
+          }))
+          .filter((tag) => Number.isFinite(tag.id)),
+      })
+      setTagSelectDialogOpen(false)
+    } catch (error) {
+      console.error(error)
+      toast.error("保存失败,请稍后重试")
+    } finally {
+      setTagSaving(false)
+    }
+  }, [selectedTags, setWorkInfo, tagSaving, workId])
 
   const handleFinishTitle = useCallback(() => {
     const v = editingTitleValue.trim()
@@ -718,7 +824,13 @@ export const EditorTreeSidebar = ({
               role="button"
               tabIndex={0}
               className="shrink-0 cursor-pointer text-xs underline"
-              onClick={() => toast.info("暂未开放，敬请期待")}
+              onClick={() => setTagSelectDialogOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setTagSelectDialogOpen(true)
+                }
+              }}
             >
               编辑标签
             </div>
@@ -734,6 +846,7 @@ export const EditorTreeSidebar = ({
               node={node}
               level={0}
               currentKey={currentEditingId}
+              onMarkNodeAsRead={clearNewNodeId}
               onSelect={(n) => setCurrentEditingId(n.id)}
               onAddFile={handleAddFileUnder}
               onContextMenu={(e, node) => {
@@ -939,6 +1052,31 @@ export const EditorTreeSidebar = ({
             >
               确定删除
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tagSelectDialogOpen} onOpenChange={setTagSelectDialogOpen}>
+        <DialogContent
+          className="flex h-[80vh] max-h-[80vh] w-[820px] max-w-[95vw] flex-col overflow-hidden p-0"
+          showCloseButton
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-1 flex-col overflow-hidden p-[50px_32px]">
+            <WorkflowTagSelector
+              categories={tagCategories}
+              updateTagCategories={updateTagCategories}
+              selectedTags={selectedTags}
+              onSelectedTagsChange={setSelectedTags}
+            />
+          </div>
+          <DialogFooter className="flex flex-row-reverse gap-3 px-6 py-4">
+            <Button type="button" onClick={handleSaveTags} disabled={tagSaving}>
+              确定
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setTagSelectDialogOpen(false)}>
+              取消
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

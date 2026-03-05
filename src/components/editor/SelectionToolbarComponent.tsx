@@ -26,7 +26,7 @@ interface SelectionToolbarComponentProps {
   btns: SelectionToolbarAction[];
   onAdd?: (text: string) => void;
   onNote?: (text: string) => void;
-  onAction?: (action: SelectionToolbarAction, text: string) => void;
+  onAction?: (action: SelectionToolbarAction, text: string, fullText: string) => void;
   onPinnedChange?: (pinned: boolean) => void;
 }
 
@@ -190,6 +190,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
           action: chatType,
           originalText: snapshot.selectedText,
           query,
+          fullText: editor.getText(),
         },
         onStreamData,
         onStreamError,
@@ -302,7 +303,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
       return;
     }
 
-    onAction?.(action, selection.selectedText);
+    onAction?.(action, selection.selectedText, editor.getText());
     // if (action === "image") {
     //   openActionPanel(action, selection);
     //   void handleImage();

@@ -65,16 +65,57 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   const showQuickStart = isEditorEmpty ?? totalMdContentLength === 0
   const [enterActive, setEnterActive] = useState(false)
   const [enterSeed, setEnterSeed] = useState(0)
-  const workId = useEditorStore((s) => s.workId)
-  const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
-  const setServerData = useEditorStore((s) => s.setServerData)
-  const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
-  const saveEditorData = useEditorStore((s) => s.saveEditorData)
 
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: () => setStepCreateDialogShow(true),
   }), [])
 
+  const handleStepConfirm = useCallback(
+    async (data: StepSaveData) => {
+      setStepCreateDialogShow(false)
+      if (data.saveTarget !== "new") {
+        const guidedWritingNewNodeIds = [
+          "大纲.md",
+          "设定/角色设定.md",
+          "设定/故事设定.md",
+        ]
+        setServerData({
+          "大纲.md": data.outline || "",
+          "知识库/": "",
+          "设定/角色设定.md": generateRoleSetting(data.character),
+          "设定/故事设定.md": data.story?.intro || "",
+          "正文/第一章.md": "",
+        })
+        setNewNodeIds(guidedWritingNewNodeIds)
+        setCurrentEditingId("大纲.md")
+
+        const titleLine = data.story?.title?.trim() || "未命名作品"
+        setWorkInfo((prev) => ({ ...prev, title: titleLine, stage: "final" }))
+        if (workId) {
+          try {
+            await updateWorkInfoReq(workId, {
+              title: titleLine,
+              stage: "final",
+            })
+          } catch (error) {
+            console.error("[StepWorkflow] updateWorkInfoReq failed:", error)
+          }
+          await saveEditorData("1")
+        }
+      }
+      onStepConfirm?.(data)
+    },
+    [
+      generateRoleSetting,
+      onStepConfirm,
+      saveEditorData,
+      setCurrentEditingId,
+      setNewNodeIds,
+      setServerData,
+      setWorkInfo,
+      workId,
+    ]
+  )
 
   const handleStartItemClick = useCallback((mode: string) => {
     setStepCreateDialogShow(true)

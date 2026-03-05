@@ -31,6 +31,7 @@ import type {
   FileItem as FileItemType,
 } from "@/stores/chatStore";
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
+import type { ChatTabType } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
 import {
   getWorksByIdReq,
@@ -237,7 +238,13 @@ const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string,
 };
 
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
-function CanvasToolbar({ apiRef }: { apiRef: RefObject<InsCanvasApi | null> }) {
+function CanvasToolbar({
+  apiRef,
+  currentSessionId,
+}: {
+  apiRef: RefObject<InsCanvasApi | null>
+  currentSessionId: string
+}) {
   const api = apiRef.current;
   if (!api) return null;
   return (
@@ -268,7 +275,7 @@ function CanvasToolbar({ apiRef }: { apiRef: RefObject<InsCanvasApi | null> }) {
         variant="ghost"
         size="icon"
         disabled={!api.inspirationDrawId}
-        onClick={() => void api.saveCanvas()}
+        onClick={() => void api.saveCanvas(currentSessionId)}
         title={api.inspirationDrawId ? "保存画布" : "请先创建画布"}
         aria-label="保存画布"
       >
@@ -722,6 +729,7 @@ const MarkdownEditorPage = () => {
   const [leftPanelWidthRem, setLeftPanelWidthRem] = useState(LEFT_DEFAULT_REM);
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
   const [rightPanelWidthRem, setRightPanelWidthRem] = useState(RIGHT_DEFAULT_REM);
+  const preCanvasRightWidthRemRef = useRef<number | null>(null);
   const dragStartRightRem = useRef(RIGHT_DEFAULT_REM);
   const dragStartRightPx = useRef(RIGHT_DEFAULT_REM * REM_BASE);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
@@ -1040,6 +1048,37 @@ const MarkdownEditorPage = () => {
     const newWidthPx = Math.max(effectiveMinRightPx, Math.min(maxRightPx, rawPx));
     setRightPanelWidthRem(newWidthPx / remBase);
   }, [leftPanelWidthRem]);
+
+  const maximizeRightPanel = useCallback(() => {
+    const el = resizeContainerRef.current;
+    const contentWidthPx = el ? el.clientWidth - CONTAINER_PADDING_PX : 0;
+    if (contentWidthPx <= 0) return;
+    const remBase = getRootRemPx();
+    const leftWidthPx = leftPanelRef.current?.offsetWidth ?? leftPanelWidthRem * remBase;
+    const maxRightPx = Math.max(
+      0,
+      contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase
+    );
+    setRightPanelWidthRem(maxRightPx / remBase);
+  }, [leftPanelWidthRem]);
+
+  const handleChatHeaderTabChange = useCallback(
+    (tab: ChatTabType) => {
+      if (tab === "canvas") {
+        if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
+          preCanvasRightWidthRemRef.current = rightPanelWidthRem;
+        }
+        maximizeRightPanel();
+      } else if (tab === "chat" && activeTab === "canvas") {
+        if (preCanvasRightWidthRemRef.current != null) {
+          setRightPanelWidthRem(preCanvasRightWidthRemRef.current);
+          preCanvasRightWidthRemRef.current = null;
+        }
+      }
+      setActiveTab(tab);
+    },
+    [activeTab, maximizeRightPanel, rightPanelWidthRem]
+  );
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
   const currentFileChanges = useMemo(
@@ -1922,14 +1961,17 @@ const MarkdownEditorPage = () => {
             activeTab={activeTab}
             currentSessionId={currentSessionId}
             workId={workId}
-            onTabChange={setActiveTab}
+            onTabChange={handleChatHeaderTabChange}
             onNewChat={() => createNewSession(activeTab)}
             onSwitchSession={(id) => loadSession(activeTab, id)}
             onSaveCurrentSession={() => saveCurrentSession(activeTab)}
             checkStreamingStatusAndConfirm={async () => true}
             canvasActionsSlot={
               activeTab === "canvas" ? (
-                <CanvasToolbar apiRef={insCanvasRef} />
+                <CanvasToolbar
+                  apiRef={insCanvasRef}
+                  currentSessionId={currentSessionId}
+                />
               ) : null
             }
           />

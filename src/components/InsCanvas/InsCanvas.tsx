@@ -51,7 +51,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
   export interface InsCanvasApi {
     addNewCanvas: () => void;
     openHistory: () => void;
-    saveCanvas: () => void;
+    saveCanvas: (sessionId?: string) => void;
     inspirationDrawId: string;
     isLoading: boolean;
   }
@@ -197,8 +197,8 @@ import { saveInspirationCanvasReq } from "@/api/works";
     const errorBatchRef = useRef<{ startedAt: number; messages: Set<string> } | null>(null);
     // 当前缩放百分比（用于右下角 UI 展示）
     const [zoomPercent, setZoomPercent] = useState(100);
-    // 是否处于“手型拖动画布”模式
-    const [panMode, setPanMode] = useState(false);
+    // 画布拖拽总开关（默认开启，支持按钮一键关闭）
+    const [panMode, setPanMode] = useState(true);
   
     const tree = useMemo(() => convertToTreeStructure(nodes, edges), [nodes, edges]);
   
@@ -914,7 +914,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
       setInspirationDrawId("");
     }, [setNodes, setEdges]);
 
-    const handleSaveCanvas = useCallback(async () => {
+    const handleSaveCanvas = useCallback(async (sessionId?: string) => {
       if (!inspirationDrawId) {
         msg("warning", "请先创建画布");
         return;
@@ -923,7 +923,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
         await saveInspirationCanvasReq(inspirationDrawId, {
           nodes: nodes as unknown[],
           edges: edges as unknown[],
-        });
+        }, sessionId);
         msg("success", "保存成功");
       } catch {
         msg("error", "保存失败，请稍后重试");
@@ -1095,19 +1095,13 @@ import { saveInspirationCanvasReq } from "@/api/works";
                   },
                 }}
                 defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+                onPaneContextMenu={(e) => e.preventDefault()}
                 zoomOnScroll={canInteract}
                 zoomOnPinch={canInteract}
-                // 避免左键拖动画布吞掉节点内部点击（按钮/输入框等）
-                // 仅允许中键/右键拖动平移画布
-                panOnDrag={
-                  canInteract
-                    ? panMode
-                      ? true // 手型模式下允许任意按键拖动画布
-                      : [1, 2] // 默认只允许中键/右键拖动画布
-                    : false
-                }
+                // 画布空白区支持左/中/右键拖拽；可通过手型按钮关闭
+                panOnDrag={canInteract && panMode ? [0, 1, 2] : false}
                 panOnScroll={canInteract}
-                panActivationKeyCode={canInteract ? 'Space' : null}
+                panActivationKeyCode={canInteract && panMode ? 'Space' : null}
                 nodesDraggable={canInteract}
                 elementsSelectable={canInteract}
                 nodesConnectable={canInteract}
@@ -1130,7 +1124,8 @@ import { saveInspirationCanvasReq } from "@/api/works";
                     className="bg-background/90 !rounded-full shadow-sm border px-1 py-2 flex flex-col items-stretch gap-2"
                   >
                     <ControlButton
-                      aria-label="Toggle pan mode"
+                      aria-label={panMode ? "关闭画布拖拽" : "开启画布拖拽"}
+                      title={panMode ? "关闭画布拖拽" : "开启画布拖拽"}
                       onClick={() => setPanMode((v) => !v)}
                       className={panMode ? "!bg-primary !text-white !rounded-full" : "!rounded-full"}
                     >
