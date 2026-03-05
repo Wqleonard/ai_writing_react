@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import type { PostStreamData } from "@/api";
 import { generateImage, postSelectionToolbarStream } from "@/api/selection-toolbar";
@@ -79,7 +79,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     });
   };
 
-  const closePanel = () => {
+  const closePanel = (notifyPinned = true) => {
     if (streamAbortRef.current) {
       streamAbortRef.current.abort();
       streamAbortRef.current = null;
@@ -88,7 +88,9 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     setChatLoading(false);
     setChatArr([]);
     setInputVal("");
-    onPinnedChange?.(false);
+    if (notifyPinned) {
+      onPinnedChange?.(false);
+    }
   };
 
   const handleBack = () => {
@@ -312,6 +314,12 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     openActionPanel(action, selection);
   };
 
+  useEffect(() => {
+    return () => {
+      closePanel(false);
+    }
+  },[])
+
   return (
     <div
       className="min-w-[128px] rounded-[10px]  bg-white p-1"
@@ -352,7 +360,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 type="button"
                 className="h-6 w-6 cursor-pointer rounded-sm text-[#61616f] hover:bg-[#e8e8e8]"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={closePanel}
+                onClick={() => closePanel()}
               >
                 <IconFont unicode="&#xe633;" className="h-6 w-6 text-center text-base leading-6" />
               </button>
