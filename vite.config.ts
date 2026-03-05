@@ -4,6 +4,7 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import viteCompression from 'vite-plugin-compression'
 import terser from './terser.config'
+import visualizer from "rollup-plugin-visualizer";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -34,6 +35,10 @@ export default defineConfig(({ mode }) => {
         threshold: 10240,
         deleteOriginFile: false,
       }),
+      visualizer({
+        open: true,
+        filename: 'bundle-analysis.html'
+      })
     ].flat() as PluginOption[],
     resolve: {
       alias: {
@@ -48,6 +53,42 @@ export default defineConfig(({ mode }) => {
     build: {
       minify: 'terser',
       terserOptions: terser as TerserOptions,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+
+            if (/node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) {
+              return 'vendor-react'
+            }
+
+            if (/node_modules[\\/]@tiptap[\\/]/.test(id)) {
+              return 'vendor-tiptap'
+            }
+
+            if (id.includes('markdown-it') || id.includes('highlight.js')) {
+              return 'vendor-markdown'
+            }
+
+            if (id.includes('mermaid')) {
+              return 'vendor-mermaid'
+            }
+
+            if (
+              id.includes('cytoscape') ||
+              id.includes('cose-bilkent') ||
+              id.includes('dagre') ||
+              id.includes('@xyflow')
+            ) {
+              return 'vendor-graph'
+            }
+
+            if (id.includes('katex')) {
+              return 'vendor-katex'
+            }
+          },
+        },
+      },
     }
   }
 })

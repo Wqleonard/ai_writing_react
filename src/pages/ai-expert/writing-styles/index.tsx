@@ -86,6 +86,8 @@ const WritingStylesPage = () => {
   const [newAddStyleId, setNewAddStyleId] = useState('')
   const [newAddStyleName, setNewAddStyleName] = useState('')
 
+  const isLoggedIn = useLoginStore(s=>s.isLoggedIn)
+
   useEffect(() => {
     const next = chatArr
       .filter((chat) => chat.type === 'ai')
@@ -100,6 +102,7 @@ const WritingStylesPage = () => {
   }, [])
 
   const fetchHistoryList = useCallback(async () => {
+    if (!isLoggedIn) return
     try {
       const list = await getWritingStyleHistoryList()
       if (Array.isArray(list)) {
@@ -121,7 +124,7 @@ const WritingStylesPage = () => {
     } catch {
       // ignore
     }
-  }, [])
+  }, [isLoggedIn])
 
   const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
 
@@ -131,10 +134,11 @@ const WritingStylesPage = () => {
 
   useEffect(() => {
     (async () => {
+      if (!isLoggedIn) return
       fetchHistoryList()
       await completeNewbieMissionByCode('USE_WRITING_STYLE')
     })()
-  }, [])
+  }, [completeNewbieMissionByCode, fetchHistoryList, isLoggedIn])
 
 
   const onStreamData = useCallback((data: PostStreamData) => {

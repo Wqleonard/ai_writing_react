@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, redirect, type RouteObject } from 'react-router-dom'
 import { lazy } from 'react'
 
 // 首屏关键组件保持同步导入
@@ -35,6 +35,14 @@ const MRulesPage = lazy(() => import("@/m-pages/rules"));
 const MFeedbackIssuePage = lazy(() => import("@/m-pages/feedback-issue"));
 const MUserAgreementPage = lazy(() => import("@/m-pages/user-agreement"));
 const MPrivacyPolicyPage = lazy(() => import("@/m-pages/privacy-policy"));
+
+const editorAuthMiddleware = () => {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    throw redirect('/workspace/my-place')
+  }
+  return null
+}
 
 const routes: RouteObject[] = [
   {
@@ -98,6 +106,7 @@ const routes: RouteObject[] = [
       {
         path: '/editor/:workId',
         element: <MarkdownEditorPage/>,
+        loader: editorAuthMiddleware,
       },
       {
         path: '/m',

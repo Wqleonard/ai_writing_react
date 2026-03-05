@@ -237,6 +237,10 @@ export default function MyPlacePage() {
         toast.error('作品ID不存在，无法跳转')
         return
       }
+      if (data.workType != 'editor'){
+        toast.error('敬请期待！')
+        return
+      }
       setLoading(true)
       try {
         navigate(`/editor/${data.id}`, { state: { workId: data.id } })
@@ -502,7 +506,7 @@ export default function MyPlacePage() {
                   />
                 ))}
                 {isLoadingMore ? (
-                  <div className="loading-more col-span-full py-5 text-center text-sm text-primary">
+                  <div className="col-span-full py-5 text-center text-sm text-(--theme-color)">
                     加载中...
                   </div>
                 ) : null}
