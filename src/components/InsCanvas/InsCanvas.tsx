@@ -40,6 +40,7 @@ import {
   } from "./types";
 import { Iconfont } from "../IconFont";
 import { saveInspirationCanvasReq } from "@/api/works";
+import { useCanvasStore } from "@/stores/canvasStore";
   
   const nodeTypes = {
     mainCard: MainCardNode,
@@ -47,7 +48,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
     settingCard: SettingCardNode,
     outlineCard: OutlineCardNode,
   };
-  
+
   export interface InsCanvasApi {
     addNewCanvas: () => void;
     openHistory: () => void;
@@ -199,6 +200,9 @@ import { saveInspirationCanvasReq } from "@/api/works";
     const [zoomPercent, setZoomPercent] = useState(100);
     // 画布拖拽总开关（默认开启，支持按钮一键关闭）
     const [panMode, setPanMode] = useState(true);
+    const getOrCreateCanvasSessionId = useCanvasStore((s) => s.getOrCreateCanvasSessionId);
+    const createNewCanvasSessionId = useCanvasStore((s) => s.createNewCanvasSessionId);
+    const clearCanvasSessionId = useCanvasStore((s) => s.clearCanvasSessionId);
   
     const tree = useMemo(() => convertToTreeStructure(nodes, edges), [nodes, edges]);
   
@@ -632,8 +636,9 @@ import { saveInspirationCanvasReq } from "@/api/works";
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
-        const baseX = source.position.x + 475;
-        const spacing = 278;
+        // 与其它节点保持一致的横向距离，避免大纲节点离父节点过远
+        const baseX = source.position.x + 400;
+        const spacing = V_SPACING - 20;
         const ph = (source as any).measured?.height ?? (source as CustomNode).dimensions?.height ?? 200;
         const centerY = source.position.y + ph / 2;
         const secondY = centerY - 230 / 2;
@@ -672,7 +677,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
         setNodes((nds) => [...nds, ...newNodes]);
         setEdges((eds) => [...eds, ...newEdges]);
       },
-      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges]
+      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, V_SPACING]
     );
   
     const addOutlineCard = useCallback(
@@ -906,15 +911,16 @@ import { saveInspirationCanvasReq } from "@/api/works";
       },
       [inspirationDrawId, setNodes, msg]
     );
-  
+
     const addNewCanvas = useCallback(() => {
       setIsLoading(false);
       setNodes([]);
       setEdges([]);
       setInspirationDrawId("");
-    }, [setNodes, setEdges]);
+      createNewCanvasSessionId(workId);
+    }, [createNewCanvasSessionId, setNodes, setEdges, workId]);
 
-    const handleSaveCanvas = useCallback(async (sessionId?: string) => {
+    const handleSaveCanvas = useCallback(async (sessionIdOverride?: string) => {
       if (!inspirationDrawId) {
         msg("warning", "请先创建画布");
         return;
@@ -923,12 +929,23 @@ import { saveInspirationCanvasReq } from "@/api/works";
         await saveInspirationCanvasReq(inspirationDrawId, {
           nodes: nodes as unknown[],
           edges: edges as unknown[],
-        }, sessionId);
+        });
         msg("success", "保存成功");
       } catch {
         msg("error", "保存失败，请稍后重试");
       }
-    }, [inspirationDrawId, nodes, edges, msg]);
+    }, [inspirationDrawId, nodes, edges, msg, getOrCreateCanvasSessionId, workId]);
+
+    const getCanvasSessionId = useCallback(() => {
+      if (!workId) return "";
+      return getOrCreateCanvasSessionId(workId);
+    }, [getOrCreateCanvasSessionId, workId]);
+
+    useEffect(() => {
+      return () => {
+        clearCanvasSessionId(workId);
+      };
+    }, [clearCanvasSessionId, workId]);
 
     const openHistory = useCallback(() => setHistoryDialogShow(true), []);
 
@@ -1000,6 +1017,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
           // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
         handleOutlineExpand: () => setTimeout(autoLayout, 100),
+        getCanvasSessionId,
         msg,
       }),
       [
@@ -1013,6 +1031,7 @@ import { saveInspirationCanvasReq } from "@/api/works";
         addSettingCard,
         handleOutlineGenerate,
         addOutlineCard,
+        getCanvasSessionId,
         msg
       ]
     );

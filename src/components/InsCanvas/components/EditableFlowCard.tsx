@@ -9,6 +9,7 @@ import type { MarkdownEditorRef } from "@/components/MarkdownEditor";
 import type { CustomNodeData } from "@/components/InsCanvas/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
+import { useInsCanvasHandlers } from "@/components/InsCanvas/InsCanvasContext";
 
 // React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
 // 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
@@ -49,6 +50,7 @@ export default function EditableFlowCard({
   onExpand,
 }: EditableFlowCardProps) {
   const { updateNode, updateNodeData, setEdges, getEdges, getNodes } = useReactFlow();
+  const { getCanvasSessionId } = useInsCanvasHandlers();
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(data.content || "");
   const streamContentRef = useRef("");
@@ -287,20 +289,20 @@ export default function EditableFlowCard({
 
   // 获取当前节点的子节点
   const children = (getEdges() || []).filter((e: any) => e.source === id).map((e: any) => e.target);
-
   const startStream = async () => {
     shownErrorMessagesRef.current = new Set();
     // 先占位，避免 handleRefresh 后 effect 再跑一次导致重复请求
     streamingStartedRef.current = true;
     startedStreamNodeIds.add(id);
-
     try {
+      const sessionId = getCanvasSessionId() || undefined;
       const reqData = {
         inspirationWord: String(data.inspirationWord ?? ""),
         inspirationTheme: String(data.inspirationTheme ?? ""),
         shortSummary: data.shortSummary ? String(data.shortSummary) : undefined,
         storySetting: data.storySetting ? String(data.storySetting) : undefined,
         modelEndpoint: "KIMI_K2_ENDPOINT",
+        sessionId,
       };
 
       setIsStreaming(true);
@@ -554,7 +556,8 @@ export default function EditableFlowCard({
       {!children.length && !isStreaming && (
         <div
           className={cn(
-            "absolute right-[-164px] top-1/2 -translate-y-1/2 flex items-center gap-3 pl-3 z-10 transition-opacity",
+            "absolute top-1/2 -translate-y-1/2 flex items-center z-10 transition-opacity",
+            type === "outlineCard" ? "right-[-132px] gap-2 pl-2" : "right-[-164px] gap-3 pl-3",
             showFloatingButtons ? "opacity-100 visible" : "opacity-0 invisible"
           )}
           onMouseEnter={showFloatingButtonsNow}

@@ -1,6 +1,6 @@
 import * as React from 'react'
-import { useCallback, useEffect, useState, useRef } from 'react'
-import { Dialog, DialogContent, DialogTitle, DialogClose, VisuallyHidden } from '@/components/ui/Dialog'
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react'
+import { Dialog, DialogContent, DialogTitle, VisuallyHidden } from '@/components/ui/Dialog'
 import { Iconfont } from '@/components/IconFont'
 import {
   Select,
@@ -11,13 +11,17 @@ import {
 } from '@/components/ui/Select'
 import { getUserBalanceReq, getInvitationCodeReq } from '@/api/users'
 import { getOrderHistory, type Order } from '@/api/order'
-import type { OrderTypeFilter } from '@/api/order'
 import { formatLocalTime } from '@/utils/formatLocalTime'
-import { ORDER_CODE_VALUE } from '@/utils/constant'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import {
+  aggregateOrdersBySession,
+  filterToOrderType,
+  formatPoints,
+  getDetailText,
+  getPointsClass,
+} from './utils'
 
-import closeIcon from '@/assets/images/quota/close.svg'
 import topUpIcon from '@/assets/images/quota/top_up.svg'
 import exchangeIcon from '@/assets/images/quota/exchange.svg'
 import invitationIcon from '@/assets/images/quota/invitation.svg'
@@ -25,7 +29,6 @@ import separateWhiteIcon from '@/assets/images/quota/separate_white.svg'
 import separateYellowIcon from '@/assets/images/quota/separate_yellow.svg'
 import quotaBackImg from '@/assets/images/quota/quota_back.png'
 import { openDialog } from '@/lib/openDialog'
-import { Button } from '../ui/Button'
 
 export interface QuotaDialogProps {
   open: boolean
@@ -38,12 +41,6 @@ const USAGE_FILTER_OPTIONS = [
   { id: '2', name: '消耗' },
 ] as const
 const PAGE_SIZE = 20
-
-const filterToOrderType = (id: string): OrderTypeFilter => {
-  if (id === '1') return 'INCREASE'
-  if (id === '2') return 'DECREASE'
-  return 'ALL'
-}
 
 export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   const [view, setView] = useState<'quota' | 'usage'>('quota')
@@ -61,6 +58,7 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   const [hasMoreUsage, setHasMoreUsage] = useState(true)
   const usagePageRef = useRef(-1)
   const usageContentRef = useRef<HTMLDivElement>(null)
+  const usageScrollTickingRef = useRef(false)
 
   const updateQuota = useCallback(async () => {
     try {
@@ -134,14 +132,12 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
       }
       const list = data.content
       if (list.length > 0) {
-        setOrdersList(prev => [...prev, ...list])
+        setOrdersList(prev => aggregateOrdersBySession([...prev, ...list]))
         usagePageRef.current = nextPage
       }
-      const totalAfter = ordersList.length + list.length
       const noMore =
         list.length < PAGE_SIZE ||
-        (data.totalPages != null && nextPage >= data.totalPages - 1) ||
-        (data.totalElements != null && totalAfter >= data.totalElements)
+        (data.totalPages != null && nextPage >= data.totalPages - 1)
       if (noMore) setHasMoreUsage(false)
     } catch {
       setHasMoreUsage(false)
@@ -149,7 +145,7 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
       setIsLoadingUsage(false)
       setIsLoadingMoreUsage(false)
     }
-  }, [usageFilterType, isLoadingUsage, isLoadingMoreUsage, hasMoreUsage, ordersList.length])
+  }, [usageFilterType, isLoadingUsage, isLoadingMoreUsage, hasMoreUsage])
 
   const resetAndLoadUsage = useCallback(async () => {
     setOrdersList([])
@@ -167,12 +163,11 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
         setHasMoreUsage(false)
         return
       }
-      setOrdersList(data.content)
+      setOrdersList(aggregateOrdersBySession(data.content))
       usagePageRef.current = 0
       const noMore =
         data.content.length < PAGE_SIZE ||
-        (data.totalPages != null && 0 >= data.totalPages - 1) ||
-        (data.totalElements != null && data.content.length >= data.totalElements)
+        (data.totalPages != null && 0 >= data.totalPages - 1)
       if (noMore) setHasMoreUsage(false)
     } catch {
       setHasMoreUsage(false)
@@ -182,10 +177,16 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   }, [usageFilterType])
 
   const handleUsageScroll = useCallback(() => {
-    const el = usageContentRef.current
-    if (!el) return
-    const { scrollTop, scrollHeight, clientHeight } = el
-    if (scrollHeight - scrollTop - clientHeight < 50) loadMoreUsage()
+    if (usageScrollTickingRef.current) return
+    usageScrollTickingRef.current = true
+    requestAnimationFrame(() => {
+      const el = usageContentRef.current
+      if (el) {
+        const { scrollTop, scrollHeight, clientHeight } = el
+        if (scrollHeight - scrollTop - clientHeight < 50) loadMoreUsage()
+      }
+      usageScrollTickingRef.current = false
+    })
   }, [loadMoreUsage])
 
   const handleOpenUsageDetails = useCallback(() => {
@@ -217,27 +218,23 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
     [onOpenChange]
   )
 
-  const getDetailText = useCallback((order: Order): string => {
-    if (order.function && ORDER_CODE_VALUE[order.function]) return ORDER_CODE_VALUE[order.function]
-    return order.function || order.orderType || '—'
-  }, [])
-
-  const formatPoints = useCallback((order: Order): string => {
-    return parseFloat(Number(order.totalCost) / 1000 + '').toFixed(2)
-  }, [])
-
-  const getPointsClass = useCallback((order: Order): string => {
-    const val = Math.abs(order.totalCost ?? 0)
-    if (val === 0) return ''
-    if (order.orderType === 'DECREASE') return 'text-[#f56c6c]'
-    return 'text-[#67c23a]'
-  }, [])
+  const usageRows = useMemo(
+    () =>
+      ordersList.map((order) => ({
+        id: order.id,
+        detailText: getDetailText(order),
+        createdTimeText: formatLocalTime(order.createdTime),
+        pointsText: formatPoints(order),
+        pointsClass: getPointsClass(order),
+      })),
+    [ordersList]
+  )
 
   useEffect(() => {
     if (view === 'usage') {
-      resetAndLoadUsage()
+      void resetAndLoadUsage()
     }
-  }, [view, usageFilterType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, usageFilterType, resetAndLoadUsage])
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -318,35 +315,35 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
                   onScroll={handleUsageScroll}
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                  {isLoadingUsage && ordersList.length === 0 ? (
+                  {isLoadingUsage && usageRows.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#8c8c8c]">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span>加载中...</span>
                     </div>
                   ) : (
                     <>
-                      {ordersList.map((order, index) => (
+                      {usageRows.map((row, index) => (
                         <div
-                          key={order.id}
+                          key={row.id}
                           className={`flex items-center px-5 py-3.5 text-sm text-[#666] border-b border-[#f0f0f0] ${index % 2 === 0 ? 'bg-[#ebebeb]' : 'bg-white'}`}
                         >
                           <div
                             className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left"
-                            title={getDetailText(order)}
+                            title={row.detailText}
                           >
-                            {getDetailText(order)}
+                            {row.detailText}
                           </div>
                           <div className="w-[200px] shrink-0 text-left">
-                            {formatLocalTime(order.createdTime)}
+                            {row.createdTimeText}
                           </div>
                           <div
-                            className={`w-[110px] shrink-0 text-left font-medium ${getPointsClass(order)}`}
+                            className={`w-[110px] shrink-0 text-left font-medium ${row.pointsClass}`}
                           >
-                            {formatPoints(order)}
+                            {row.pointsText}
                           </div>
                         </div>
                       ))}
-                      {ordersList.length === 0 && (
+                      {usageRows.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-[60px] px-5 text-[#8c8c8c] text-sm">
                           暂无使用记录
                         </div>

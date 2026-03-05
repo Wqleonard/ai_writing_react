@@ -110,6 +110,7 @@ interface PostInspirationStreamData {
   shortSummary?: string;
   storySetting?: string;
   modelEndpoint?: string;
+  sessionId?: string;
 }
 
 const postInspirationStream = (
@@ -151,12 +152,9 @@ const updateInspirationDrawReq = (
 const saveInspirationCanvasReq = (
   inspirationDrawId: string | number,
   canvas: { nodes: unknown[]; edges: unknown[] },
-  sessionId?: string
 ) => {
-  console.log(sessionId, 'sessionId')
   return apiClient.put(`/api/works/inspiration-draw/${inspirationDrawId}`, {
     content: JSON.stringify(canvas),
-    ...(sessionId ? { sessionId } : {}),
   });
 };
 

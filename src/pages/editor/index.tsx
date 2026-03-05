@@ -240,10 +240,8 @@ const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string,
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
 function CanvasToolbar({
   apiRef,
-  currentSessionId,
 }: {
   apiRef: RefObject<InsCanvasApi | null>
-  currentSessionId: string
 }) {
   const api = apiRef.current;
   if (!api) return null;
@@ -275,7 +273,7 @@ function CanvasToolbar({
         variant="ghost"
         size="icon"
         disabled={!api.inspirationDrawId}
-        onClick={() => void api.saveCanvas(currentSessionId)}
+        onClick={() => void api.saveCanvas()}
         title={api.inspirationDrawId ? "保存画布" : "请先创建画布"}
         aria-label="保存画布"
       >
@@ -396,7 +394,7 @@ const MarkdownEditorPage = () => {
       ? chatCurrentSession?.id ?? ""
       : activeTab === "faq"
         ? faqCurrentSession?.id ?? ""
-        : "";
+        : chatCurrentSession?.id ?? "";
 
   const { modelLLM, selectedWritingStyle, setModelLLM, setSelectedWritingStyle } = useLLM();
   const streamingMessageRef = useRef<ChatMessage | null>(null);
@@ -1970,7 +1968,6 @@ const MarkdownEditorPage = () => {
               activeTab === "canvas" ? (
                 <CanvasToolbar
                   apiRef={insCanvasRef}
-                  currentSessionId={currentSessionId}
                 />
               ) : null
             }

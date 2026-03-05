@@ -16,6 +16,7 @@ export interface InsCanvasHandlers {
   handleOutlineDelete: (nodeId: string) => void;
   handleOutlineUpdate: (nodeId: string, content: string) => void;
   handleOutlineExpand: (nodeId: string) => void;
+  getCanvasSessionId: () => string;
   msg: (type: "success" | "error" | "warning", msg: string) => void;
 }
 
@@ -35,6 +36,7 @@ const defaultValue: InsCanvasHandlers = {
   handleOutlineDelete: () => {},
   handleOutlineUpdate: () => {},
   handleOutlineExpand: () => {},
+  getCanvasSessionId: () => "",
   msg: () => {},
 };
 
