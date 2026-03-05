@@ -419,7 +419,7 @@ export default function EditableFlowCard({
         "bg-card shadow-sm border border-border",
         "group transition-all duration-200 ease-out",
          // 展开时加宽并适度增高，方便阅读更多内容
-         isExpanded ? "w-[560px] min-h-[500px]" : "w-[250px] min-h-[200px]",
+         isExpanded ? "w-[1120px] h-[500px]" : "w-[250px] min-h-[200px]",
         "min-h-[200px]",
         isEditing && "nodrag nopan"
       )}
@@ -484,7 +484,7 @@ export default function EditableFlowCard({
             onPointerDown={isEditing ? (e) => e.stopPropagation() : undefined}
           >
             <AutoScrollArea
-              maxHeight={isExpanded ? "none" : 150}
+              maxHeight={isExpanded ? 400 : 150}
               autoScroll={isStreaming && !isEditing}
               className={cn("relative w-full cursor-pointer")}
               onWheel={handleWheel}

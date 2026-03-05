@@ -6,6 +6,7 @@ export interface InsCanvasHandlers {
   handleSummaryAdd: (nodeId: string) => void;
   handleSummaryDelete: (nodeId: string) => void;
   handleSummaryUpdate: (nodeId: string, content: string) => void;
+  handleSummaryExpand: (nodeId: string) => void;
   handleSettingGenerate: (nodeId: string) => void;
   handleSettingAdd: (nodeId: string) => void;
   handleSettingDelete: (nodeId: string) => void;
@@ -26,6 +27,7 @@ const defaultValue: InsCanvasHandlers = {
   handleSummaryAdd: () => {},
   handleSummaryDelete: () => {},
   handleSummaryUpdate: () => {},
+  handleSummaryExpand: () => {},
   handleSettingGenerate: () => {},
   handleSettingAdd: () => {},
   handleSettingDelete: () => {},

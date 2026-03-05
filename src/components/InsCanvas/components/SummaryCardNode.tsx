@@ -15,6 +15,7 @@ export default function SummaryCardNode(props: any) {
       onAdd={handlers.handleSummaryAdd}
       onDelete={handlers.handleSummaryDelete}
       onUpdate={handlers.handleSummaryUpdate}
+      onExpand={handlers.handleSummaryExpand}
       msg={handlers.msg}
     />
   );

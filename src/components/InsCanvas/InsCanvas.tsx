@@ -173,10 +173,6 @@ import { useCanvasStore } from "@/stores/canvasStore";
     onCanvasReady,
     canvasRef,
   }: InsCanvasInnerProps) {
-    const CARD_MIN_HEIGHT = 200;
-    const CARD_V_GAP = 100; // 节点间垂直间隙，避免重叠
-    const V_SPACING = CARD_MIN_HEIGHT + CARD_V_GAP; // 保证多节点生成时不会上下重叠
-
     const containerRef = useRef<HTMLDivElement>(null);
     const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
@@ -214,7 +210,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
     // 是否可以交互(canvas: 比如拖拽 滑动)
     const canInteract = hasIdea && canvasReady;
   
-    const { zoomIn, zoomOut, getNode } = useReactFlow();
+    const { zoomIn, zoomOut } = useReactFlow();
     const { layout: dagreLayout } = useDagreLayout();
   
     const msg = useCallback(
@@ -304,6 +300,46 @@ import { useCanvasStore } from "@/stores/canvasStore";
       if (hasIdea) setCanvasReady(true);
     }, [hasIdea]);
 
+    // dagre 完成后，按同父边顺序稳定兄弟节点上下顺序，避免出现 B->D->C 被排成 B->C->D
+    const stabilizeSiblingOrder = useCallback(
+      (layoutedNodes: CustomNode[], edgesArr: CustomEdge[]) => {
+        const nextNodes = layoutedNodes.map((n) => ({
+          ...n,
+          position: { ...n.position },
+        }));
+        const nodeMap = new Map(nextNodes.map((n) => [n.id, n] as const));
+
+        const parentChildrenMap = new Map<string, string[]>();
+        for (const e of edgesArr) {
+          if (!parentChildrenMap.has(e.source)) parentChildrenMap.set(e.source, []);
+          parentChildrenMap.get(e.source)!.push(e.target);
+        }
+
+        for (const [, childIdsInEdgeOrder] of parentChildrenMap) {
+          if (childIdsInEdgeOrder.length <= 1) continue;
+          const children = childIdsInEdgeOrder
+            .map((id) => nodeMap.get(id))
+            .filter((n): n is CustomNode => Boolean(n));
+          if (children.length <= 1) continue;
+
+          const ySlots = [...children]
+            .sort((a, b) => a.position.y - b.position.y)
+            .map((n) => n.position.y);
+
+          // 边顺序靠前的孩子使用更靠上的 y 槽位
+          children.forEach((child, index) => {
+            const y = ySlots[index];
+            if (typeof y === "number") {
+              child.position.y = y;
+            }
+          });
+        }
+
+        return nextNodes;
+      },
+      []
+    );
+
     const autoLayout = useCallback(() => {
       // 注意：autoLayout 会延迟触发，不能用闭包里的 hasIdea（可能是旧值）
       if (!hasIdeaRef.current) return;
@@ -314,13 +350,36 @@ import { useCanvasStore } from "@/stores/canvasStore";
             edgesRef.current,
             "LR"
           );
-          setNodes(layouted as CustomNode[]);
+          const stabilized = stabilizeSiblingOrder(
+            layouted as CustomNode[],
+            edgesRef.current
+          );
+          setNodes(stabilized);
         } catch (e) {
           console.error("dagre layout error:", e);
         }
       }, 100);
-    }, [dagreLayout, setNodes]);
-  
+    }, [dagreLayout, setNodes, stabilizeSiblingOrder]);
+
+    // 统一图更新与布局触发：每次动作只触发一次布局，并且布局基于最新图数据
+    const applyGraphAndAutoLayout = useCallback(
+      (nextNodes: CustomNode[], nextEdges: CustomEdge[], delayMs: number = 120) => {
+        nodesRef.current = nextNodes;
+        edgesRef.current = nextEdges;
+        setNodes(nextNodes);
+        setEdges(nextEdges);
+        setTimeout(autoLayout, delayMs);
+      },
+      [setNodes, setEdges, autoLayout]
+    );
+
+    const scheduleAutoLayoutForExpand = useCallback(() => {
+      // 展开/折叠存在过渡动画，动画完成后做一次布局
+      setTimeout(() => {
+        autoLayout();
+      }, 260);
+    }, [autoLayout]);
+
     const updateNodeContent = useCallback(
       (nodeId: string, content: string) => {
         setNodes((nds) =>
@@ -375,7 +434,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
         const baseX = source.position.x + 400;
-        const spacing = V_SPACING;
+        const spacing = 120;
         const parentY = source.position.y;
         const ys = [parentY - spacing, parentY, parentY + spacing];
         const newNodes: CustomNode[] = [];
@@ -407,68 +466,42 @@ import { useCanvasStore } from "@/stores/canvasStore";
             targetHandle: "left-handle",
           });
         }
-        setNodes((nds) => [...nds, ...newNodes]);
-        setEdges((eds) => [...eds, ...newEdges]);
-        setTimeout(autoLayout, 50);
+        const nextNodes = [...nodes, ...newNodes];
+        const nextEdges = [...(edges as CustomEdge[]), ...newEdges];
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
       },
-      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout, V_SPACING]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
     );
   
-    /** 平移下方兄弟及其子树，为新节点腾出空间 */
-    const shiftSiblingsDown = useCallback(
-      (
-        sourceNodeId: string,
-        parentId: string,
-        newNode: CustomNode,
-        edgesArr: CustomEdge[]
-      ) => {
-        const source = nodes.find((n) => n.id === sourceNodeId);
-        if (!source) return;
-        const siblingIds = edgesArr
-          .filter((e) => e.source === parentId)
-          .map((e) => e.target)
-          .filter((id) => id !== sourceNodeId);
-        const siblingsBelow = nodes.filter(
-          (n) => siblingIds.includes(n.id) && n.position.y > source.position.y
-        );
-        const newNodeHeight = CARD_MIN_HEIGHT + 80;
-        const offset = newNodeHeight + CARD_V_GAP; // 新节点高度 + 与下方节点的间隙，避免覆盖
-        const collectSubtree = (rootId: string, acc = new Set<string>()) => {
-          acc.add(rootId);
-          edgesArr
-            .filter((e) => e.source === rootId)
-            .forEach((e) => collectSubtree(e.target, acc));
-          return acc;
-        };
-        const nodesToShift = new Set<string>();
-        siblingsBelow.forEach((sib) =>
-          collectSubtree(sib.id).forEach((id) => nodesToShift.add(id))
-        );
-        setNodes((nds) => [
-          ...nds.map((n) =>
-            nodesToShift.has(n.id)
-              ? { ...n, position: { ...n.position, y: n.position.y + offset } }
-              : n
-          ),
-          newNode,
-        ]);
-      },
-      [nodes, setNodes]
-    );
-
     const addSummaryCard = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
 
-        const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
+        const edgesArr = edges as CustomEdge[];
+        const parentEdge = edgesArr.find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
+        const siblingEdges = edgesArr.filter((e) => e.source === parentId);
+        const siblingNodesInfo = siblingEdges
+          .map((edge) => {
+            const node = nodes.find((n) => n.id === edge.target);
+            return {
+              node,
+              y: node?.position.y ?? 0,
+              edgeId: edge.id,
+            };
+          })
+          .filter((item) => item.node);
 
-        const sourceHeight =
-          getNode(sourceNodeId)?.measured?.height ??
-          (source as CustomNode).dimensions?.height ??
-          CARD_MIN_HEIGHT;
-        const newY = source.position.y + sourceHeight + CARD_V_GAP;
+        siblingNodesInfo.sort((a, b) => a.y - b.y);
+        const sourceNodeInfo = siblingNodesInfo.find(
+          (item) => item.node?.id === sourceNodeId
+        );
+        const sourceIndex = sourceNodeInfo
+          ? siblingNodesInfo.indexOf(sourceNodeInfo)
+          : -1;
+
+        const newY = source.position.y + 200;
 
         const newNodeId = `summaryCard-${Date.now()}`;
         const newNode: CustomNode = {
@@ -498,10 +531,65 @@ import { useCanvasStore } from "@/stores/canvasStore";
           targetHandle: "left-handle",
         };
 
-        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
-        setEdges((eds) => [...eds, newEdge]);
+        const nextNodes = [...nodes];
+        if (sourceNodeInfo && sourceIndex >= 0) {
+          if (sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingNodeId = nextSibling.node?.id;
+            const insertIndex = nextSiblingNodeId
+              ? nextNodes.findIndex((n) => n.id === nextSiblingNodeId)
+              : -1;
+            if (insertIndex >= 0) {
+              nextNodes.splice(insertIndex, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          } else {
+            const sourceNodeIdInList = sourceNodeInfo.node?.id;
+            const sourceNodeIndexInNodes = sourceNodeIdInList
+              ? nextNodes.findIndex((n) => n.id === sourceNodeIdInList)
+              : -1;
+            if (sourceNodeIndexInNodes >= 0) {
+              nextNodes.splice(sourceNodeIndexInNodes + 1, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          }
+        } else {
+          nextNodes.push(newNode);
+        }
+
+        const nextEdges = [...edgesArr];
+        if (sourceNodeInfo?.edgeId) {
+          const sourceEdgeIndex = nextEdges.findIndex((e) => e.id === sourceNodeInfo.edgeId);
+          if (sourceIndex >= 0 && sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingEdgeIndex = nextSibling.edgeId
+              ? nextEdges.findIndex((e) => e.id === nextSibling.edgeId)
+              : -1;
+            if (nextSiblingEdgeIndex >= 0) {
+              nextEdges.splice(nextSiblingEdgeIndex, 0, newEdge);
+            } else {
+              if (sourceEdgeIndex >= 0) {
+                nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+              } else {
+                nextEdges.push(newEdge);
+              }
+            }
+          } else {
+            if (sourceEdgeIndex >= 0) {
+              nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+            } else {
+              nextEdges.push(newEdge);
+            }
+          }
+        } else {
+          nextEdges.push(newEdge);
+        }
+
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
     );
   
     const handleMainCardCreate = useCallback(
@@ -510,7 +598,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
         if (!source) return;
         // 先立即创建节点，避免等待接口导致“点了按钮但画布不出节点”
         const baseX = source.position.x + 400;
-        const spacing = V_SPACING;
+        const spacing = 120;
         const parentY = source.position.y;
         const ys = [parentY - spacing, parentY, parentY + spacing];
         const newNodes: CustomNode[] = [];
@@ -558,10 +646,8 @@ import { useCanvasStore } from "@/stores/canvasStore";
           ...newEdges,
         ];
 
-        setNodes(nextNodes);
-        setEdges(nextEdges);
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
         setCanvasReady(true);
-        setTimeout(autoLayout, 50);
 
         // 后台生成 drawId，成功后回写到状态与各节点 data 中
         void (async () => {
@@ -585,21 +671,37 @@ import { useCanvasStore } from "@/stores/canvasStore";
           }
         })();
       },
-      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, setEdges, autoLayout, V_SPACING]
+      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, applyGraphAndAutoLayout]
     );
   
     const addSettingCard = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
-        const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
+        const edgesArr = edges as CustomEdge[];
+        const parentEdge = edgesArr.find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
+        const siblingEdges = edgesArr.filter((e) => e.source === parentId);
+        const siblingNodesInfo = siblingEdges
+          .map((edge) => {
+            const node = nodes.find((n) => n.id === edge.target);
+            return {
+              node,
+              y: node?.position.y ?? 0,
+              edgeId: edge.id,
+            };
+          })
+          .filter((item) => item.node);
+
+        siblingNodesInfo.sort((a, b) => a.y - b.y);
+        const sourceNodeInfo = siblingNodesInfo.find(
+          (item) => item.node?.id === sourceNodeId
+        );
+        const sourceIndex = sourceNodeInfo
+          ? siblingNodesInfo.indexOf(sourceNodeInfo)
+          : -1;
         const nid = `story-setting-${Date.now()}`;
-        const sourceHeight =
-          getNode(sourceNodeId)?.measured?.height ??
-          (source as CustomNode).dimensions?.height ??
-          CARD_MIN_HEIGHT;
-        const newY = source.position.y + sourceHeight + CARD_V_GAP;
+        const newY = source.position.y + 200;
         const newNode: CustomNode = {
           id: nid,
           type: "settingCard",
@@ -626,19 +728,74 @@ import { useCanvasStore } from "@/stores/canvasStore";
           sourceHandle: "right-handle",
           targetHandle: "left-handle",
         };
-        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
-        setEdges((eds) => [...eds, newEdge]);
+
+        const nextNodes = [...nodes];
+        if (sourceNodeInfo && sourceIndex >= 0) {
+          if (sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingNodeId = nextSibling.node?.id;
+            const insertIndex = nextSiblingNodeId
+              ? nextNodes.findIndex((n) => n.id === nextSiblingNodeId)
+              : -1;
+            if (insertIndex >= 0) {
+              nextNodes.splice(insertIndex, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          } else {
+            const sourceNodeIdInList = sourceNodeInfo.node?.id;
+            const sourceNodeIndexInNodes = sourceNodeIdInList
+              ? nextNodes.findIndex((n) => n.id === sourceNodeIdInList)
+              : -1;
+            if (sourceNodeIndexInNodes >= 0) {
+              nextNodes.splice(sourceNodeIndexInNodes + 1, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          }
+        } else {
+          nextNodes.push(newNode);
+        }
+
+        const nextEdges = [...edgesArr];
+        if (sourceNodeInfo?.edgeId) {
+          const sourceEdgeIndex = nextEdges.findIndex((e) => e.id === sourceNodeInfo.edgeId);
+          if (sourceIndex >= 0 && sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingEdgeIndex = nextSibling.edgeId
+              ? nextEdges.findIndex((e) => e.id === nextSibling.edgeId)
+              : -1;
+            if (nextSiblingEdgeIndex >= 0) {
+              nextEdges.splice(nextSiblingEdgeIndex, 0, newEdge);
+            } else {
+              if (sourceEdgeIndex >= 0) {
+                nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+              } else {
+                nextEdges.push(newEdge);
+              }
+            }
+          } else {
+            if (sourceEdgeIndex >= 0) {
+              nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+            } else {
+              nextEdges.push(newEdge);
+            }
+          }
+        } else {
+          nextEdges.push(newEdge);
+        }
+
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
     );
   
     const generateOutlineNodes = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
-        // 与其它节点保持一致的横向距离，避免大纲节点离父节点过远
-        const baseX = source.position.x + 400;
-        const spacing = V_SPACING - 20;
+        const baseX = source.position.x + 475;
+        const spacing = 278;
         const ph = (source as any).measured?.height ?? (source as CustomNode).dimensions?.height ?? 200;
         const centerY = source.position.y + ph / 2;
         const secondY = centerY - 230 / 2;
@@ -674,24 +831,41 @@ import { useCanvasStore } from "@/stores/canvasStore";
             targetHandle: "left-handle",
           });
         }
-        setNodes((nds) => [...nds, ...newNodes]);
-        setEdges((eds) => [...eds, ...newEdges]);
+        const nextNodes = [...nodes, ...newNodes];
+        const nextEdges = [...(edges as CustomEdge[]), ...newEdges];
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
       },
-      [nodes, hasIdea, inspirationDrawId, setNodes, setEdges, V_SPACING]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
     );
   
     const addOutlineCard = useCallback(
       (sourceNodeId: string) => {
         const source = nodes.find((n) => n.id === sourceNodeId);
         if (!source) return;
-        const parentEdge = (edges as CustomEdge[]).find((e) => e.target === sourceNodeId);
+        const edgesArr = edges as CustomEdge[];
+        const parentEdge = edgesArr.find((e) => e.target === sourceNodeId);
         const parentId = parentEdge?.source ?? "1";
+        const siblingEdges = edgesArr.filter((e) => e.source === parentId);
+        const siblingNodesInfo = siblingEdges
+          .map((edge) => {
+            const node = nodes.find((n) => n.id === edge.target);
+            return {
+              node,
+              y: node?.position.y ?? 0,
+              edgeId: edge.id,
+            };
+          })
+          .filter((item) => item.node);
+
+        siblingNodesInfo.sort((a, b) => a.y - b.y);
+        const sourceNodeInfo = siblingNodesInfo.find(
+          (item) => item.node?.id === sourceNodeId
+        );
+        const sourceIndex = sourceNodeInfo
+          ? siblingNodesInfo.indexOf(sourceNodeInfo)
+          : -1;
         const nid = `outline-${Date.now()}`;
-        const sourceHeight =
-          getNode(sourceNodeId)?.measured?.height ??
-          (source as CustomNode).dimensions?.height ??
-          CARD_MIN_HEIGHT + 80;
-        const newY = source.position.y + sourceHeight + CARD_V_GAP;
+        const newY = source.position.y + 295;
         const newNode: CustomNode = {
           id: nid,
           type: "outlineCard",
@@ -718,10 +892,66 @@ import { useCanvasStore } from "@/stores/canvasStore";
           sourceHandle: "right-handle",
           targetHandle: "left-handle",
         };
-        shiftSiblingsDown(sourceNodeId, parentId, newNode, edges as CustomEdge[]);
-        setEdges((eds) => [...eds, newEdge]);
+
+        const nextNodes = [...nodes];
+        if (sourceNodeInfo && sourceIndex >= 0) {
+          if (sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingNodeId = nextSibling.node?.id;
+            const insertIndex = nextSiblingNodeId
+              ? nextNodes.findIndex((n) => n.id === nextSiblingNodeId)
+              : -1;
+            if (insertIndex >= 0) {
+              nextNodes.splice(insertIndex, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          } else {
+            const sourceNodeIdInList = sourceNodeInfo.node?.id;
+            const sourceNodeIndexInNodes = sourceNodeIdInList
+              ? nextNodes.findIndex((n) => n.id === sourceNodeIdInList)
+              : -1;
+            if (sourceNodeIndexInNodes >= 0) {
+              nextNodes.splice(sourceNodeIndexInNodes + 1, 0, newNode);
+            } else {
+              nextNodes.push(newNode);
+            }
+          }
+        } else {
+          nextNodes.push(newNode);
+        }
+
+        const nextEdges = [...edgesArr];
+        if (sourceNodeInfo?.edgeId) {
+          const sourceEdgeIndex = nextEdges.findIndex((e) => e.id === sourceNodeInfo.edgeId);
+          if (sourceIndex >= 0 && sourceIndex < siblingNodesInfo.length - 1) {
+            const nextSibling = siblingNodesInfo[sourceIndex + 1];
+            const nextSiblingEdgeIndex = nextSibling.edgeId
+              ? nextEdges.findIndex((e) => e.id === nextSibling.edgeId)
+              : -1;
+            if (nextSiblingEdgeIndex >= 0) {
+              nextEdges.splice(nextSiblingEdgeIndex, 0, newEdge);
+            } else {
+              if (sourceEdgeIndex >= 0) {
+                nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+              } else {
+                nextEdges.push(newEdge);
+              }
+            }
+          } else {
+            if (sourceEdgeIndex >= 0) {
+              nextEdges.splice(sourceEdgeIndex + 1, 0, newEdge);
+            } else {
+              nextEdges.push(newEdge);
+            }
+          }
+        } else {
+          nextEdges.push(newEdge);
+        }
+
+        applyGraphAndAutoLayout(nextNodes, nextEdges);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, getNode, shiftSiblingsDown]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
     );
   
     const buildParentChain = useCallback(
@@ -1001,6 +1231,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
           updateNodeContent(id, c);
           // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
+        handleSummaryExpand: () => scheduleAutoLayoutForExpand(),
         handleSettingGenerate: generateOutlineNodes,
         handleSettingAdd: addSettingCard,
         handleSettingDelete: deleteNode,
@@ -1008,7 +1239,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
           updateNodeContent(id, c);
           // 不触发 autoLayout，与 addSummaryCard 一致，避免流式输出时新节点被 dagre 排到顶部
         },
-        handleSettingExpand: () => setTimeout(autoLayout, 100),
+        handleSettingExpand: () => scheduleAutoLayoutForExpand(),
         handleOutlineGenerate,
         handleOutlineAdd: addOutlineCard,
         handleOutlineDelete: deleteNode,
@@ -1016,7 +1247,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
           updateNodeContent(id, c);
           // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
-        handleOutlineExpand: () => setTimeout(autoLayout, 100),
+        handleOutlineExpand: () => scheduleAutoLayoutForExpand(),
         getCanvasSessionId,
         msg,
       }),
@@ -1026,7 +1257,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
         addSummaryCard,
         deleteNode,
         updateNodeContent,
-        autoLayout,
+        scheduleAutoLayoutForExpand,
         generateOutlineNodes,
         addSettingCard,
         handleOutlineGenerate,

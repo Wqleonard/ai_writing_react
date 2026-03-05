@@ -27,8 +27,12 @@ export function useDagreLayout() {
 
       for (const node of nodes) {
         const graphNode = getNode(node.id);
-        const width = graphNode?.measured?.width ?? 400;
-        const height = graphNode?.measured?.height ?? 200;
+        const measuredWidth = graphNode?.measured?.width;
+        const measuredHeight = graphNode?.measured?.height;
+        const dimWidth = (graphNode as any)?.dimensions?.width;
+        const dimHeight = (graphNode as any)?.dimensions?.height;
+        const width = measuredWidth ?? dimWidth ?? 400;
+        const height = measuredHeight ?? dimHeight ?? 200;
         nodeSizeMap.set(node.id, { width, height });
 
         dagreGraph.setNode(node.id, {
