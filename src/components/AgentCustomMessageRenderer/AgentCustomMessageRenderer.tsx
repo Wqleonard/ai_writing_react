@@ -177,6 +177,13 @@ const AgentCustomMessageRenderer = ({
   const [localHiltStatusByMessageId, setLocalHiltStatusByMessageId] = useState<
     Record<string, "in_progress" | "approved" | "rejected">
   >({});
+  /** 接受后仅收起“当前这轮 todo 快照”的确认卡片；当 todo 进入下一步（快照变化）时重新弹出 */
+  const [dismissedHiltCardKeyByMessageId, setDismissedHiltCardKeyByMessageId] = useState<
+    Record<string, string>
+  >({});
+  const [hiltActionLoadingByMessageId, setHiltActionLoadingByMessageId] = useState<
+    Record<string, boolean>
+  >({});
   const shouldCollapseMessageContent = useCallback((msg: AgentCustomMessageItem): boolean => {
     if ((msg as { resultType?: string }).resultType !== "output") return false;
     const config = toolCallsActiveObject[(msg.name || "") as ToolCallsKey];
@@ -308,6 +315,13 @@ const AgentCustomMessageRenderer = ({
     [localHiltStatusByMessageId]
   );
 
+  const getHiltTodosProgressKey = useCallback((effectiveTodos: HiltTodoItem[] | undefined): string => {
+    if (!effectiveTodos?.length) return "";
+    return effectiveTodos
+      .map((todo) => `${todo.status ?? "pending"}:${todo.content ?? ""}`)
+      .join("||");
+  }, []);
+
   const handleHiltRejectForMessage = useCallback(
     (msg: AgentCustomMessageItem) => {
       setLocalHiltStatusByMessageId((prev) => ({ ...prev, [msg.id]: "rejected" }));
@@ -318,10 +332,20 @@ const AgentCustomMessageRenderer = ({
 
   const handleHiltApproveForMessage = useCallback(
     (msg: AgentCustomMessageItem) => {
-      setLocalHiltStatusByMessageId((prev) => ({ ...prev, [msg.id]: "approved" }));
+      if (hiltActionLoadingByMessageId[msg.id]) return;
+      const effectiveTodos = getEffectiveHiltTodos(msg);
+      const currentTodosKey = getHiltTodosProgressKey(effectiveTodos);
+      setHiltActionLoadingByMessageId((prev) => ({ ...prev, [msg.id]: true }));
+      // 仅收起当前 todo 快照的卡片，避免重复点击；下一个 todo 会因 key 变化重新展示
+      if (currentTodosKey) {
+        setDismissedHiltCardKeyByMessageId((prev) => ({ ...prev, [msg.id]: currentTodosKey }));
+      }
       onHiltApprove?.({ ...msg, hiltStatus: "approved" });
+      queueMicrotask(() => {
+        setHiltActionLoadingByMessageId((prev) => ({ ...prev, [msg.id]: false }));
+      });
     },
-    [onHiltApprove]
+    [getEffectiveHiltTodos, getHiltTodosProgressKey, hiltActionLoadingByMessageId, onHiltApprove]
   );
 
   const visibleToolCallsMap = useMemo(() => {
@@ -714,11 +738,16 @@ const AgentCustomMessageRenderer = ({
                   {(() => {
                     const effectiveTodos = getEffectiveHiltTodos(msg);
                     const effectiveStatus = getEffectiveHiltStatus(msg, effectiveTodos);
+                    const currentTodosKey = getHiltTodosProgressKey(effectiveTodos);
+                    const isDismissedForCurrentTodos =
+                      !!currentTodosKey &&
+                      dismissedHiltCardKeyByMessageId[msg.id] === currentTodosKey;
                     const showOuterCard =
                       effectiveTodos &&
                       effectiveTodos.length > 0 &&
                       isLastMessage &&
-                      effectiveStatus === "in_progress";
+                      effectiveStatus === "in_progress" &&
+                      !isDismissedForCurrentTodos;
                     if (!showOuterCard) return null;
                     return (
                       <div className="hilt-todos-container">
@@ -756,6 +785,7 @@ const AgentCustomMessageRenderer = ({
                             <button
                               type="button"
                               className="hilt-approve-btn"
+                              disabled={!!hiltActionLoadingByMessageId[msg.id]}
                               onClick={() => handleHiltApproveForMessage(msg)}
                             >
                               <span className="hilt-btn-icon" aria-hidden>
