@@ -81,7 +81,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
   function MarkdownEditor(
     {
       className = '',
-      fontClassName = 'font-KaiTi',
+      fontClassName = '',
       readonly = false,
       placeholder = '请输入内容...',
       loading = false,
@@ -359,7 +359,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
               placement: 'top',
               strategy: 'absolute',
             }}
-            className="z-[9999] selection-toolbar-popover"
+            className="z-999 selection-toolbar-popover"
           >
             <SelectionToolbarComponent
               editor={editor}
