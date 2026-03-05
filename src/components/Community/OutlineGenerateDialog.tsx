@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
+import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Iconfont } from '@/components/IconFont'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup'
 import { Textarea } from '@/components/ui/Textarea'
@@ -200,7 +201,7 @@ export const OutlineGenerateDialog = ({
 
     const workIdVal = formModel.connectedWork?.work?.id
     const relatedFiles = deduplicateAndFilterFiles(formModel.connectedWork?.file || []).map(i => i.id)
-    const chapterNum = Number(formModel.chapterNum) || 0
+    const chapterNum = Number(formModel.chapterNum) || 10
 
     const requestData = {
       promptId: String(promptData?.id ?? ''),
@@ -330,7 +331,7 @@ export const OutlineGenerateDialog = ({
   return (
     <Dialog open={open} onOpenChange={o => !o && onOpenChange(false)}>
       <DialogContent
-        className="w-[1020px] max-w-[90vw] py-11 px-[120px] pb-8 sm:max-w-[90vw]"
+        className="w-[1020px] max-w-[90vw] py-11 px-25 pb-8 sm:max-w-[90vw]"
         showCloseButton
       >
         <DialogHeader className="px-5 relative h-9 min-h-0 shrink-0 gap-0">
@@ -348,9 +349,10 @@ export const OutlineGenerateDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 w-full min-w-0 h-[576px] flex flex-col">
+        <div className="w-[820px] h-[576px] flex flex-col ">
           {!formConfirmed ? (
-            <div className="mt-4 flex flex-col gap-4 overflow-y-auto min-w-0 px-1 -mx-1 py-1 -my-1">
+            <ScrollArea className='h-full w-full'>
+              <div className="w-[820px] px-5  flex flex-col gap-4">
               {/* 提示词 */}
               {promptData && (
                 <div className="min-w-0">
@@ -512,15 +514,15 @@ export const OutlineGenerateDialog = ({
                   </div>
                 </>
               )}
-            </div>
+              </div>
+            </ScrollArea>
           ) : (
-            <div className="mt-2 flex flex-col gap-1">
+            <div className="mt-2 px-5 flex flex-col gap-1 h-full">
               <AutoScrollArea
                 className={clsx(
-                  'h-[500px] rounded-lg bg-[#f6f6f6] p-3',
+                  'flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3',
                   markdownEditing && 'outline-2 outline-(--theme-color)'
                 )}
-                maxHeight="500px"
                 autoScroll
               >
                 <MarkdownEditor
@@ -556,7 +558,7 @@ export const OutlineGenerateDialog = ({
           )}
         </div>
 
-        <DialogFooter className="flex flex-row-reverse gap-4 border-0 p-0">
+        <DialogFooter className="flex flex-row-reverse gap-4 border-0 py-0 px-5">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             退出
           </Button>

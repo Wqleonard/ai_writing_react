@@ -62,12 +62,13 @@ export const PromptsDetailDialog = ({
         {data && (
           <div className="w-full h-140 overflow-y-auto flex flex-col">
             <div className="h-10 flex min-w-0 items-center gap-4 pb-2">
-              <DialogTitle className="min-w-0 flex-1 truncate text-3xl">{data.name}</DialogTitle>
+              <DialogTitle className="min-w-0 flex-1 truncate text-3xl">
+                {data.isOfficial && '【官方】'}{data.name}
+              </DialogTitle>
               {data.categories?.map(category => (
                 <span
                   key={category.id}
-                  className="rounded px-2 py-1 text-sm"
-                  style={{ background: '#f3f4f6' }}
+                  className="rounded px-2 py-1 text-sm bg-[#f3f4f6]"
                 >
                   {category.name}
                 </span>
@@ -76,8 +77,7 @@ export const PromptsDetailDialog = ({
             <div className="mt-4 flex items-center justify-between">
               <div className="flex items-center">
                 <div
-                  className="size-5 shrink-0 overflow-hidden rounded-full"
-                  style={{ background: '#c4c4c4' }}
+                  className="size-5 shrink-0 overflow-hidden rounded-full bg-[#c4c4c4]"
                 />
                 <div className="ml-1 max-w-[200px] overflow-hidden text-ellipsis">
                   {data.authorName}

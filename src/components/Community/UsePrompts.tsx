@@ -17,15 +17,25 @@ export interface UsePromptsProps {
   openMarketDirectly?: boolean;
 }
 
-export const UsePrompts = ({ open, onOpenChange, data, openMarketDirectly }: UsePromptsProps) => {
+export const UsePrompts = ({
+  open,
+  onOpenChange,
+  data,
+  openMarketDirectly,
+}: UsePromptsProps) => {
   const [promptData, setPromptData] = useState<PromptItem | null>(data ?? null);
   const [marketDialogShow, setMarketDialogShow] = useState(false);
-  const [publicGenerateDialogShow, setPublicGenerateDialogShow] = useState(false);
-  const [officialIntroductionDialogShow, setOfficialIntroductionDialogShow] = useState(false);
-  const [officialOutlineDialogShow, setOfficialOutlineDialogShow] = useState(false);
-  const [officialCharacterDialogShow, setOfficialCharacterDialogShow] = useState(false);
+  const [publicGenerateDialogShow, setPublicGenerateDialogShow] =
+    useState(false);
+  const [officialIntroductionDialogShow, setOfficialIntroductionDialogShow] =
+    useState(false);
+  const [officialOutlineDialogShow, setOfficialOutlineDialogShow] =
+    useState(false);
+  const [officialCharacterDialogShow, setOfficialCharacterDialogShow] =
+    useState(false);
   const [officialWorldDialogShow, setOfficialWorldDialogShow] = useState(false);
-  const [officialChapterDialogShow, setOfficialChapterDialogShow] = useState(false);
+  const [officialChapterDialogShow, setOfficialChapterDialogShow] =
+    useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
 
@@ -42,7 +52,7 @@ export const UsePrompts = ({ open, onOpenChange, data, openMarketDirectly }: Use
 
   const handleDetailUse = useCallback(
     (item: PromptItem | null) => {
-      trackEvent('Community', 'Use', 'Prompt', Number(item?.id))
+      trackEvent("Community", "Use", "Prompt", Number(item?.id));
       if (!promptData?.isOfficial) {
         onOpenChange(false);
         setPublicGenerateDialogShow(true);
@@ -74,7 +84,7 @@ export const UsePrompts = ({ open, onOpenChange, data, openMarketDirectly }: Use
           break;
       }
     },
-    [promptData, onOpenChange]
+    [promptData, onOpenChange],
   );
 
   const handleOpenMarket = useCallback((prompt: PromptItem | null) => {
@@ -85,16 +95,24 @@ export const UsePrompts = ({ open, onOpenChange, data, openMarketDirectly }: Use
     }
   }, []);
 
-  const handleMarketPromptUse = useCallback((prompt: PromptItem | null) => {
-    setPromptData(prompt);
-    setMarketDialogShow(false);
-    setPublicGenerateDialogShow(false);
-    onOpenChange(true);
-  }, [onOpenChange]);
+  const handleMarketPromptUse = useCallback(
+    (prompt: PromptItem | null) => {
+      setPromptData(prompt);
+      setMarketDialogShow(false);
+      setPublicGenerateDialogShow(false);
+      onOpenChange(true);
+    },
+    [onOpenChange],
+  );
 
   return (
     <>
-      <PromptsDetailDialog open={open} onOpenChange={onOpenChange} data={promptData} onUse={handleDetailUse} />
+      <PromptsDetailDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        data={promptData}
+        onUse={handleDetailUse}
+      />
       <PromptsMarketDialog
         open={marketDialogShow}
         onClose={() => setMarketDialogShow(false)}

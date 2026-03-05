@@ -3,6 +3,7 @@ import { Heart, BarChart2 } from 'lucide-react'
 import type { PromptItem } from '@/components/Community/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
+import { Iconfont } from '@/components/IconFont'
 
 const STATUS_MAP: Record<string, string> = {
   UNDER_REVIEW: '审核中',
@@ -54,6 +55,7 @@ export const PromptCard = ({
             className="truncate pt-0.5 text-base font-bold"
             title={cardData.name}
           >
+            {cardData.isOfficial && '【官方】'}
             {cardData.name}
           </div>
           <div className="flex h-5 items-center gap-3">
@@ -62,20 +64,21 @@ export const PromptCard = ({
                 {cardData.categories[0]?.name}
               </div>
             ) : null}
-            <span className="flex items-center text-sm text-[#ff5200]">
-              <BarChart2 className="mr-0.5 size-4" />
+            <div className="flex items-center text-sm text-[#ff5200]">
+              <Iconfont unicode='&#xe63b;' className="mr-0.5 " />
               {cardData.useCount}
-            </span>
+            </div>
             <button
               type="button"
               className={cn(
-                'flex items-center text-sm',
-                cardData.isFavorited ? 'text-primary' : 'text-muted-foreground'
+                'flex items-center text-sm hover:text-(--theme-color) cursor-pointer',
+                cardData.isFavorited ? 'text-(--theme-color)' : 'text-muted-foreground'
               )}
               onClick={handleFavoriteClick}
             >
-              <Heart
-                className={cn('mr-0.5 size-4', cardData.isFavorited && 'fill-current')}
+              <Iconfont
+                unicode={cardData.isFavorited ? '&#xea40;' : '&#xea51;'}
+                className={cn('mr-0.5 ', cardData.isFavorited && 'fill-current')}
               />
               {cardData.favoritesCount}
             </button>

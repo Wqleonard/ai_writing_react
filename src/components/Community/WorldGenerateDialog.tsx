@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
+import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Iconfont } from '@/components/IconFont'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup'
 import { Textarea } from '@/components/ui/Textarea'
@@ -262,7 +263,7 @@ export const WorldGenerateDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onOpenChange(false)}>
-      <DialogContent className="w-[1020px] max-w-[90vw] py-11 px-[120px] pb-8 sm:max-w-[90vw]" showCloseButton>
+      <DialogContent className="w-[1020px] max-w-[90vw] py-11 px-25 pb-8 sm:max-w-[90vw]" showCloseButton>
         <DialogHeader className="px-5 relative h-9 min-h-0 shrink-0 gap-0">
           {formConfirmed && (
             <div role="button" className="absolute left-5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md hover:bg-accent cursor-pointer" onClick={handleBack}>
@@ -272,9 +273,10 @@ export const WorldGenerateDialog = ({
           <DialogTitle className="h-9 min-h-0 overflow-hidden text-center text-2xl leading-9">故事设定生成器</DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 w-full min-w-0 h-[576px] flex flex-col">
+        <div className="w-[820px] h-[576px] flex flex-col ">
           {!formConfirmed ? (
-            <div className="mt-4 flex flex-col gap-4 overflow-y-auto min-w-0 px-1 -mx-1 py-1 -my-1">
+            <ScrollArea className='h-full w-full'>
+              <div className="w-[820px] px-5  flex flex-col gap-4">
               {promptData && (
                 <div className="min-w-0">
                   <div className="text-lg">提示词</div>
@@ -343,10 +345,11 @@ export const WorldGenerateDialog = ({
                   </div>
                 </>
               )}
-            </div>
+              </div>
+            </ScrollArea>
           ) : (
-            <div className="mt-2 flex flex-col gap-1">
-              <AutoScrollArea className={clsx('h-[500px] rounded-lg bg-[#f6f6f6] p-3', markdownEditing && 'outline-2 outline-(--theme-color)')} maxHeight="500px" autoScroll>
+            <div className="mt-2 px-5 flex flex-col gap-1 h-full">
+              <AutoScrollArea className={clsx('flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3', markdownEditing && 'outline-2 outline-(--theme-color)')} autoScroll>
                 <MarkdownEditor value={markdownContent} onChange={v => setMarkdownContent(v)} readonly={!markdownEditing} loading={showIndicator} placeholder="请等待输出..." />
               </AutoScrollArea>
               <div className="mt-2 flex justify-center gap-4">
