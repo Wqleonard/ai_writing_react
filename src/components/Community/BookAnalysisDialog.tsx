@@ -223,9 +223,8 @@ export const BookAnalysisDialog = ({
           ) : (
             <>
               <AutoScrollArea
-                maxHeight={440}
                 className={cn(
-                  "mt-2 h-[440px] rounded-lg bg-[#f6f6f6] p-3",
+                  "mt-2 flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3",
                   markdownEditing ? "outline-2 outline-(--theme-color)" : "",
                 )}
               >
@@ -233,7 +232,6 @@ export const BookAnalysisDialog = ({
                   value={markdownContent}
                   onChange={setMarkdownContent}
                   readonly={!markdownEditing}
-                  minHeight={280}
                 />
               </AutoScrollArea>
               <div className="mt-4 flex justify-center gap-4">

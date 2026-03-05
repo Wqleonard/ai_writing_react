@@ -35,7 +35,7 @@ export interface AutoScrollAreaRef {
 const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
   (
     {
-      maxHeight = 400,
+      maxHeight,
       autoScroll = true,
       bottomThreshold = 50,
       className,
