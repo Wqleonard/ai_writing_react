@@ -303,14 +303,14 @@ export const IntroductionGenerateDialog = ({
   return (
     <Dialog open={open} onOpenChange={o => !o && onOpenChange(false)}>
       <DialogContent
-        className="w-[1020px] max-w-[90vw] py-11 px-[120px] pb-8 sm:max-w-[90vw]"
+        className="w-[1020px] max-w-[90vw] py-11 px-25 pb-8 sm:max-w-[90vw]"
         showCloseButton
       >
-        <DialogHeader className="relative h-9 min-h-0 shrink-0 gap-0">
+        <DialogHeader className="px-5 relative h-9 min-h-0 shrink-0 gap-0">
           {formConfirmed && (
             <div
               role="button"
-              className="absolute left-0 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md hover:bg-accent cursor-pointer"
+              className="absolute left-5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md hover:bg-accent cursor-pointer"
               onClick={handleBack}
             >
               <Iconfont unicode="&#xe62a;" />
@@ -321,10 +321,10 @@ export const IntroductionGenerateDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="w-[780px] h-[576px] flex flex-col ">
+        <div className="w-[820px] h-[576px] flex flex-col ">
           {!formConfirmed ? (
             <ScrollArea className='h-full w-full'>
-              <div className="w-[780px] px-5  flex flex-col gap-4">
+              <div className="w-[820px] px-5  flex flex-col gap-4">
               {/* 提示词 */}
               {promptData && (
                 <div className="w-full">
@@ -452,7 +452,7 @@ export const IntroductionGenerateDialog = ({
             </div>
             </ScrollArea>
           ) : (
-            <div className="mt-2 flex flex-col gap-1 h-full">
+            <div className="mt-2 px-5 flex flex-col gap-1 h-full">
               <AutoScrollArea
                 className={clsx(
                   'flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3',
@@ -493,7 +493,7 @@ export const IntroductionGenerateDialog = ({
           )}
         </div>
 
-        <DialogFooter className="flex flex-row-reverse gap-4 border-0 p-0">
+        <DialogFooter className="flex flex-row-reverse gap-4 border-0 py-0 px-5">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             退出
           </Button>
