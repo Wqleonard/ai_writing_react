@@ -35,7 +35,7 @@ const Textarea = ({
         value={value}
         maxLength={maxLength}
         className={cn(
-          "flex min-h-[80px] w-full resize-none bg-background text-base text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          "flex min-h-[80px] h-full w-full resize-none text-base text-foreground placeholder:text-muted-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
           showLimit && "pb-6 pr-12",
           resize && 'resize-y!',
           areaClassName,

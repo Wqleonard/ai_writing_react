@@ -1,7 +1,9 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption, type TerserOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
+import viteCompression from 'vite-plugin-compression'
+import terser from './terser.config'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -10,7 +12,6 @@ export default defineConfig(({ mode }) => {
 
   if (!env.VITE_API_BASE_URL) {
     // 仅启动时提示一次，便于排查“读不到 env”
-    // eslint-disable-next-line no-console
     console.warn(`[vite] VITE_API_BASE_URL is empty for mode=${mode}`)
   }
 
@@ -18,7 +19,22 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5555,
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      viteCompression({
+        algorithm: 'gzip',
+        ext: '.gz',
+        threshold: 10240,
+        deleteOriginFile: false,
+      }),
+      viteCompression({
+        algorithm: 'brotliCompress',
+        ext: '.br',
+        threshold: 10240,
+        deleteOriginFile: false,
+      }),
+    ].flat() as PluginOption[],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
@@ -29,5 +45,9 @@ export default defineConfig(({ mode }) => {
       __API_BASE_URL__: JSON.stringify(env.VITE_API_BASE_URL ?? ''),
       __VITE_MODE__: JSON.stringify(mode),
     },
+    build: {
+      minify: 'terser',
+      terserOptions: terser as TerserOptions,
+    }
   }
 })
