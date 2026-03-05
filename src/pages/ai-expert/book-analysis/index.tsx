@@ -299,7 +299,7 @@ const BookAnalysisPage = () => {
     []
   )
 
-  const handleTemplateClick = useCallback(
+  const createFromTemplate = useCallback(
     async (template: TemplateCardData) => {
       setLoading(true)
       try {
@@ -324,6 +324,13 @@ const BookAnalysisPage = () => {
       }
     },
     [navigate]
+  )
+
+  const handleTemplateClick = useCallback(
+    (template: TemplateCardData) => {
+      void requireLogin(createFromTemplate, template)
+    },
+    [createFromTemplate, requireLogin]
   )
 
   const onScroll = useCallback(() => {

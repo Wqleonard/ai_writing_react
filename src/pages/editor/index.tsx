@@ -2,7 +2,6 @@ import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } fro
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
-import mermaid from "mermaid";
 import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MarkdownEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import IconFont from "@/components/IconFont/Iconfont";
@@ -306,14 +305,14 @@ function MermaidRelationPreview({ markdown }: { markdown: string }) {
       return;
     }
 
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "loose",
-      theme: "default",
-    });
-
     (async () => {
       try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "loose",
+          theme: "default",
+        });
         const rendered: string[] = [];
         for (let i = 0; i < blocks.length; i++) {
           const id = `relation-${Date.now()}-${i}`;

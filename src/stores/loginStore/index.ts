@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { verifyTicket, getNewbieMission, completeNewbieMissionReq, type GuideTask } from '@/api/users'
 import { getInsiteNotification, type NotificationItem } from '@/api/insite-notification'
+import { openLoginDialog } from '@/components/LoginDialog'
 import type {
   UserInfo,
   AvatarData,
@@ -366,7 +367,6 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       }))
 
       try {
-        const { openLoginDialog } = await import('@/components/LoginDialog/openLoginDialog')
         await openLoginDialog()
         await get().executeInterceptedActions()
       } catch (error) {
@@ -395,7 +395,6 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     },
 
     completeNewbieMissionByCode: async (code: string): Promise<boolean> => {
-      console.log('completeNewbieMissionByCode', code)
       try {
         if (!code) return false
         if (!get().isLoggedIn) return false

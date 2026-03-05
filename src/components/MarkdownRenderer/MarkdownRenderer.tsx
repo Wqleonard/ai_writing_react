@@ -2,7 +2,12 @@
 
 import React, { useMemo, useEffect, useRef } from "react";
 import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import typescript from "highlight.js/lib/languages/typescript";
 import "highlight.js/styles/github.css";
 import "./MarkdownRenderer.css";
 
@@ -10,6 +15,16 @@ export interface MarkdownRendererProps {
   content: string;
   onFileNameClick?: (fileName: string) => void;
 }
+
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("sh", bash);
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("js", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("ts", typescript);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("md", markdown);
 
 const md = new MarkdownIt({
   html: true,

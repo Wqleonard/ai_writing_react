@@ -197,7 +197,9 @@ const SharePage = () => {
     return () => viewport.removeEventListener('scroll', onMyShareScroll)
   }, [myShareOpen, onMyShareScroll])
 
-  const handleMyShareClick = useCallback(() => {
+  const requireLogin = useLoginStore(s=>s.requireLogin)
+
+  const openMyShare = useCallback(() => {
     setMyShareOpen(true)
     setMyShares([])
     setMyShareCurrentPage(0)
@@ -205,11 +207,19 @@ const SharePage = () => {
     loadMyShares(0, false)
   }, [loadMyShares])
 
-  const handleCreateShare = useCallback(() => {
+  const createShare = useCallback(() => {
     trackEvent('Community', 'Create', 'Share')
     setMyShareOpen(false)
     navigateTo('/workspace/creation-community/share/create/new')
   }, [navigateTo])
+
+  const handleMyShareClick = useCallback(() => {
+    void requireLogin(openMyShare)
+  }, [openMyShare, requireLogin])
+
+  const handleCreateShare = useCallback(() => {
+    void requireLogin(createShare)
+  }, [createShare, requireLogin])
 
   const handleMyShareCardClick = useCallback(
     (share: ShareData) => {

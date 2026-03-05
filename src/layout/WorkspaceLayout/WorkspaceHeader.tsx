@@ -30,6 +30,7 @@ export function WorkspaceHeader() {
 
   const isLoggedIn = useLoginStore(selectIsLoggedIn)
   const logout = useLoginStore((s) => s.logout)
+  const requireLogin = useLoginStore((s) => s.requireLogin)
   const avatarData = useLoginStore(selectAvatarDataUrl)
 
   const handleAccountMenuClick = useCallback(() => {
@@ -42,7 +43,7 @@ export function WorkspaceHeader() {
     openQuotaDialog()
   }, [])
 
-  const handleNotesClick = useCallback(async () => {
+  const openNotesSelector = useCallback(async () => {
     try {
       const result = await showNotesSelectorDialog()
       if (result.success && result.notes.length > 0) {
@@ -63,6 +64,12 @@ export function WorkspaceHeader() {
       // 用户取消或关闭对话框，不做任何操作
     }
   }, [location.pathname, navigate, selectedNotes, removeNote, addNote, clearSelectedNotes])
+
+  const handleNotesClick = useCallback(() => {
+    void requireLogin(openNotesSelector).catch(() => {
+      // 用户取消登录，不做任何操作
+    })
+  }, [openNotesSelector, requireLogin])
 
   const handleUserClick = useCallback(async () => {
     if (!isLoggedIn) {

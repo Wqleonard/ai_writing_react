@@ -12,11 +12,22 @@ const PromptPage = () => {
   const updateCategories = useOptionsStore((s) => s.updateCategories)
 
   const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+  const requireLogin = useLoginStore((s) => s.requireLogin)
+
+  const handlePageTypeClick = (type: PageType) => {
+    if (type === 'public') {
+      setPageType(type)
+      return
+    }
+    void requireLogin(() => setPageType(type)).catch(() => {
+      // 用户取消登录时保持当前 tab
+    })
+  }
 
   useEffect(() => {
     updateCategories()
     completeNewbieMissionByCode('USE_PROMPTS')
-  }, [])
+  }, [completeNewbieMissionByCode, updateCategories])
 
   return (
     <div className="page-community-prompt flex h-full w-full flex-col px-2">
@@ -30,7 +41,7 @@ const PromptPage = () => {
                 'text-base mr-3 cursor-pointer px-0.5',
                 pageType === opt.value ? 'text-theme' : '',
               )}
-              onClick={() => setPageType(opt.value as PageType)}
+              onClick={() => handlePageTypeClick(opt.value as PageType)}
             >
               {opt.label}
             </div>
