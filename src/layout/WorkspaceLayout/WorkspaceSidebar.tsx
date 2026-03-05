@@ -12,6 +12,7 @@ import { AddNewWorkPopover } from '@/components/AddNewWorkPopover'
 import { Iconfont } from '@/components/IconFont'
 import { useOptionsStore } from '@/stores/optionsStore'
 import { openFeedbackDialog } from '@/components/FeedbackDialog'
+import { useLoginStore } from '@/stores/loginStore'
 
 interface MenuChild {
   title: string
@@ -224,13 +225,13 @@ export function WorkspaceSidebar() {
   const [joinGroupOpen, setJoinGroupOpen] = useState(false)
 
   const optionsStore = useOptionsStore()
+  const requireLogin = useLoginStore((s) => s.requireLogin)
 
   // 监听路由变化，自动展开对应的父菜单
   useEffect(() => {
     const parentMenusToExpand = menuData
       .filter(item => item.children?.some(c => location.pathname.startsWith(c.route)))
       .map(i => i.route)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpandedMenus(parentMenusToExpand)
   }, [location.pathname])
 
@@ -247,6 +248,12 @@ export function WorkspaceSidebar() {
   const goLanding = useCallback(() => {
     navigate('/')
   }, [navigate])
+
+  const handleFeedbackClick = useCallback(() => {
+    void requireLogin(openFeedbackDialog).catch(() => {
+      // 用户取消登录时，不打开反馈弹窗
+    })
+  }, [requireLogin])
 
   return (
     <aside
@@ -411,9 +418,7 @@ export function WorkspaceSidebar() {
           <TooltipTrigger asChild>
             <button
               className="iconfont flex h-7 w-7 text-[#757575]! cursor-pointer items-center justify-center rounded-[8px] transition-colors hover:bg-(--bg-tertiary)"
-              onClick={() => {
-                openFeedbackDialog()
-              }}
+              onClick={handleFeedbackClick}
             >
               &#xe64e;
             </button>
