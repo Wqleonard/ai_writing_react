@@ -202,12 +202,13 @@ const TreeNodeRow = ({
   }, [isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
 
   return (
-    <div className="w-full group/node">
+    <div className="w-full">
       <div
         role="button"
         tabIndex={0}
         draggable
         className={clsx(
+          "group/node",
           "relative flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-all duration-200",
           "min-h-[32px] rounded-[4px]",
           isSelected && "bg-[#fffef9] text-(--text-primary)",
