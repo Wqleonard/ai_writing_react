@@ -503,7 +503,7 @@ const WritingStylesPage = () => {
       </Dialog>
 
       <Dialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
-        <DialogContent showCloseButton>
+        <DialogContent showCloseButton className="w-100">
           <DialogHeader>
             <DialogTitle>创建成功！</DialogTitle>
           </DialogHeader>
