@@ -872,6 +872,7 @@ const MarkdownEditorPage = () => {
     customStyle.textContent = `
       .page-editor-panel .editor-content-layout {
         padding-left: ${settings.margin}px;
+        padding-right: ${settings.margin}px;
       }
 
       .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror {
