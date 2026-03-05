@@ -484,7 +484,7 @@ export default function EditableFlowCard({
             onPointerDown={isEditing ? (e) => e.stopPropagation() : undefined}
           >
             <AutoScrollArea
-              maxHeight={isExpanded ? 400 : 150}
+              maxHeight={isExpanded ? 370 : 150}
               autoScroll={isStreaming && !isEditing}
               className={cn("relative w-full cursor-pointer")}
               onWheel={handleWheel}
