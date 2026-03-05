@@ -177,9 +177,15 @@ export default function EditableFlowCard({
       setShowExpandBtn(false);
       return;
     }
+    // 展开态不重算「是否显示展开按钮」，避免因宽度变大导致内容高度变小而把按钮错误隐藏
+    if (isExpanded) return;
     const el = textRef.current;
     if (!el) return;
-    const overflow = el.scrollHeight > 150;
+    const viewport = el.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null;
+    // 优先使用真实滚动容器高度判断，避免内容高度临界值在折叠/动画时误判
+    const overflow = viewport
+      ? viewport.scrollHeight > viewport.clientHeight + 1
+      : el.scrollHeight > 148;
     setShowExpandBtn(overflow);
   };
 
@@ -189,6 +195,7 @@ export default function EditableFlowCard({
       checkOverflow();
       return;
     }
+    if (isExpanded) return;
     // 退出编辑后只读视图可能尚未完成布局，延迟执行 checkOverflow 以正确显示「展开/折叠」按钮
     const rafId = requestAnimationFrame(() => {
       checkOverflowTimerRef.current = setTimeout(() => {
@@ -204,6 +211,19 @@ export default function EditableFlowCard({
       }
     };
   }, [displayContent, isExpanded, isEditing]);
+
+  useEffect(() => {
+    if (isEditing || isExpanded) return;
+    const el = textRef.current;
+    if (!el) return;
+    const viewport = el.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null;
+    const target = viewport ?? el;
+    const observer = new ResizeObserver(() => {
+      checkOverflow();
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isEditing, isExpanded, displayContent]);
 
   const handleBlur = () => {
     if (isEditing) {
@@ -278,7 +298,11 @@ export default function EditableFlowCard({
   const toggleExpand = () => {
     // 流式输出期间不允许展开，避免内容区域被撑高遮挡下方节点
     if (isStreaming) return;
-    setIsExpanded((v) => !v);
+    setIsExpanded((v) => {
+      // 从展开切回折叠时，先保留按钮显示，等待折叠态测量结果回写
+      if (v) setShowExpandBtn(true);
+      return !v;
+    });
     onExpand?.(id);
   };
 
@@ -326,7 +350,6 @@ export default function EditableFlowCard({
 
             // 只有拿到最终内容时才结束流式，否则忽略（有些后端会在过程中发 updates 元数据）
             if (finalMsg) {
-              console.log(finalMsg, 'finalMsg')
               commitFinalContent(finalMsg);
               return;
             }
@@ -397,7 +420,6 @@ export default function EditableFlowCard({
   };
 
   const handleAdd = () => {
-    console.log(`${type} add`)
     onAdd(id)
   };
 
@@ -541,9 +563,12 @@ export default function EditableFlowCard({
           <button
             type="button"
             onClick={toggleExpand}
-            className="mt-2 px-3 py-1.5 text-xs rounded-full border border-border bg-card/90 text-muted-foreground hover:bg-card hover:text-foreground transition-colors cursor-pointer"
+            className={cn(
+              "mt-2 px-3 py-1.5 text-xs bg-card/90 text-muted-foreground hover:bg-card hover:text-foreground transition-colors cursor-pointer",
+              // "underline underline-offset-2 decoration-current"
+            )}
           >
-            {isExpanded ? "折叠" : "展开"}
+            {isExpanded ? "< 折叠 >" : "< 展开 >"}
           </button>
         )}
         {/* 编辑态下保留与「展开/折叠」按钮同高的占位，避免高度塌陷 */}
