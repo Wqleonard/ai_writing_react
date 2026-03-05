@@ -466,7 +466,7 @@
 }
 
 .quill-chat-input .chat-textarea.has-error {
-  color: #ef4444;
+  /* color: #ef4444; */
 }
 
 /* 底部工具栏与右侧区域 */
@@ -873,6 +873,39 @@
 /* 横向推荐标签滚动条隐藏（与 Vue FormRecommendLabel 一致） */
 .tags-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* 编辑主内容区：使用原生滚动容器时的滚动条样式 */
+.editor-main-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: #d5d6d8 transparent;
+}
+
+.editor-main-scroll-area::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.editor-main-scroll-area::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.editor-main-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-main-scroll-area::-webkit-scrollbar-thumb {
+  background: #d5d6d8;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.editor-main-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: #b9bcc2;
+  background-clip: content-box;
 }
 
 /* MarkdownRenderer 内容样式（与 Vue MarkdownRenderer 一致） */

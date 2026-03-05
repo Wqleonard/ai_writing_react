@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/Select";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
+import { ScrollArea } from "@/components/ui/ScrollArea";
 import { CircleAlert } from "lucide-react";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
@@ -579,7 +580,7 @@ const MarkdownEditorPage = () => {
 
   const handleStopStreaming = useCallback(() => {
     stoppedByUserRef.current = true;
-    finalizeStreamingMessageWithSuffix("智能体已暂停");
+    finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
     langGraphStream.stop();
   }, [finalizeStreamingMessageWithSuffix, langGraphStream]);
 
@@ -703,6 +704,7 @@ const MarkdownEditorPage = () => {
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
   const editorMainScrollRef = useRef<HTMLDivElement | null>(null);
+
   const leftPanelRef = useRef<HTMLDivElement | null>(null);
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
   const activeRemarkHighlightRef = useRef<HTMLElement | null>(null);
@@ -1157,15 +1159,6 @@ const MarkdownEditorPage = () => {
     },
     [clearRemarkHighlight]
   );
-
-  const handleEditorMaskWheel = useCallback((e: React.WheelEvent) => {
-    const el = editorMainScrollRef.current;
-    if (!el) return;
-    e.preventDefault();
-    e.stopPropagation();
-    el.scrollTop += e.deltaY;
-    el.scrollLeft += e.deltaX;
-  }, []);
 
   const applyChangeToFile = useCallback(
     (targetFileKey: string, oldString: string, newString: string): boolean => {
@@ -1751,144 +1744,133 @@ const MarkdownEditorPage = () => {
 
             {/* 编辑区主体 */}
             <div className="flex flex-1 min-h-0 min-w-0 relative">
-              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col" style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem` }}>
+              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col" style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem`, }}>
                 <div
                   ref={editorMainScrollRef}
                   className={clsx(
-                    "h-full min-h-0 flex flex-col relative overflow-x-hidden",
-                    isCurrentEditorEmpty ? "overflow-y-hidden" : "overflow-y-auto",
+                    "editor-main-scroll-area h-full min-h-0 relative overflow-x-hidden overflow-y-auto",
+                    !isEditorEditable && "cursor-not-allowed-all",
                     isStreamingOverlayVisible && "cursor-not-allowed"
                   )}
                 >
-                  <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
-                    <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
-                      <div className="flex flex-col flex-1 min-h-0">
-                        {currentEditingId ? (
-                          isEditingLabel ? (
-                            <input
-                              ref={labelInputRef}
-                              type="text"
-                              disabled={!isEditorEditable}
-                              className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
-                              value={editingLabelValue}
-                              onChange={(e) => setEditingLabelValue(e.target.value)}
-                              onBlur={saveLabelEdit}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  saveLabelEdit();
-                                } else if (e.key === "Escape") {
-                                  e.preventDefault();
-                                  cancelLabelEdit();
-                                }
-                              }}
-                            />
-                          ) : (
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
-                              onClick={() => {
-                                if (!isEditorEditable) return;
-                                startEditingLabel(currentLabel);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
+                  <div className="min-h-full flex flex-col relative overflow-x-hidden">
+                    <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
+                      <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
+                        <div className="flex flex-col flex-1 min-h-0">
+                          {currentEditingId ? (
+                            isEditingLabel ? (
+                              <input
+                                ref={labelInputRef}
+                                type="text"
+                                disabled={!isEditorEditable}
+                                className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
+                                value={editingLabelValue}
+                                onChange={(e) => setEditingLabelValue(e.target.value)}
+                                onBlur={saveLabelEdit}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    saveLabelEdit();
+                                  } else if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    cancelLabelEdit();
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
+                                onClick={() => {
                                   if (!isEditorEditable) return;
                                   startEditingLabel(currentLabel);
-                                }
-                              }}
-                            >
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    if (!isEditorEditable) return;
+                                    startEditingLabel(currentLabel);
+                                  }
+                                }}
+                              >
+                                {currentLabel}
+                              </div>
+                            )
+                          ) : (
+                            <div className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0">
                               {currentLabel}
                             </div>
-                          )
-                        ) : (
-                          <div className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0">
-                            {currentLabel}
+                          )}
+                          <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
+                            {isRoleSettingPreviewFile && (
+                              <div className="flex items-center gap-2 text-xs">
+                                <button
+                                  type="button"
+                                  className={clsx(
+                                    "px-2 py-1 rounded border transition-colors",
+                                    relationViewMode === "edit"
+                                      ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                      : "bg-background text-muted-foreground border-border"
+                                  )}
+                                  onClick={() => setRelationViewMode("edit")}
+                                >
+                                  编辑
+                                </button>
+                                <button
+                                  type="button"
+                                  className={clsx(
+                                    "px-2 py-1 rounded border transition-colors",
+                                    relationViewMode === "preview"
+                                      ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                      : "bg-background text-muted-foreground border-border"
+                                  )}
+                                  onClick={() => setRelationViewMode("preview")}
+                                >
+                                  {isRoleRelationFile ? "关系图预览" : "表格预览"}
+                                </button>
+                              </div>
+                            )}
+                            {relationViewMode === "preview" && isRoleRelationFile ? (
+                              <div className="flex-1 min-h-0">
+                                <MermaidRelationPreview markdown={currentContent} />
+                              </div>
+                            ) : relationViewMode === "preview" && isRoleTableFile ? (
+                              <div className="flex-1 min-h-0">
+                                <RoleTablePreview markdown={currentContent} />
+                              </div>
+                            ) : (
+                              <MarkdownEditor
+                                ref={markdownEditorRef}
+                                key={fileKey}
+                                className="editor-outer-scroll-mode"
+                                fontClassName="font-KaiTi"
+                                value={currentContent}
+                                onChange={(markdown) => setServerDataFile(fileKey, markdown)}
+                                placeholder={EDITOR_PLACEHOLDER}
+                                readonly={!isEditorEditable}
+                                btns={["edit", "expand", "add", "note"]}
+                                onSelectionAdd={handleEditorSelectionAdd}
+                                onSelectionNote={handleEditorSelectionNote}
+                              />
+                            )}
                           </div>
-                        )}
-                        <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
-                          {isRoleSettingPreviewFile && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <button
-                                type="button"
-                                className={clsx(
-                                  "px-2 py-1 rounded border transition-colors",
-                                  relationViewMode === "edit"
-                                    ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
-                                    : "bg-background text-muted-foreground border-border"
-                                )}
-                                onClick={() => setRelationViewMode("edit")}
-                              >
-                                编辑
-                              </button>
-                              <button
-                                type="button"
-                                className={clsx(
-                                  "px-2 py-1 rounded border transition-colors",
-                                  relationViewMode === "preview"
-                                    ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
-                                    : "bg-background text-muted-foreground border-border"
-                                )}
-                                onClick={() => setRelationViewMode("preview")}
-                              >
-                                {isRoleRelationFile ? "关系图预览" : "表格预览"}
-                              </button>
-                            </div>
-                          )}
-                          {relationViewMode === "preview" && isRoleRelationFile ? (
-                            <div className="flex-1 min-h-0">
-                              <MermaidRelationPreview markdown={currentContent} />
-                            </div>
-                          ) : relationViewMode === "preview" && isRoleTableFile ? (
-                            <div className="flex-1 min-h-0">
-                              <RoleTablePreview markdown={currentContent} />
-                            </div>
-                          ) : (
-                            <MarkdownEditor
-                              ref={markdownEditorRef}
-                              key={fileKey}
-                              className="editor-outer-scroll-mode"
-                              value={currentContent}
-                              onChange={(markdown) => setServerDataFile(fileKey, markdown)}
-                              placeholder={EDITOR_PLACEHOLDER}
-                              readonly={!isEditorEditable}
-                              btns={["edit", "expand", "add", "note"]}
-                              onSelectionAdd={handleEditorSelectionAdd}
-                              onSelectionNote={handleEditorSelectionNote}
-                            />
-                          )}
                         </div>
+                        <StepWorkflow
+                          ref={stepWorkflowRef}
+                          totalMdContentLength={wordCount}
+                          isEditorEmpty={isEditorActuallyEmpty}
+                          currentEditingId={currentEditingId}
+                        />
                       </div>
-                      <StepWorkflow
-                        ref={stepWorkflowRef}
-                        totalMdContentLength={wordCount}
-                        isEditorEmpty={isEditorActuallyEmpty}
-                        currentEditingId={currentEditingId}
-                      />
                     </div>
+                    {!isEditorEditable && (
+                      <div
+                        className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"
+                      />
+                    )}
                   </div>
                 </div>
-                {!isEditorEditable && (
-                  <div
-                    aria-hidden
-                    className="absolute inset-x-0 bottom-0 top-0 z-20 bg-white/35 cursor-not-allowed pointer-events-auto"
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                    }}
-                    onWheel={handleEditorMaskWheel}
-                  />
-                )}
                 {shouldShowRemarkOverlay && (
                   <div className="pointer-events-none absolute bottom-3 left-2 z-40">
                     <div className="pointer-events-auto flex w-fit items-center gap-2 rounded-md bg-[rgba(255,255,255,0.92)] px-2 py-1 shadow-sm">

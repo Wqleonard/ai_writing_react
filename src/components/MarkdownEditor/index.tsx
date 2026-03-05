@@ -109,6 +109,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const onChangeRef = useRef(onChange)
     const onKeyDownRef = useRef(onKeyDown)
     const isComposingRef = useRef(false)
+    const editorInstanceRef = useRef<Editor | null>(null)
     const [isSelectionToolbarPinned, setIsSelectionToolbarPinned] = useState(false)
     const [selectionToolbarRenderKey, setSelectionToolbarRenderKey] = useState(0)
     const closeSelectionToolbar = useCallback(() => {
@@ -125,6 +126,26 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       onChangeRef.current = onChange
       onKeyDownRef.current = onKeyDown
     }, [readonly, onChange, onKeyDown])
+
+    const emitMarkdownChange = useCallback(
+      (targetEditor: Editor) => {
+        if (readonlyRef.current) return
+        isInternalUpdate.current = true
+        let content =
+          (targetEditor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
+        if (maxlength != null && content.length > maxlength) {
+          content = content.slice(0, maxlength)
+          onChangeRef.current?.(content)
+          targetEditor.commands.setContent(content, { contentType: 'markdown' })
+        } else {
+          onChangeRef.current?.(content)
+        }
+        queueMicrotask(() => {
+          isInternalUpdate.current = false
+        })
+      },
+      [maxlength]
+    )
 
     const extensions = useMemo(
       () => [
@@ -199,29 +220,29 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             },
             compositionend: () => {
               isComposingRef.current = false
+              queueMicrotask(() => {
+                const targetEditor = editorInstanceRef.current
+                if (!targetEditor) return
+                emitMarkdownChange(targetEditor)
+              })
             },
           },
         },
         onUpdate: ({ editor }) => {
-          if (readonlyRef.current) return
           if (isComposingRef.current) return
-          isInternalUpdate.current = true
-          let content = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
-          if (maxlength != null && content.length > maxlength) {
-            content = content.slice(0, maxlength)
-            onChangeRef.current?.(content)
-            editor.commands.setContent(content, { contentType: 'markdown' })
-          } else {
-            onChangeRef.current?.(content)
-          }
-          queueMicrotask(() => {
-            isInternalUpdate.current = false
-          })
+          emitMarkdownChange(editor)
         },
       },
       // 不把 readonly/onChange/onKeyDown 放入 deps，避免父组件重渲染导致 editor 重建（光标跳转、中文 IME 打断）
-      [maxlength, placeholder, minHeight]
+      [emitMarkdownChange, placeholder, minHeight]
     )
+
+    useEffect(() => {
+      editorInstanceRef.current = editor
+      return () => {
+        editorInstanceRef.current = null
+      }
+    }, [editor])
 
     // 同步外部 value 到编辑器。可编辑态下不回写，避免 setContent 导致失焦/无法输入
     useEffect(() => {

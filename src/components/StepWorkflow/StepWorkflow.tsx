@@ -57,15 +57,16 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   {
     totalMdContentLength: _totalMdContentLength = 0,
     isEditorEmpty: _isEditorEmpty,
-    currentEditingId,
+    currentEditingId: _currentEditingId,
     onStepConfirm,
   },
   ref
 ) {
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
-  const [enterActive, setEnterActive] = useState(false)
-  const [enterSeed, setEnterSeed] = useState(0)
+  const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
+  const [isQuickStartActive, setIsQuickStartActive] = useState(false)
+  const hideTimerRef = useRef<number | null>(null)
 
   const serverData = useEditorStore((s) => s.serverData)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
@@ -90,25 +91,38 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   }, [])
 
   useEffect(() => {
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = null
+    }
+
     if (showQuickStart) {
-      setEnterActive(false)
-      // 双 rAF：确保浏览器先绘制 enter-from（opacity-0 translate-y-50），再切到 enter-to，过渡才会生效
+      setIsQuickStartMounted(true)
+      // 双 rAF：确保先应用 enter-from，再平滑过渡到 enter-to
       let raf2 = 0
       const raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => setEnterActive(true))
+        raf2 = requestAnimationFrame(() => setIsQuickStartActive(true))
       })
       return () => {
         cancelAnimationFrame(raf1)
         if (raf2) cancelAnimationFrame(raf2)
       }
     }
-    setEnterActive(false)
-  }, [showQuickStart, enterSeed])
 
-  // 与 Vue 版本行为保持一致：切换编辑目标且内容为空时，重触发一次进入动画
-  useEffect(() => {
-    if (showQuickStart) setEnterSeed((v) => v + 1)
-  }, [currentEditingId, showQuickStart])
+    // 先做离场动画，再真正隐藏，避免突兀闪断
+    setIsQuickStartActive(false)
+    hideTimerRef.current = window.setTimeout(() => {
+      setIsQuickStartMounted(false)
+      hideTimerRef.current = null
+    }, 280)
+
+    return () => {
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current)
+        hideTimerRef.current = null
+      }
+    }
+  }, [showQuickStart])
 
   const handleStepConfirm = useCallback(async (data: StepSaveData, editingId = "大纲.md") => {
     const nextServerData = {
@@ -178,9 +192,9 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
         style={{
           contain: "layout style paint",
           willChange: "transform, opacity",
-          visibility: showQuickStart ? "visible" : "hidden",
+          visibility: isQuickStartMounted ? "visible" : "hidden",
         }}
-        aria-hidden={!showQuickStart}
+        aria-hidden={!isQuickStartMounted}
       >
         <div
           className={`
@@ -188,9 +202,9 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
             transform-gpu
           `}
           style={{
-            transition: "transform 240ms ease-out, opacity 160ms ease-out",
-            transform: showQuickStart && enterActive ? "translate3d(0, 0, 0)" : "translate3d(0, 56px, 0)",
-            opacity: showQuickStart ? 1 : 0,
+            transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out",
+            transform: isQuickStartActive ? "translate3d(0, 0, 0)" : "translate3d(0, 28px, 0)",
+            opacity: isQuickStartActive ? 1 : 0,
           }}
         >
           <div className="flex items-center justify-center gap-4">
