@@ -262,11 +262,11 @@ const SharePage = () => {
     <div className="mx-auto flex h-full flex-col items-center px-2">
       <div className="flex w-265 shrink-0 items-center justify-between">
         <div className="text-2xl font-medium">创作分享</div>
-        <div className="flex items-center gap-0">
+        <div className="flex items-center gap-3">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-7.5 rounded-lg text-black"
+            className="h-7.5 px-4 rounded-lg text-black"
             onClick={handleMyShareClick}
           >
             我的
@@ -274,7 +274,7 @@ const SharePage = () => {
           <Button
             variant="default"
             size="sm"
-            className="h-7 rounded-lg text-white"
+            className="h-7 px-4 rounded-lg text-white"
             onClick={handleCreateShare}
           >
             创建
