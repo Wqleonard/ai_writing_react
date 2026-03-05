@@ -43,9 +43,9 @@ export interface StepWorkflowRef {
 }
 
 export interface StepWorkflowProps {
-  /** 编辑器内容总字数，用于控制快捷入口显隐 */
+  /** 兼容历史参数（当前展示判断已切换为基于 serverData） */
   totalMdContentLength?: number
-  /** 当前编辑器内容是否为空（优先于 totalMdContentLength） */
+  /** 兼容历史参数（当前展示判断已切换为基于 serverData） */
   isEditorEmpty?: boolean
   /** 当前编辑中的文件 id，变化时重算快捷入口 */
   currentEditingId?: string | null
@@ -55,8 +55,8 @@ export interface StepWorkflowProps {
 
 export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>(function StepWorkflow(
   {
-    totalMdContentLength = 0,
-    isEditorEmpty,
+    totalMdContentLength: _totalMdContentLength = 0,
+    isEditorEmpty: _isEditorEmpty,
     currentEditingId,
     onStepConfirm,
   },
@@ -64,14 +64,21 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
 ) {
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
-  const showQuickStart = isEditorEmpty ?? totalMdContentLength === 0
   const [enterActive, setEnterActive] = useState(false)
   const [enterSeed, setEnterSeed] = useState(0)
 
+  const serverData = useEditorStore((s) => s.serverData)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
+  const hasContentOutsideKnowledgeBase = (key: string, value: string) => {
+    if (!value || value.trim().length === 0) return false
+    return !key.startsWith("知识库/")
+  }
+  const showQuickStart = !Object.entries(serverData).some(([key, value]) =>
+    hasContentOutsideKnowledgeBase(key, value)
+  )
 
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: () => setStepCreateDialogShow(true),
