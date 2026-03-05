@@ -25,8 +25,7 @@ import {
   chapterPostStream,
 } from '@/api/editor-header-toolbar'
 import { postPublicPromptStream } from '@/api/community-prompt'
-import { showGenerationSaveDialog } from '@/utils/showGenerationSaveDialog'
-import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/works'
+import { handleGenerationSave } from '@/utils/handleGenerationSave'
 import { toast } from 'sonner'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 
@@ -36,12 +35,6 @@ export interface PublicGenerateDialogProps {
   data: PromptItem | null
   onOpenMarket: (prompt: PromptItem | null) => void
   onSave?: (saveId: string) => void
-}
-
-function stripPrefixBeforeSlash(input: string): string {
-  const idx = input.indexOf('/')
-  if (idx === -1) return input
-  return input.slice(idx + 1)
 }
 
 function deduplicateAndFilterFiles(files: FileTreeNode[]): FileTreeNode[] {
@@ -285,28 +278,8 @@ export const PublicGenerateDialog = ({
   const handleAddToWork = useCallback(async () => {
     try {
       const name = `${data?.categories?.[0]?.name || ''}(来自生成器)`
-      const result = await showGenerationSaveDialog({
-        fileNameDefault: name,
-      })
-      if (!result.selectedPath) return
-      let saveId = ''
-      if (result.workType === 'new') {
-        const createRes: any = await createWorkReq()
-        const newWorkId = createRes.id
-        const newWorkFiles = JSON.parse(createRes.latestWorkVersion?.content || '{}')
-        const savePath = stripPrefixBeforeSlash(result.selectedPath) + '/' + result.fileName + '.md'
-        const saveFiles = { ...newWorkFiles, [savePath]: markdownContent }
-        await updateWorkVersionReq(newWorkId, JSON.stringify(saveFiles), '0')
-        saveId = newWorkId
-      } else {
-        const workId = String(result.selectedWork?.id)
-        const work: any = await getWorksByIdReq(workId)
-        const workFiles = JSON.parse(work?.latestWorkVersion?.content || '{}')
-        const savePath = stripPrefixBeforeSlash(result.selectedPath) + '/' + result.fileName + '.md'
-        const saveFiles = { ...workFiles, [savePath]: markdownContent }
-        await updateWorkVersionReq(workId, JSON.stringify(saveFiles), '0')
-        saveId = workId
-      }
+      const saveId = await handleGenerationSave(name, markdownContent)
+      if (!saveId) return
       toast.success('保存成功')
       onSave?.(saveId)
       onOpenChange(false)

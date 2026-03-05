@@ -1,16 +1,16 @@
 "use client"
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useRef, useState } from "react"
 import clsx from "clsx"
 import dayjs from "dayjs"
 import utc from "dayjs/plugin/utc"
 import { WorkspaceHeader } from "@/layout/WorkspaceLayout/WorkspaceHeader"
 import IconFont from "@/components/IconFont/Iconfont"
 import { EditorToolbarPromptPopover } from "./EditorToolbarPromptPopover"
-import { UsePrompts } from "@/components/Community/UsePrompts"
 import { WritingStyleDialog } from "@/components/Community/WritingStyleDialog"
 import { BookAnalysisDialog } from "@/components/Community/BookAnalysisDialog"
 import type { PromptItem } from "@/components/Community/types"
+import { UseGenerationTool, type UseGenerationToolRef } from "./UseGenerationTool"
 
 dayjs.extend(utc)
 
@@ -44,22 +44,17 @@ export const EditorTopToolbar = ({
       ? dayjs.utc(updatedTime).local().format("HH:mm:ss")
       : null
 
-  const [usePromptsOpen, setUsePromptsOpen] = useState(false)
-  const [usePromptsData, setUsePromptsData] = useState<PromptItem | null>(null)
-  const [openMarketDirectly, setOpenMarketDirectly] = useState(false)
   const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
   const [bookAnalysisDialogOpen, setBookAnalysisDialogOpen] = useState(false)
 
+  const useGenerationToolRef = useRef<UseGenerationToolRef>(null)
+
   const handlePromptUse = useCallback((item: PromptItem) => {
-    setUsePromptsData(item)
-    setOpenMarketDirectly(false)
-    setUsePromptsOpen(true)
+    useGenerationToolRef.current?.handleUse(item)
   }, [])
 
   const handlePromptMore = useCallback(() => {
-    setUsePromptsData(null)
-    setOpenMarketDirectly(true)
-    setUsePromptsOpen(true)
+    useGenerationToolRef.current?.openMarket()
   }, [])
 
   const handleBookAnalysisClick = useCallback(() => {
@@ -73,23 +68,23 @@ export const EditorTopToolbar = ({
   return (
     <div
       className={clsx(
-        "editor-top-toolbar flex h-14 w-full shrink-0 flex-row items-center justify-between bg-[var(--bg-editor)] px-7",
+        "editor-top-toolbar flex h-14 w-full shrink-0 flex-row items-center justify-between bg-(--bg-editor) px-7",
         className
       )}
     >
       <div className="top-toolbar-left flex h-[30px] items-center">
         <div
-          className="flex cursor-pointer items-center text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]"
+          className="flex cursor-pointer items-center text-sm text-(--text-primary) hover:text-(--accent-color)"
           onClick={onBackClick}
         >
           <IconFont unicode="\ue62a" className="mr-2 text-sm" />
           <span>返回</span>
         </div>
-        <span className="divider mx-2 select-none text-base text-[var(--border-color)]">
+        <span className="divider mx-2 select-none text-base text-(--border-color)">
           |
         </span>
         <div
-          className="cursor-pointer text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]"
+          className="cursor-pointer text-sm text-(--text-primary) hover:text-(--accent-color)"
           onClick={onSaveClick}
         >
           保存
@@ -142,12 +137,9 @@ export const EditorTopToolbar = ({
       <div className="top-toolbar-right flex items-center gap-1">
         <WorkspaceHeader />
       </div>
-
-      <UsePrompts
-        open={usePromptsOpen}
-        onOpenChange={setUsePromptsOpen}
-        data={usePromptsData}
-        openMarketDirectly={openMarketDirectly}
+        
+      <UseGenerationTool
+        ref={useGenerationToolRef}
       />
 
       <WritingStyleDialog

@@ -210,7 +210,7 @@ const TreeNodeRow = ({
         className={clsx(
           "relative flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-all duration-200",
           "min-h-[32px] rounded-[4px]",
-          isSelected && "bg-[#fffef9] text-[var(--text-primary)]",
+          isSelected && "bg-[#fffef9] text-(--text-primary)",
           !isSelected && "hover:bg-[#fffef9]",
           isDir && "cursor-pointer",
           isDragged && "opacity-50 scale-[0.98]",
@@ -240,7 +240,7 @@ const TreeNodeRow = ({
         <div
           className={clsx(
             "mr-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-all duration-200",
-            isDir ? "opacity-100 text-[var(--text-secondary)] hover:text-[var(--theme-color)]" : "opacity-0"
+            isDir ? "opacity-100 text-(--text-secondary) hover:text-(--theme-color)" : "opacity-0"
           )}
           style={!isDir ? { width: 20, minWidth: 20 } : undefined}
           onClick={(e) => {

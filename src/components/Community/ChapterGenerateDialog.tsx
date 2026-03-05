@@ -20,8 +20,7 @@ import type { ConnectedFile, PromptItem } from './types'
 import type { PostStreamData } from '@/api'
 import { chapterPostStream } from '@/api/editor-header-toolbar'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
-import { showGenerationSaveDialog } from '@/utils/showGenerationSaveDialog'
-import { createWorkReq, getWorksByIdReq, updateWorkVersionReq } from '@/api/works'
+import { handleGenerationSave } from '@/utils/handleGenerationSave'
 import { useOptionsStore } from '@/stores/optionsStore'
 import { toast } from 'sonner'
 import clsx from 'clsx'
@@ -59,11 +58,6 @@ function deduplicateAndFilterFiles(files: ConnectedFile['file']) {
   }
   walk(files)
   return result
-}
-
-function stripPrefixBeforeSlash(input: string): string {
-  const idx = input.indexOf('/')
-  return idx === -1 ? input : input.slice(idx + 1)
 }
 
 export interface ChapterGenerateDialogProps {
@@ -242,23 +236,8 @@ export const ChapterGenerateDialog = ({
 
   const handleSave = useCallback(async () => {
     try {
-      const result = await showGenerationSaveDialog({ fileNameDefault: '正文(来自生成器)', currentWorkId })
-      if (!result.selectedPath) return
-      let saveId = ''
-      if (result.workType === 'new') {
-        const createRes: any = await createWorkReq()
-        const newWorkFiles = JSON.parse(createRes.latestWorkVersion?.content || '{}')
-        const savePath = stripPrefixBeforeSlash(result.selectedPath) + '/' + result.fileName + '.md'
-        await updateWorkVersionReq(createRes.id, JSON.stringify({ ...newWorkFiles, [savePath]: markdownContent }), '0')
-        saveId = createRes.id
-      } else {
-        const workId = String(result.selectedWork?.id)
-        const work: any = await getWorksByIdReq(workId)
-        const workFiles = JSON.parse(work?.latestWorkVersion?.content || '{}')
-        const savePath = stripPrefixBeforeSlash(result.selectedPath) + '/' + result.fileName + '.md'
-        await updateWorkVersionReq(workId, JSON.stringify({ ...workFiles, [savePath]: markdownContent }), '0')
-        saveId = workId
-      }
+      const saveId = await handleGenerationSave('正文(来自生成器)', markdownContent, currentWorkId)
+      if (!saveId) return
       toast.success('保存成功')
       onSave?.(saveId)
       onOpenChange(false)

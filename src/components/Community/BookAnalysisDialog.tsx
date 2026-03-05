@@ -19,8 +19,8 @@ import type { PromptItem } from "./types";
 import { LinkButton } from "../ui/LinkButton";
 import { AutoScrollArea } from "../AutoScrollArea";
 import { cn } from "@/lib/utils";
-import { showGenerationSaveDialog } from "@/utils/showGenerationSaveDialog";
 import { useEditorStore } from "@/stores/editorStore";
+import { handleGenerationSave } from "@/utils/handleGenerationSave";
 
 const SIZE_LIMIT = 8 * 1024 * 1024;
 
@@ -57,10 +57,12 @@ export const BookAnalysisDialog = ({
   }, [open]);
 
   useEffect(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
   }, []);
 
   const canStart =
@@ -140,20 +142,15 @@ export const BookAnalysisDialog = ({
   const handleSave = useCallback(async () => {
     try {
       const name = "拆书仿写" + "(来自生成器)";
-      const saveId = showGenerationSaveDialog({
-        fileNameDefault: name,
-      });
+      const saveId = await handleGenerationSave(name, markdownContent, workId);
       if (!saveId) return;
-      // if(saveId == workId){
-      //   // await
-      // }
       toast.success("保存成功");
       onClose();
     } catch (error) {
       console.error(error);
       toast.error("保存失败");
     }
-  }, [onClose]);
+  }, [markdownContent, onClose, workId]);
 
   const handleConfirm = async () => {
     if (!fileConfirmed) {
