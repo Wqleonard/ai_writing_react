@@ -194,6 +194,16 @@ export const StepCreateDialog = React.forwardRef<
   const workId = useEditorStore(s=>s.workId)
 
   useEffect(() => {
+    if (open) {
+      // 打开 Dialog 前移除外层编辑器焦点，避免 aria-hidden 与已聚焦元素冲突
+      const active = document.activeElement
+      if (active instanceof HTMLElement) {
+        active.blur()
+      }
+    }
+  }, [open])
+
+  useEffect(() => {
     if (selectedMode === "template") setSteps(STEPS_TEMPLATE)
     else if (selectedMode === "tag") setSteps(STEPS_TAG)
     else if (selectedMode === "custom") setSteps(STEPS_CUSTOM)

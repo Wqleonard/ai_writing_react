@@ -398,10 +398,6 @@ export const EditorTreeSidebar = ({
     return attachNewFlags(serverDataToTree(serverData))
   }, [newNodeIds, serverData])
 
-  useEffect(()=>{
-    console.log('serverData', serverData)
-  }, [serverData])
-
   useEffect(() => {
     setEditingTitleValue(workInfo.title)
   }, [workInfo.title])
