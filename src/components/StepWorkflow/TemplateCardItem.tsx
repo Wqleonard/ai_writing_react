@@ -40,7 +40,7 @@ export const TemplateCardItem = ({
         }
       }}
       className={clsx(
-        "group relative flex h-[190px] cursor-pointer flex-col gap-1 rounded-[20px] border-2 border-border bg-card p-3 transition-all duration-300 hover:border-[var(--theme-color)]",
+        "group relative flex h-[190px] cursor-pointer flex-col gap-1 rounded-[20px] border-2 border-border bg-card p-3 transition-all duration-300 hover:border-(--theme-color)",
         className
       )}
     >

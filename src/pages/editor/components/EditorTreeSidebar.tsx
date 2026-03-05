@@ -368,6 +368,10 @@ export const EditorTreeSidebar = ({
 
   const treeData = useMemo(() => serverDataToTree(serverData), [serverData])
 
+  useEffect(()=>{
+    console.log('serverData', serverData)
+  }, [serverData])
+
   useEffect(() => {
     setEditingTitleValue(workInfo.title)
   }, [workInfo.title])
