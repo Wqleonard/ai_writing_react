@@ -86,8 +86,7 @@ export const FormRecommendLabel = React.forwardRef<
         {label}
         {required && (
           <span
-            className="absolute right-0 top-0 text-[14px] leading-none text-[var(--el-color-danger)]"
-            style={{ transform: "translate(-50%, -20%)" }}
+            className="ml-0.5 text-red-500"
           >
             *
           </span>
