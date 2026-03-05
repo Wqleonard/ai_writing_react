@@ -2,12 +2,12 @@
 
 import React, { useCallback, useImperativeHandle, useRef, useState, useEffect } from "react"
 import { StepCreateDialog, type StepCreateDialogRef } from "./components/StepCreateDialog"
-import type { StepSaveData, Mode } from "./types"
+import type { StepSaveData, Mode, CharacterCardData } from "./types"
 import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
-import { updateWorkInfoReq } from "@/api/works"
 import { useEditorStore } from "@/stores/editorStore"
+import { updateWorkInfoReq } from "@/api/works"
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -18,6 +18,22 @@ const MODES = [
   { mode: "template", title: "使用模板创作", desc: "选择热门模板创作…", cover: TEMPLATE_COVER },
   { mode: "tag", title: "使用标签创作", desc: "选择标签自由获取灵感…", cover: TAG_COVER },
 ]
+
+const generateRoleSetting = (character: CharacterCardData | null) => {
+  if (!character) return ""
+  let md = "## 主角信息\n"
+  const firstLineArr: string[] = []
+  if (character.name) firstLineArr.push(character.name)
+  if (character.age) firstLineArr.push(character.age)
+  if (character.gender) firstLineArr.push(character.gender)
+  if (character.mbti) firstLineArr.push(character.mbti)
+  md += `${firstLineArr.join("，")}。\n\n`
+  if (character.experiences) md += `${character.experiences}\n\n`
+  if (character.personality) md += `${character.personality}\n\n`
+  if (character.abilities) md += `${character.abilities}\n\n`
+  if (character.identity) md += `${character.identity}\n\n`
+  return md
+}
 
 export interface StepWorkflowRef {
   /** 打开步骤创建弹窗（对应 Vue 的 setStepCreateDialogShow(true)） */
@@ -49,81 +65,16 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   const showQuickStart = isEditorEmpty ?? totalMdContentLength === 0
   const [enterActive, setEnterActive] = useState(false)
   const [enterSeed, setEnterSeed] = useState(0)
-  const workId = useEditorStore((s) => s.workId)
-  const setServerData = useEditorStore((s) => s.setServerData)
-  const setNewNodeIds = useEditorStore((s) => s.setNewNodeIds)
-  const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
-  const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
-  const saveEditorData = useEditorStore((s) => s.saveEditorData)
 
-  const generateRoleSetting = useCallback((character: StepSaveData["character"]) => {
-    if (!character) return ""
-    let markdown = "## 主角信息\n"
-    const firstLineItems: string[] = []
-    if (character.name) firstLineItems.push(character.name)
-    if (character.age) firstLineItems.push(character.age)
-    if (character.gender) firstLineItems.push(character.gender)
-    if (character.mbti) firstLineItems.push(character.mbti)
-    if (firstLineItems.length > 0) {
-      markdown += `${firstLineItems.join("，")}。\n\n`
-    }
-    if (character.experiences) markdown += `${character.experiences}\n\n`
-    if (character.personality) markdown += `${character.personality}\n\n`
-    if (character.abilities) markdown += `${character.abilities}\n\n`
-    if (character.identity) markdown += `${character.identity}\n\n`
-    return markdown
-  }, [])
+  const workId = useEditorStore((s) => s.workId)
+  const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
+  const setServerData = useEditorStore((s) => s.setServerData)
+  const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
+  const saveEditorData = useEditorStore((s) => s.saveEditorData)
 
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: () => setStepCreateDialogShow(true),
   }), [])
-
-  const handleStepConfirm = useCallback(
-    async (data: StepSaveData) => {
-      setStepCreateDialogShow(false)
-      if (data.saveTarget !== "new") {
-        const guidedWritingNewNodeIds = [
-          "大纲.md",
-          "设定/角色设定.md",
-          "设定/故事设定.md",
-        ]
-        setServerData({
-          "大纲.md": data.outline || "",
-          "知识库/": "",
-          "设定/角色设定.md": generateRoleSetting(data.character),
-          "设定/故事设定.md": data.story?.intro || "",
-          "正文/第一章.md": "",
-        })
-        setNewNodeIds(guidedWritingNewNodeIds)
-        setCurrentEditingId("大纲.md")
-
-        const titleLine = data.story?.title?.trim() || "未命名作品"
-        setWorkInfo((prev) => ({ ...prev, title: titleLine, stage: "final" }))
-        if (workId) {
-          try {
-            await updateWorkInfoReq(workId, {
-              title: titleLine,
-              stage: "final",
-            })
-          } catch (error) {
-            console.error("[StepWorkflow] updateWorkInfoReq failed:", error)
-          }
-          await saveEditorData("1")
-        }
-      }
-      onStepConfirm?.(data)
-    },
-    [
-      generateRoleSetting,
-      onStepConfirm,
-      saveEditorData,
-      setCurrentEditingId,
-      setNewNodeIds,
-      setServerData,
-      setWorkInfo,
-      workId,
-    ]
-  )
 
   const handleStartItemClick = useCallback((mode: string) => {
     setStepCreateDialogShow(true)
@@ -150,6 +101,34 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   useEffect(() => {
     if (showQuickStart) setEnterSeed((v) => v + 1)
   }, [currentEditingId, showQuickStart])
+
+  const handleStepConfirm = useCallback(async (data: StepSaveData) => {
+    console.log('handleStepConfirm data', data)
+    const nextServerData = {
+      "大纲.md": data.outline || "",
+      "知识库/": "",
+      "设定/角色设定.md": generateRoleSetting(data.character),
+      "设定/故事设定.md": data.story?.intro ?? "",
+      "正文/第一章.md": "",
+    }
+    setServerData(nextServerData)
+    setCurrentEditingId("大纲.md")
+    setStepCreateDialogShow(false)
+
+    const titleLine = data.story?.title || "未命名作品"
+    if (workId) {
+      await updateWorkInfoReq(workId, {
+        title: titleLine,
+        stage: "final",
+      })
+    }
+    setWorkInfo({
+      title: titleLine,
+      stage: "final",
+    })
+    await saveEditorData("1")
+    onStepConfirm?.(data)
+  }, [workId, setWorkInfo, setServerData, setCurrentEditingId, saveEditorData, onStepConfirm])
 
   return (
     <>
@@ -194,7 +173,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
                     handleStartItemClick(m.mode)
                   }
                 }}
-                className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-[var(--theme-color)]"
+                className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-(--theme-color)"
               >
                 <div className="h-[50px] w-full bg-white">
                   <img src={m.cover} alt="" className="h-full w-full object-cover" />

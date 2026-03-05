@@ -72,7 +72,7 @@ export const CreateRecommendDialog = ({
       <DialogContent
         showCloseButton
         className={clsx(
-          "flex h-[80vh] w-full max-w-[95vw] flex-col gap-0 p-0 sm:w-[880px] sm:!max-w-[880px]",
+          "flex h-[80vh] w-full max-w-[95vw] flex-col gap-0 p-0 sm:w-[880px] sm:max-w-[880px]!",
           "left-1/2 top-[10vh] -translate-x-1/2 translate-y-0",
           "duration-200 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -92,7 +92,7 @@ export const CreateRecommendDialog = ({
               type="button"
               onClick={onCreateWithTags}
               className={clsx(
-                "grid-item flex h-[190px] cursor-pointer flex-col items-center justify-center gap-0 rounded-[20px] border-2 border-border bg-background transition-all duration-300 hover:border-[var(--theme-color)]"
+                "grid-item flex h-[190px] cursor-pointer flex-col items-center justify-center gap-0 rounded-[20px] border-2 border-border bg-background transition-all duration-300 hover:border-(--theme-color)"
               )}
             >
               <div

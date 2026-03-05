@@ -1,6 +1,3 @@
-"use client"
-
-import React from "react"
 import {
   Dialog,
   DialogContent,
@@ -25,25 +22,24 @@ export const StepConfirmDialog = ({
   onSaveToNew,
 }: StepConfirmDialogProps) => {
   const handleCancel = () => {
-    onOpenChange(false)
     onCancel?.()
+    onOpenChange(false)
   }
 
   const handleSaveToCurrent = () => {
-    onOpenChange(false)
     onSaveToCurrent?.()
+    onOpenChange(false)
   }
 
   const handleSaveToNew = () => {
-    onOpenChange(false)
     onSaveToNew?.()
+    onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        showCloseButton={false}
-        className="max-w-[370px] rounded-[10px]"
+        className="w-100 rounded-[10px]"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
@@ -51,14 +47,14 @@ export const StepConfirmDialog = ({
         <VisuallyHidden>
           <DialogTitle>是否保存至当前作品？</DialogTitle>
         </VisuallyHidden>
-        <div className="flex flex-col justify-center pb-5">
+        <div className="flex flex-col justify-center">
           <div className="text-center text-xl font-medium">
             是否保存至当前作品？
           </div>
           <div className="mt-1 text-center text-sm">
             注：如已有内容将被覆盖
           </div>
-          <div className="mt-6 flex justify-center gap-3">
+          <div className="mt-10 flex justify-center gap-3">
             <Button
               type="button"
               variant="secondary"

@@ -194,6 +194,16 @@ export const StepCreateDialog = React.forwardRef<
   const workId = useEditorStore(s=>s.workId)
 
   useEffect(() => {
+    if (open) {
+      // 打开 Dialog 前移除外层编辑器焦点，避免 aria-hidden 与已聚焦元素冲突
+      const active = document.activeElement
+      if (active instanceof HTMLElement) {
+        active.blur()
+      }
+    }
+  }, [open])
+
+  useEffect(() => {
     if (selectedMode === "template") setSteps(STEPS_TEMPLATE)
     else if (selectedMode === "tag") setSteps(STEPS_TAG)
     else if (selectedMode === "custom") setSteps(STEPS_CUSTOM)
@@ -508,6 +518,7 @@ export const StepCreateDialog = React.forwardRef<
     if (selectedStory || selectedCharacter) {
       try {
         const result = await showStepConfirmDialog()
+        console.log(result)
         if (result === "cancel") {
           onOpenChange(false)
           return
@@ -552,6 +563,14 @@ export const StepCreateDialog = React.forwardRef<
     onOpenChange,
     onConfirm,
   ])
+
+  const handleDialogOpenChange = useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true)
+      return
+    }
+    void handleClose()
+  }, [onOpenChange, handleClose])
 
   useEffect(() => {
     if (!open) return
@@ -980,7 +999,7 @@ export const StepCreateDialog = React.forwardRef<
       },
       { signal: controller.signal }
     )
-  }, [workId, selectedStory, selectedCharacter, chapterNumber, markStepUpdated])
+  }, [selectedStory?.title, selectedStory?.intro, selectedStory?.theme, selectedCharacter, markStepUpdated, workId, chapterNumber, selectedMode, selectedTemplate, selectedTags, generateCustomDesc, historyStepSnapshots])
 
   useEffect(() => {
     if (!open || stepActive !== 4 || !selectedStory?.title || !selectedCharacter?.name) return
@@ -1049,13 +1068,14 @@ export const StepCreateDialog = React.forwardRef<
   }, [clearStoryEditTimers, clearCharacterEditTimers])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         showCloseButton
         className={clsx(
-          "flex max-h-[80vh] min-h-[728px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:!max-w-[1020px]",
+          "flex max-h-[80vh] min-h-[728px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:max-w-[1020px]!",
           "left-1/2 top-[10vh] -translate-x-1/2 translate-y-0"
         )}
+        onEscapeKeyDown={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -1071,10 +1091,10 @@ export const StepCreateDialog = React.forwardRef<
                 size="icon-lg"
                 type="button"
                 onClick={handleBack}
-                className="absolute left-6 top-5 flex h-8 w-8 cursor-pointer items-center justify-center rounded bg-transparent p-0 transition-colors hover:text-[var(--el-color-primary)]"
+                className="absolute left-6 top-5 flex h-8 w-8 cursor-pointer items-center justify-center rounded bg-transparent p-0 transition-colors hover:text-(--el-color-primary)"
                 aria-label="返回"
               >
-                <Iconfont unicode="&#xe62a;" className="text-lg text-[var(--el-text-color-secondary)]" />
+                <Iconfont unicode="&#xe62a;" className="text-lg text-(--el-text-color-secondary)" />
               </Button>
             ) : null}
             <div className="w-full max-w-[550px]">
@@ -1100,8 +1120,8 @@ export const StepCreateDialog = React.forwardRef<
                     className={clsx(
                       "mode-item flex h-[204px] w-[240px] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-colors",
                       selectedMode === m.mode
-                        ? "border-[var(--theme-color)]"
-                        : "border-[#e6e6e5] hover:border-[var(--theme-color)]"
+                        ? "border-(--theme-color)"
+                        : "border-[#e6e6e5] hover:border-(--theme-color)"
                     )}
                   >
                     <div className="mode-cover h-[76px] w-full overflow-hidden rounded bg-white">
@@ -1136,7 +1156,7 @@ export const StepCreateDialog = React.forwardRef<
                         "grid-item flex h-[190px] cursor-pointer flex-col rounded-[20px] border-2 bg-white p-3 transition",
                         selectedTemplate?.id === t.id
                           ? "border-primary"
-                          : "border-gray-200 hover:border-[var(--theme-color)]"
+                          : "border-gray-200 hover:border-(--theme-color)"
                       )}
                     >
                       <TemplateCardItem data={t} />

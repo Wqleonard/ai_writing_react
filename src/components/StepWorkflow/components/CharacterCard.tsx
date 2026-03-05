@@ -89,17 +89,17 @@ export const CharacterCard = ({
       <div className="text-[36px] font-bold leading-[72px]">{data.name}</div>
       <div className="flex flex-nowrap gap-1.5 overflow-hidden">
         {data.gender && (
-          <span className="character-tag flex-shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
+          <span className="character-tag shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
             {data.gender}
           </span>
         )}
         {data.age && (
-          <span className="character-tag flex-shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
+          <span className="character-tag shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
             {data.age}
           </span>
         )}
         {data.mbti && (
-          <span className="character-tag flex-shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
+          <span className="character-tag shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
             {data.mbti}
           </span>
         )}
@@ -117,7 +117,7 @@ export const CharacterCard = ({
       <div className="absolute bottom-3 left-3.5 w-[calc(100%-28px)]">
         <div className="text-xs">身份</div>
         <div
-          className="my-0.5 h-px w-[104px] bg-gradient-to-r from-[#dedede] to-[rgba(77,77,77,0)]"
+          className="my-0.5 h-px w-[104px] bg-linear-to-r from-[#dedede] to-[rgba(77,77,77,0)]"
           style={{ marginBottom: 3 }}
         />
         <div className="truncate text-[10px] text-[#9a9a9a]">
