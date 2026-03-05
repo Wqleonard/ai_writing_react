@@ -780,7 +780,6 @@ export const EditorTreeSidebar = ({
             }}
           >
             {workInfo.title || "未命名作品"}
-            {workId ? ` (${workId})` : ""}
           </div>
         )}
         <div className="mt-1 max-h-8 overflow-x-auto overflow-y-hidden scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
