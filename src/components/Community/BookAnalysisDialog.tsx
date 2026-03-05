@@ -138,19 +138,23 @@ export const BookAnalysisDialog = ({
   }, [uploadedFile, onStreamData, onStreamError, onStreamEnd]);
 
   const workId = useEditorStore((s) => s.workId);
+  const initEditorData = useEditorStore((s) => s.initEditorData);
 
   const handleSave = useCallback(async () => {
     try {
       const name = "拆书仿写" + "(来自生成器)";
       const saveId = await handleGenerationSave(name, markdownContent, workId);
       if (!saveId) return;
+      if(saveId == workId){
+        await initEditorData(workId)
+      }
       toast.success("保存成功");
       onClose();
     } catch (error) {
       console.error(error);
       toast.error("保存失败");
     }
-  }, [markdownContent, onClose, workId]);
+  }, [markdownContent, onClose, workId, initEditorData]);
 
   const handleConfirm = async () => {
     if (!fileConfirmed) {

@@ -28,6 +28,7 @@ import { postPublicPromptStream } from '@/api/community-prompt'
 import { handleGenerationSave } from '@/utils/handleGenerationSave'
 import { toast } from 'sonner'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import { cn } from '@/lib/utils'
 
 export interface PublicGenerateDialogProps {
   open: boolean
@@ -443,7 +444,10 @@ export const PublicGenerateDialog = ({
             ) : (
               <>
                 <AutoScrollArea
-                  className="mt-2 h-[500px] rounded-lg bg-[#f6f6f6] p-3"
+                  className={cn(
+                    'mt-2 h-[500px] rounded-lg bg-[#f6f6f6] p-3',
+                    markdownEditing && 'outline-2 outline-(--theme-color)'
+                  )}
                   maxHeight="500px"
                   autoScroll
                 >
