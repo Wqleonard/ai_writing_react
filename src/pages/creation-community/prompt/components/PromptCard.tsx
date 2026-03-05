@@ -16,6 +16,7 @@ export interface PromptCardProps {
   showStatus?: boolean
   onUse?: (data: PromptItem) => void
   onFavorite?: (data: PromptItem) => void
+  className?: string
 }
 
 export const PromptCard = ({
@@ -23,6 +24,7 @@ export const PromptCard = ({
   showStatus = false,
   onUse,
   onFavorite,
+  className,
 }: PromptCardProps) => {
   const [cardData, setCardData] = useState<PromptItem>({ ...data })
 
@@ -39,7 +41,10 @@ export const PromptCard = ({
   }, [cardData, onUse])
 
   return (
-    <div className="relative flex w-full min-w-0 flex-col rounded-[10px] bg-white px-4 py-3">
+    <div className={cn(
+      'relative flex w-full min-w-0 flex-col rounded-[10px] bg-white px-4 py-3',
+      className
+    )}>
       <div className="flex h-13 w-full gap-4">
         <div className="h-13 w-13 shrink-0 overflow-hidden rounded-full bg-gray-100">
           {cardData.iconUrl ? (
