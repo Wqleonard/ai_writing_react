@@ -723,6 +723,7 @@ const MarkdownEditorPage = () => {
   const setServerDataFile = useEditorStore((s) => s.setServerDataFile);
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo);
   const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath);
+  const initEditorStore = useEditorStore((s) => s.initEditorStore);
 
   const [leftPanelWidthRem, setLeftPanelWidthRem] = useState(LEFT_DEFAULT_REM);
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
@@ -842,8 +843,10 @@ const MarkdownEditorPage = () => {
   }, [serverData, currentEditingId]);
 
   const handleBackClick = useCallback(() => {
+    // 返回时先清空编辑器 store，避免下次进入短暂展示上一次作品内容
+    initEditorStore();
     navigate("/workspace/my-place", { replace: true });
-  }, [navigate]);
+  }, [initEditorStore, navigate]);
 
   const handleSaveClick = useCallback(async () => {
     await saveEditorData("0", true);
