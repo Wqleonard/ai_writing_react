@@ -104,6 +104,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     ref
   ) {
     const isInternalUpdate = useRef(false)
+    const containerRef = useRef<HTMLDivElement | null>(null)
     const readonlyRef = useRef(readonly)
     const onChangeRef = useRef(onChange)
     const onKeyDownRef = useRef(onKeyDown)
@@ -270,6 +271,40 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       }
     }, [editor, onBlur])
 
+    // 选区失效时自动取消 pinned，避免工具栏被“锁住”
+    useEffect(() => {
+      if (!editor || !isSelectionToolbarPinned) return
+      const clearPinnedIfSelectionInvalid = () => {
+        const { from, to } = editor.state.selection
+        const text = editor.state.doc.textBetween(from, to).trim()
+        if (from === to || !text) {
+          setIsSelectionToolbarPinned(false)
+        }
+      }
+      editor.on('selectionUpdate', clearPinnedIfSelectionInvalid)
+      return () => {
+        editor.off('selectionUpdate', clearPinnedIfSelectionInvalid)
+      }
+    }, [editor, isSelectionToolbarPinned])
+
+    // pinned 状态下，点击编辑器与工具栏外部区域时自动关闭
+    useEffect(() => {
+      if (!isSelectionToolbarPinned) return
+      const onPointerDown = (event: PointerEvent) => {
+        const target = event.target as HTMLElement | null
+        if (!target) return
+        const inEditorContainer = !!containerRef.current?.contains(target)
+        const inToolbar = !!target.closest('.selection-toolbar-popover')
+        if (!inEditorContainer && !inToolbar) {
+          setIsSelectionToolbarPinned(false)
+        }
+      }
+      document.addEventListener('pointerdown', onPointerDown, true)
+      return () => {
+        document.removeEventListener('pointerdown', onPointerDown, true)
+      }
+    }, [isSelectionToolbarPinned])
+
     // 卸载时销毁
     useEffect(() => {
       return () => {
@@ -303,6 +338,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
 
     return (
       <div
+        ref={containerRef}
         className={`markdown-editor ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
         style={{ width: '100%', height: '100%' }}
       >
@@ -311,15 +347,17 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
           <BubbleMenu
             editor={editor}
             shouldShow={({ editor }) => {
-              if (isSelectionToolbarPinned) return true
+              if (!editor) return false
               const { from, to } = editor.state.selection
-              if (from === to) return false
+              if (from >= to) return false
               const text = editor.state.doc.textBetween(from, to).trim()
-              return text.length > 0
+              if (!text) return false
+              if (isSelectionToolbarPinned) return true
+              return editor.isFocused
             }}
             options={{
               placement: 'top',
-              strategy: 'fixed',
+              strategy: 'absolute',
             }}
             className="z-[9999] selection-toolbar-popover"
           >
