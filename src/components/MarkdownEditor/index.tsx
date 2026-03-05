@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/core'
@@ -110,6 +110,11 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const onKeyDownRef = useRef(onKeyDown)
     const isComposingRef = useRef(false)
     const [isSelectionToolbarPinned, setIsSelectionToolbarPinned] = useState(false)
+    const [selectionToolbarRenderKey, setSelectionToolbarRenderKey] = useState(0)
+    const closeSelectionToolbar = useCallback(() => {
+      setIsSelectionToolbarPinned(false)
+      setSelectionToolbarRenderKey((prev) => prev + 1)
+    }, [])
     const effectiveSelectionBtns = useMemo(
       () => (btns && btns.length > 0 ? btns : selectionToolbarBtns),
       [btns, selectionToolbarBtns]
@@ -278,14 +283,14 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         const { from, to } = editor.state.selection
         const text = editor.state.doc.textBetween(from, to).trim()
         if (from === to || !text) {
-          setIsSelectionToolbarPinned(false)
+          closeSelectionToolbar()
         }
       }
       editor.on('selectionUpdate', clearPinnedIfSelectionInvalid)
       return () => {
         editor.off('selectionUpdate', clearPinnedIfSelectionInvalid)
       }
-    }, [editor, isSelectionToolbarPinned])
+    }, [editor, isSelectionToolbarPinned, closeSelectionToolbar])
 
     // pinned 状态下，点击编辑器与工具栏外部区域时自动关闭
     useEffect(() => {
@@ -296,14 +301,14 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         const inEditorContainer = !!containerRef.current?.contains(target)
         const inToolbar = !!target.closest('.selection-toolbar-popover')
         if (!inEditorContainer && !inToolbar) {
-          setIsSelectionToolbarPinned(false)
+          closeSelectionToolbar()
         }
       }
       document.addEventListener('pointerdown', onPointerDown, true)
       return () => {
         document.removeEventListener('pointerdown', onPointerDown, true)
       }
-    }, [isSelectionToolbarPinned])
+    }, [isSelectionToolbarPinned, closeSelectionToolbar])
 
     // 卸载时销毁
     useEffect(() => {
@@ -362,9 +367,16 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             className="z-999 selection-toolbar-popover"
           >
             <SelectionToolbarComponent
+              key={selectionToolbarRenderKey}
               editor={editor}
               btns={effectiveSelectionBtns}
-              onPinnedChange={setIsSelectionToolbarPinned}
+              onPinnedChange={(pinned) => {
+                if (pinned) {
+                  setIsSelectionToolbarPinned(true)
+                  return
+                }
+                closeSelectionToolbar()
+              }}
               onAdd={(selectedText) => onSelectionAdd?.(selectedText)}
               onNote={(selectedText) => onSelectionNote?.(selectedText)}
               onAction={(action, selectedText) => {

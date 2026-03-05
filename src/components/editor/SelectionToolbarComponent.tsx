@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import type { PostStreamData } from "@/api";
 import { generateImage, postSelectionToolbarStream } from "@/api/selection-toolbar";
 import IconFont from "@/components/IconFont/Iconfont";
 import { StreamIndicator } from "@/components/StreamIndicator";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/Button";
 // "image" |
 export type SelectionToolbarAction = "edit" | "expand" |  "add" | "note";
 
@@ -79,7 +80,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     });
   };
 
-  const closePanel = () => {
+  const closePanel = (notifyPinned = true) => {
     if (streamAbortRef.current) {
       streamAbortRef.current.abort();
       streamAbortRef.current = null;
@@ -88,7 +89,9 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     setChatLoading(false);
     setChatArr([]);
     setInputVal("");
-    onPinnedChange?.(false);
+    if (notifyPinned) {
+      onPinnedChange?.(false);
+    }
   };
 
   const handleBack = () => {
@@ -312,6 +315,12 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     openActionPanel(action, selection);
   };
 
+  useEffect(() => {
+    return () => {
+      closePanel(false);
+    }
+  },[])
+
   return (
     <div
       className="min-w-[128px] rounded-[10px]  bg-white p-1"
@@ -348,14 +357,14 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 <span className="ml-2">{actionLabelMap[chatType]}</span>
               </div>
 
-              <button
+              <Button
                 type="button"
-                className="h-6 w-6 cursor-pointer rounded-sm text-[#61616f] hover:bg-[#e8e8e8]"
+                className="p-3 h-6 w-6 bg-white cursor-pointer rounded-sm text-[#61616f] hover:bg-[#e8e8e8]"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={closePanel}
+                onClick={() => closePanel()}
               >
-                <IconFont unicode="&#xe633;" className="h-6 w-6 text-center text-base leading-6" />
-              </button>
+                <IconFont unicode="&#xe633;" className="h-6 w-6 text-center text-base " />
+              </Button>
             </div>
           </div>
 
