@@ -7,7 +7,9 @@ import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
 import { useEditorStore } from "@/stores/editorStore"
-import { updateWorkInfoReq } from "@/api/works"
+import { createWorkReq, updateWorkInfoReq, updateWorkVersionReq } from "@/api/works"
+import { createNewMobileWork } from "@/api/m-workspace-chat"
+import { toast } from "sonner";
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -66,7 +68,6 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   const [enterActive, setEnterActive] = useState(false)
   const [enterSeed, setEnterSeed] = useState(0)
 
-  const workId = useEditorStore((s) => s.workId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
@@ -102,8 +103,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     if (showQuickStart) setEnterSeed((v) => v + 1)
   }, [currentEditingId, showQuickStart])
 
-  const handleStepConfirm = useCallback(async (data: StepSaveData) => {
-    console.log('handleStepConfirm data', data)
+  const handleStepConfirm = useCallback(async (data: StepSaveData, editingId = "大纲.md") => {
     const nextServerData = {
       "大纲.md": data.outline || "",
       "知识库/": "",
@@ -111,24 +111,50 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
       "设定/故事设定.md": data.story?.intro ?? "",
       "正文/第一章.md": "",
     }
-    setServerData(nextServerData)
-    setCurrentEditingId("大纲.md")
-    setStepCreateDialogShow(false)
+    if (data.saveTarget == 'current') {
+      setServerData(nextServerData)
+      setCurrentEditingId(editingId)
+      setStepCreateDialogShow(false)
 
-    const titleLine = data.story?.title || "未命名作品"
-    if (workId) {
-      await updateWorkInfoReq(workId, {
+      const titleLine = data.story?.title || "未命名作品"
+      const currentWorkId = useEditorStore.getState().workId
+      if (currentWorkId) {
+        await updateWorkInfoReq(currentWorkId, {
+          title: titleLine,
+          stage: "final",
+        })
+      }
+      setWorkInfo({
         title: titleLine,
         stage: "final",
       })
+      await saveEditorData("1")
+    } else if (data.saveTarget == 'new') {
+      try {
+        const newWorkIdReq = await createWorkReq()
+        if (!newWorkIdReq.id) {
+          toast.error('保存失败')
+          return
+        }
+        const titleLine = data.story?.title || "未命名作品"
+        const updateReq = await updateWorkInfoReq(newWorkIdReq.id, {
+          title: titleLine,
+          stage: "final",
+        })
+        const updateVersionReq = await updateWorkVersionReq(
+          newWorkIdReq.id,
+          JSON.stringify(nextServerData),
+          '0'
+        )
+        toast.success('保存成功')
+
+      } catch (e) {
+        console.error(e)
+      }
     }
-    setWorkInfo({
-      title: titleLine,
-      stage: "final",
-    })
-    await saveEditorData("1")
-    onStepConfirm?.(data)
-  }, [workId, setWorkInfo, setServerData, setCurrentEditingId, saveEditorData, onStepConfirm])
+    setStepCreateDialogShow(false)
+
+  }, [setWorkInfo, setServerData, setCurrentEditingId, saveEditorData])
 
   return (
     <>
@@ -164,7 +190,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
             {MODES.map((m) => (
               <div
                 key={m.mode}
-                  role="button"
+                role="button"
                 tabIndex={0}
                 onClick={() => handleStartItemClick(m.mode)}
                 onKeyDown={(e) => {
@@ -176,7 +202,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
                 className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-(--theme-color)"
               >
                 <div className="h-[50px] w-full bg-white">
-                  <img src={m.cover} alt="" className="h-full w-full object-cover" />
+                  <img src={m.cover} alt="" className="h-full w-full object-cover"/>
                 </div>
                 <div className="mt-2.5 h-[18px] text-base font-medium">{m.title}</div>
                 <div className="mt-2.5 text-[8px] text-[#9a9a9a]">{m.desc}</div>

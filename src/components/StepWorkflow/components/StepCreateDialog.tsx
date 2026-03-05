@@ -92,7 +92,7 @@ const deepClone = <T,>(obj: T): T => {
 export interface StepCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm?: (data: StepSaveData) => void
+  onConfirm?: (data: StepSaveData, editingId?: string) => void
 }
 
 export interface StepCreateDialogRef {
@@ -110,6 +110,31 @@ const MODES = [
   { mode: "template" as Mode, title: "使用模板创作", desc: "选择热门模板创作，套用核心梗，助力创作爆款小说", cover: TEMPLATE_COVER },
   { mode: "tag" as Mode, title: "使用标签创作", desc: "选择标签自由获取灵感脑洞，让创作的思维肆意挥洒", cover: TAG_COVER },
 ]
+
+
+const FormMap = new Map([
+  ['prompt', '提示词'],
+  ['coreMeme', '核心梗'],
+  ['background', '故事背景'],
+  ['persona', '主角人设'],
+  ['wordCount', '字数'],
+  ['perspective', '人称'],
+])
+
+const generateCustomDesc = (formData: Record<string, any> | null) => {
+  let description = ''
+  if (!formData) return description
+
+  const keys = Object.keys(formData)
+  for (const key of keys) {
+    const customItem = formData[key]
+    if (FormMap.has(key) && customItem != '') {
+      description += FormMap.get(key) + ':' + customItem + ';'
+    }
+    console.log('description', description)
+  }
+  return description
+}
 
 /** 将 store 的 string[] 转为 FormRecommendLabel 需要的 { label, value }[] */
 const toRecommendItems = (arr: string[]): { label: string; value: string }[] =>
@@ -399,8 +424,8 @@ export const StepCreateDialog = React.forwardRef<
         story: selectedStory,
         outline,
         description,
-        saveTarget: "default",
-      })
+        saveTarget: "current",
+      }, '大纲.md')
       onOpenChange(false)
     }
   }, [
@@ -518,7 +543,6 @@ export const StepCreateDialog = React.forwardRef<
     if (selectedStory || selectedCharacter) {
       try {
         const result = await showStepConfirmDialog()
-        console.log(result)
         if (result === "cancel") {
           onOpenChange(false)
           return
@@ -543,7 +567,7 @@ export const StepCreateDialog = React.forwardRef<
             outline,
             description,
             saveTarget: result === "saveToCurrent" ? "current" : "new",
-          })
+          },'设定/故事设定.md')
           onOpenChange(false)
         }
       } catch {
@@ -929,29 +953,6 @@ export const StepCreateDialog = React.forwardRef<
     closeCharacterEditPanel()
   }, [editingCharacter, editingCharacterIndex, selectedCharacter, characters, updateStepSnapshot, closeCharacterEditPanel])
 
-  const FormMap = new Map([
-    ['prompt', '提示词'],
-    ['coreMeme', '核心梗'],
-    ['background', '故事背景'],
-    ['persona', '主角人设'],
-    ['wordCount', '字数'],
-    ['perspective', '人称'],
-  ])
-
-  const generateCustomDesc = (formData: Record<string, any> | null) => {
-    let description = ''
-    if (!formData) return description
-
-    const keys = Object.keys(formData)
-    for (const key of keys) {
-      const customItem = formData[key]
-      if (FormMap.has(key) && customItem != '') {
-        description += FormMap.get(key) + ':' + customItem + ';'
-      }
-      console.log('description', description)
-    }
-    return description
-  }
 
   const updateOutlineStream = useCallback(() => {
     if (!selectedStory?.title || !selectedCharacter?.name) return
