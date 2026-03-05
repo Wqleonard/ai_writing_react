@@ -59,6 +59,36 @@ const DEFAULT_PATH_TREE: PathNode[] = [
   },
 ]
 
+function mapDirectoryNodesToPathTree(nodes: FileTreeNode[], parentPath: string[]): PathNode[] {
+  return nodes
+    .filter(node => node.isDirectory)
+    .map(node => {
+      const currentPath = [...parentPath, node.label]
+      return {
+        id: currentPath.join('/'),
+        key: currentPath.join('-'),
+        label: node.label,
+        path: currentPath,
+        children: mapDirectoryNodesToPathTree(node.children ?? [], currentPath),
+      }
+    })
+}
+
+function buildPathTreeFromWorkFiles(workTitle: string, files: string): PathNode[] {
+  const normalizedTitle = workTitle?.trim() || '未命名作品'
+  const rootPath = [normalizedTitle]
+  const root = serverData2FileTreeData(JSON.parse(files))
+  return [
+    {
+      id: normalizedTitle,
+      key: normalizedTitle,
+      label: normalizedTitle,
+      path: rootPath,
+      children: mapDirectoryNodesToPathTree(root?.children ?? [], rootPath),
+    },
+  ]
+}
+
 function findNodeById(nodes: PathNode[], targetId: string): PathNode | null {
   for (const node of nodes) {
     if (node.id === targetId) return node
@@ -113,6 +143,24 @@ function addChildToTree(nodes: PathNode[], parentId: string, newNode: PathNode):
   })
 }
 
+function refreshSubtreePathAndId(
+  node: PathNode,
+  parentPath: string[],
+  idMap: Map<string, string>
+) {
+  const prevId = node.id
+  const currentPath = [...parentPath, node.label]
+  node.path = currentPath
+  node.id = currentPath.join('/')
+  node.key = currentPath.join('-')
+  idMap.set(prevId, node.id)
+  if (node.children?.length) {
+    for (const child of node.children) {
+      refreshSubtreePathAndId(child, currentPath, idMap)
+    }
+  }
+}
+
 interface PathTreeRowProps {
   node: PathNode
   depth: number
@@ -121,7 +169,7 @@ interface PathTreeRowProps {
   selectedPath: string | null
   editingNodeId: string | null
   editingNodeLabel: string
-  editingInputRef: React.RefObject<HTMLInputElement | null>
+  setEditingInputRef: (el: HTMLInputElement | null) => void
   onToggleExpand: (id: string) => void
   onSelectPath: (id: string) => void
   onEditingLabelChange: (value: string) => void
@@ -139,7 +187,7 @@ const PathTreeRow = ({
   selectedPath,
   editingNodeId,
   editingNodeLabel,
-  editingInputRef,
+  setEditingInputRef,
   onToggleExpand,
   onSelectPath,
   onEditingLabelChange,
@@ -191,7 +239,7 @@ const PathTreeRow = ({
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <input
               ref={el => {
-                ;(editingInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el
+                setEditingInputRef(el)
                 if (el && editingNodeId === node.id && !hasInitializedRef.current) {
                   hasInitializedRef.current = true
                   requestAnimationFrame(() => {
@@ -263,7 +311,7 @@ const PathTreeRow = ({
             selectedPath={selectedPath}
             editingNodeId={editingNodeId}
             editingNodeLabel={editingNodeLabel}
-            editingInputRef={editingInputRef}
+            setEditingInputRef={setEditingInputRef}
             onToggleExpand={onToggleExpand}
             onSelectPath={onSelectPath}
             onEditingLabelChange={onEditingLabelChange}
@@ -391,35 +439,14 @@ export const GenerationSaveDialog = ({
           const req: any = await getWorksByIdReq(String(work.id))
           const files = req?.latestWorkVersion?.content
           if (files) {
-            const root = serverData2FileTreeData(JSON.parse(files))
-            const children = root?.children ?? []
-            const mapPath = (ns: FileTreeNode[], prefix: string, keyPrefix: string): PathNode[] =>
-              ns
-                .filter(n => n.isDirectory)
-                .map(n => {
-                  const nodeId = `${prefix}/${n.key}`
-                  const nodeKey = `${keyPrefix}-${n.key}`
-                  return {
-                    id: nodeId,
-                    key: nodeKey,
-                    label: n.label,
-                    path: [...n.path, n.label],
-                    children: mapPath(n.children ?? [], nodeId, nodeKey),
-                  }
-                })
-            const newTree: PathNode[] = [
-              {
-                id: work.title,
-                key: work.title,
-                label: work.title,
-                path: [work.title],
-                children: mapPath(children, work.title, work.title),
-              },
-            ]
+            const newTree = buildPathTreeFromWorkFiles(work.title, files)
+            console.log('newTree', newTree)
             setPathTreeData(newTree)
             setExpandedIds(collectAllIds(newTree))
           }
-        } catch {}
+        } catch (error) {
+          console.error('加载作品目录失败:', error)
+        }
       })()
     },
     [workList, collectAllIds]
@@ -476,7 +503,7 @@ export const GenerationSaveDialog = ({
     })
   }, [])
 
-  const saveNode = (nodeId: string) => {
+  const saveNode = useCallback((nodeId: string) => {
     if (!nodeId || editingNodeId !== nodeId) return
     let newLabel = editingNodeLabel.trim()
     if (!newLabel) {
@@ -487,22 +514,27 @@ export const GenerationSaveDialog = ({
 
     const parentNode = findNodeById(pathTreeData, parent.id) ?? parent
     newLabel = getUniqueFolderName(parentNode, newLabel, nodeId)
-    const newPath = [...parent.path, newLabel]
-    const newId = newPath.join('/')
-    const newKey = newPath.join('-')
 
     const treeData = JSON.parse(JSON.stringify(pathTreeData))
     const oldNode = findNodeById(treeData, nodeId)
-    if(!oldNode) return
+    if (!oldNode) return
+
     oldNode.label = newLabel
-    oldNode.path = newPath
-    oldNode.id = newId
-    oldNode.key = newKey
-    setSelectedPath(newId)
+    const idMap = new Map<string, string>()
+    refreshSubtreePathAndId(oldNode, parent.path, idMap)
+    const newId = idMap.get(nodeId) ?? oldNode.id
+    setSelectedPath(prev => (prev && idMap.has(prev) ? idMap.get(prev)! : newId))
+    setExpandedIds(prev => {
+      const next = new Set<string>()
+      prev.forEach(id => {
+        next.add(idMap.get(id) ?? id)
+      })
+      return next
+    })
     setPathTreeData(treeData)
     setEditingNodeId(null)
     setEditingNodeLabel('')
-  }
+  }, [editingNodeId, editingNodeLabel, pathTreeData])
 
   const handlePathInputBlur = useCallback(
     (nodeId: string) => saveNode(nodeId),
@@ -542,13 +574,11 @@ export const GenerationSaveDialog = ({
 
   const handleOk = () => {
     if (!valid()) return
-    let path = selectedPath
-    if (path && !path.includes('/')) path = path + '/'
     onConfirm?.({
       fileName: fileName.trim(),
       workType,
       selectedWork,
-      selectedPath: path,
+      selectedPath: selectedPath,
     })
     onClose()
   }
@@ -558,7 +588,9 @@ export const GenerationSaveDialog = ({
     selectedPath,
     editingNodeId,
     editingNodeLabel,
-    editingInputRef,
+    setEditingInputRef: (el: HTMLInputElement | null) => {
+      editingInputRef.current = el
+    },
     onToggleExpand: toggleExpand,
     onSelectPath: setSelectedPath,
     onEditingLabelChange: setEditingNodeLabel,

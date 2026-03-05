@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
 import { GenerationSaveDialog } from "../components/Community/GenerationSaveDialog";
 
@@ -20,49 +20,6 @@ export interface GenerationSaveOptions {
 
 const UNMOUNT_DELAY_MS = 300;
 
-interface WrapperProps {
-  options: GenerationSaveOptions;
-  resolve: (value: GenerationSaveResult) => void;
-  reject: (reason: Error) => void;
-  onUnmount: () => void;
-}
-
-function Wrapper({ options, resolve, reject, onUnmount }: WrapperProps) {
-  const [open, setOpen] = useState(true);
-  const isResolvedRef = useRef(false);
-
-  const finish = (unmount: () => void) => {
-    setOpen(false);
-    setTimeout(unmount, UNMOUNT_DELAY_MS);
-  };
-
-  const handleConfirm = (result: GenerationSaveResult) => {
-    if (isResolvedRef.current) return;
-    isResolvedRef.current = true;
-    resolve(result);
-    finish(onUnmount);
-  };
-
-  const handleCancel = () => {
-    if (isResolvedRef.current) return;
-    isResolvedRef.current = true;
-    reject(new Error("用户取消"));
-    finish(onUnmount);
-  };
-
-  return (
-    <GenerationSaveDialog
-      open={open}
-      onClose={handleCancel}
-      onConfirm={handleConfirm}
-      onCancel={handleCancel}
-      fileNameDefault={options.fileNameDefault}
-      fileNamePlaceholder={options.fileNamePlaceholder}
-      currentWorkId={options.currentWorkId}
-    />
-  );
-}
-
 /**
  * 打开生成保存对话框（与 Vue showGenerationSaveDialog 用法一致）
  * @returns Promise：resolve 返回 { fileName, workType, selectedWork, selectedPath }；reject 表示用户取消
@@ -75,6 +32,9 @@ export function showGenerationSaveDialog(
     document.body.appendChild(container);
 
     const root = createRoot(container);
+    let open = true;
+    let resolved = false;
+
     const onUnmount = () => {
       root.unmount();
       if (document.body.contains(container)) {
@@ -82,13 +42,40 @@ export function showGenerationSaveDialog(
       }
     };
 
-    root.render(
-      <Wrapper
-        options={options}
-        resolve={resolve}
-        reject={reject}
-        onUnmount={onUnmount}
-      />
-    );
+    const finish = () => {
+      open = false;
+      renderDialog();
+      setTimeout(onUnmount, UNMOUNT_DELAY_MS);
+    };
+
+    const handleConfirm = (result: GenerationSaveResult) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(result);
+      finish();
+    };
+
+    const handleCancel = () => {
+      if (resolved) return;
+      resolved = true;
+      reject(new Error("用户取消"));
+      finish();
+    };
+
+    const renderDialog = () => {
+      root.render(
+        <GenerationSaveDialog
+          open={open}
+          onClose={handleCancel}
+          onConfirm={handleConfirm}
+          onCancel={handleCancel}
+          fileNameDefault={options.fileNameDefault}
+          fileNamePlaceholder={options.fileNamePlaceholder}
+          currentWorkId={options.currentWorkId}
+        />
+      );
+    };
+
+    renderDialog();
   });
 }

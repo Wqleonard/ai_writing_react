@@ -25,6 +25,7 @@ import { useOptionsStore } from '@/stores/optionsStore'
 import { toast } from 'sonner'
 import clsx from 'clsx'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import { ScrollArea } from '@/components/ui/ScrollArea'
 
 type GenerateType = 'current' | 'custom'
 
@@ -305,11 +306,11 @@ export const IntroductionGenerateDialog = ({
         className="w-[1020px] max-w-[90vw] py-11 px-[120px] pb-8 sm:max-w-[90vw]"
         showCloseButton
       >
-        <DialogHeader className="px-5 relative h-9 min-h-0 shrink-0 gap-0">
+        <DialogHeader className="relative h-9 min-h-0 shrink-0 gap-0">
           {formConfirmed && (
             <div
               role="button"
-              className="absolute left-5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md hover:bg-accent cursor-pointer"
+              className="absolute left-0 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-md hover:bg-accent cursor-pointer"
               onClick={handleBack}
             >
               <Iconfont unicode="&#xe62a;" />
@@ -320,16 +321,17 @@ export const IntroductionGenerateDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 w-full min-w-0 h-[576px] flex flex-col ">
+        <div className="w-[780px] h-[576px] flex flex-col ">
           {!formConfirmed ? (
-            <div className="mt-4 flex flex-col gap-4 overflow-y-auto min-w-0 px-1 -mx-1 py-1 -my-1">
+            <ScrollArea className='h-full w-full'>
+              <div className="w-[780px] px-5  flex flex-col gap-4">
               {/* 提示词 */}
               {promptData && (
-                <div className="min-w-0">
+                <div className="w-full">
                   <div className="text-lg">提示词</div>
                   <div
                     role="button"
-                    className="mt-1.5 flex h-20 min-w-0 cursor-pointer items-center justify-between rounded-lg bg-[#f7f7f7] px-4"
+                    className="mt-1.5 flex h-20 w-full cursor-pointer items-center justify-between rounded-lg bg-[#f7f7f7] px-4"
                     onClick={() => onOpenMarket?.(promptData)}
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -401,14 +403,14 @@ export const IntroductionGenerateDialog = ({
               ) : (
                 <>
                   {/* 核心梗（必填） */}
-                  <div className="min-w-0">
+                  <div className="w-full">
                     <FormRecommendLabel
                       label="核心梗"
                       required
                       recommends={(recommendConfig.coreMeme || []).map(v => ({ label: v, value: v }))}
                       fieldKey="coreMeme"
                       onSelect={handleSelectRecommend}
-                      className="mb-1.5 min-w-0"
+                      className="mb-1.5 w-full max-w-full min-w-0 overflow-hidden"
                     />
                     <Textarea
                       className="w-full"
@@ -448,14 +450,14 @@ export const IntroductionGenerateDialog = ({
                 </>
               )}
             </div>
+            </ScrollArea>
           ) : (
-            <div className="mt-2 flex flex-col gap-1">
+            <div className="mt-2 flex flex-col gap-1 h-full">
               <AutoScrollArea
                 className={clsx(
-                  'h-[500px] rounded-lg bg-[#f6f6f6] p-3',
+                  'flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3',
                   markdownEditing && 'outline-2 outline-(--theme-color)'
                 )}
-                maxHeight="500px"
                 autoScroll
               >
                 <MarkdownEditor

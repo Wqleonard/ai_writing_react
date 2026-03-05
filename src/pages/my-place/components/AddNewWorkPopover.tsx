@@ -54,7 +54,7 @@ export const AddNewWorkPopover = ({
         setLoading(false)
         return
       }
-      navigate(`/workspace/editor/${req.id}`, { state: { isNew: true } })
+      navigate(`/editor/${req.id}`, { state: { isNew: true } })
     } catch {
       toast.error('创建作品失败，请重试')
     } finally {

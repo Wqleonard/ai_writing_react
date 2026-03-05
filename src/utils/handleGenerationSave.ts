@@ -13,17 +13,22 @@ export const handleGenerationSave = async (
   currentWorkId?: string
 ): Promise<string | false> => {
   try {
+    console.log('handleGenerationSave')
     const result = await showGenerationSaveDialog({
       fileNameDefault: fileName,
       currentWorkId,
     });
+
+
+    console.log('result', result)
 
     if (!result.selectedPath) {
       return false;
     }
 
     let saveId = "";
-    const savePath = `${stripPrefixBeforeSlash(result.selectedPath)}/${result.fileName}.md`;
+    
+    const savePath = stripPrefixBeforeSlash(result.selectedPath + `/${result.fileName}.md`)
 
     if (result.workType === "new") {
       const createNewWorkReq: any = await createWorkReq();

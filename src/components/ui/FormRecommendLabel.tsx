@@ -46,6 +46,20 @@ export const FormRecommendLabel = React.forwardRef<
     checkOverflow()
   }, [recommends, checkOverflow])
 
+  useEffect(() => {
+    const el = scrollWrapperRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      checkOverflow()
+    })
+    observer.observe(el)
+    window.addEventListener("resize", checkOverflow)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", checkOverflow)
+    }
+  }, [checkOverflow])
+
   const handleScroll = useCallback(() => {
     checkOverflow()
   }, [checkOverflow])
@@ -73,11 +87,11 @@ export const FormRecommendLabel = React.forwardRef<
     <div
       ref={ref}
       className={clsx(
-        "recommend-label flex w-full items-center text-[18px] leading-[22px]",
+        "flex w-full max-w-full min-w-0 items-center overflow-hidden text-[18px] leading-[22px]",
         className
       )}
     >
-      <span
+      <div
         className={clsx(
           "main-label shrink-0 pr-3 text-[20px] text-black",
           required && "relative"
@@ -91,7 +105,7 @@ export const FormRecommendLabel = React.forwardRef<
             *
           </span>
         )}
-      </span>
+      </div>
 
       <div className="recommend-prefix shrink-0 text-sm text-[#999]">
         推荐：
@@ -120,7 +134,7 @@ export const FormRecommendLabel = React.forwardRef<
 
         <div
           ref={scrollWrapperRef}
-          className="tags-scroll flex h-5 flex-1 items-center overflow-x-auto whitespace-nowrap"
+          className="flex h-5 flex-1 items-center overflow-x-auto whitespace-nowrap"
           onScroll={handleScroll}
           style={{
             scrollbarWidth: "none",
@@ -132,7 +146,7 @@ export const FormRecommendLabel = React.forwardRef<
               key={item.value}
               role="button"
               tabIndex={0}
-              className="tag-item inline-block mr-2 h-full cursor-pointer rounded-full bg-[#f9eece] px-2 text-xs leading-5 transition-colors hover:bg-[#fff7e0]"
+              className="inline-block mr-2 h-full cursor-pointer rounded-full bg-[#f9eece] px-2 text-xs leading-5 transition-colors hover:bg-[#fff7e0]"
               onClick={() => handleTagClick(item)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
