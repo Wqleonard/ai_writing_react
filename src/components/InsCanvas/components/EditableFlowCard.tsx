@@ -440,8 +440,8 @@ export default function EditableFlowCard({
         "vue-flow-card nowheel rounded-2xl relative overflow-visible",
         "bg-card shadow-sm border border-border",
         "group transition-all duration-200 ease-out",
-         // 展开时加宽并适度增高，方便阅读更多内容
-         isExpanded ? "w-[1120px] h-[500px]" : "w-[250px] min-h-[200px]",
+        // 展开时加宽并适度增高，方便阅读更多内容
+        isExpanded ? "w-[1120px] h-[500px]" : "w-[250px] min-h-[200px]",
         "min-h-[200px]",
         isEditing && "nodrag nopan"
       )}
@@ -515,32 +515,33 @@ export default function EditableFlowCard({
                 <MarkdownEditor
                   ref={editorRef}
                   className="min-h-0"
+                  fontClassName="!text-base"
                   readonly={!isEditing}
                   value={isEditing ? editContent : bodyContent}
                   placeholder=""
                   loading={isStreaming && !isEditing}
                   minHeight={0}
-                onChange={
-                  isEditing
-                    ? (md) => {
+                  onChange={
+                    isEditing
+                      ? (md) => {
                         editDirtyRef.current = true;
                         editingContentRef.current = md;
                         // 不 setEditContent，避免重渲染导致光标/IME 问题；失焦时用 getMarkdown() 回写
                       }
-                    : undefined
-                }
-                onBlur={isEditing ? handleBlur : undefined}
-                onKeyDown={
-                  isEditing
-                    ? (e) => {
+                      : undefined
+                  }
+                  onBlur={isEditing ? handleBlur : undefined}
+                  onKeyDown={
+                    isEditing
+                      ? (e) => {
                         if (e.key === "Escape") {
                           e.preventDefault();
                           handleCancel();
                         }
                       }
-                    : undefined
-                }
-              />
+                      : undefined
+                  }
+                />
               </div>
             </AutoScrollArea>
             {!isExpanded && showExpandBtn && !isStreaming && (
