@@ -1371,7 +1371,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
                       top: "50%",
                       transform: "translateY(-50%)",
                     }}
-                    className="bg-background/90 !rounded-full shadow-sm border px-1 py-2 flex flex-col items-stretch gap-2"
+                    className="bg-background/90 rounded-full shadow-sm border px-1 py-2 flex flex-col items-stretch gap-2"
                   >
                     <ControlButton
                       aria-label={panMode ? "关闭画布拖拽" : "开启画布拖拽"}
