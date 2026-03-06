@@ -270,6 +270,7 @@ export const NotesSelectorDialog = ({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
+        onOpenAutoFocus={event => event.preventDefault()}
         showCloseButton
         className={clsx(
           'notes-manager-dialog w-200 gap-0 p-0 overflow-hidden h-154',
@@ -285,7 +286,7 @@ export const NotesSelectorDialog = ({
                 placeholder="搜索"
                 value={searchText}
                 onChange={e => setSearchText(e.target.value)}
-                className="h-9 rounded-2xl pl-9"
+                className="h-9 rounded-2xl pl-9 focus-visible:ring-1"
               />
             </div>
           )}
