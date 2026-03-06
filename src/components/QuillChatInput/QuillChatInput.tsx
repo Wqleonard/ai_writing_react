@@ -32,6 +32,7 @@ import { useChatInputActions } from "@/hooks/useChatInputActions"
 import { uploadFileReq } from "@/api/files"
 import { openLoginDialog } from "@/components/LoginDialog"
 import { toast } from "sonner"
+import { subscribeChatSubmitBridge } from "@/services/chatSubmitBridge"
 
 export type QuillChatInputStatus = "ready" | "error" | "submitted" | "streaming"
 
@@ -137,6 +138,12 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const [isDropUploading, setIsDropUploading] = useState(false)
 
   const [hovered, setHovered] = useState(false)
+  const valueRef = useRef(value)
+  const pendingBridgeSubmitTextRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    valueRef.current = value
+  }, [value])
 
   const isExternalFileDrag = useCallback((e: React.DragEvent) => {
     const transfer = e.dataTransfer
@@ -250,6 +257,27 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     onSubmit()
     if (clearOnSubmit) onChange("")
   }, [disabled, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange])
+
+  useEffect(() => {
+    const unsubscribe = subscribeChatSubmitBridge((payload) => {
+      if (payload.source !== "creation-input") return
+      const nextText = payload.text.trim()
+      if (!nextText) return
+      pendingBridgeSubmitTextRef.current = nextText
+      if (valueRef.current.trim() === nextText) return
+      onChange(nextText)
+    })
+    return unsubscribe
+  }, [onChange])
+
+  useEffect(() => {
+    const pendingText = pendingBridgeSubmitTextRef.current
+    if (!pendingText) return
+    if (value.trim() !== pendingText) return
+    if (disabled || status === "submitted" || status === "streaming") return
+    pendingBridgeSubmitTextRef.current = null
+    handleSubmitClick()
+  }, [value, disabled, status, handleSubmitClick])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
