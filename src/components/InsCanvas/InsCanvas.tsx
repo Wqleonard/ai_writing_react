@@ -1377,7 +1377,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
                       aria-label={panMode ? "关闭画布拖拽" : "开启画布拖拽"}
                       title={panMode ? "关闭画布拖拽" : "开启画布拖拽"}
                       onClick={() => setPanMode((v) => !v)}
-                      className={panMode ? "!bg-primary !text-white !rounded-full" : "!rounded-full"}
+                      className={panMode ? "!bg-primary !text-white rounded-full" : "rounded-full"}
                     >
                       {/* 简单手型图标：可以替换成你们自己的 iconfont */}
                       <span className="iconfont">&#xe86c;</span>
