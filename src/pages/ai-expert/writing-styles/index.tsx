@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -85,6 +86,8 @@ const WritingStylesPage = () => {
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [newAddStyleId, setNewAddStyleId] = useState('')
   const [newAddStyleName, setNewAddStyleName] = useState('')
+  const historyIdRef = useRef('')
+  const markdownContentRef = useRef('')
 
   const isLoggedIn = useLoginStore(s=>s.isLoggedIn)
 
@@ -93,12 +96,23 @@ const WritingStylesPage = () => {
       .filter((chat) => chat.type === 'ai')
       .map((item) => item.content)
       .join('\n\n')
+    markdownContentRef.current = next
     setMarkdownContent(next)
   }, [chatArr])
+
+  useEffect(() => {
+    historyIdRef.current = historyId
+  }, [historyId])
+
+  useEffect(() => {
+    markdownContentRef.current = markdownContent
+  }, [markdownContent])
 
   const handleFileChange = useCallback(() => {
     setChatArr([])
     setHistoryId('')
+    historyIdRef.current = ''
+    markdownContentRef.current = ''
   }, [])
 
   const fetchHistoryList = useCallback(async () => {
@@ -230,15 +244,17 @@ const WritingStylesPage = () => {
       next[next.length - 1] = { ...next[next.length - 1], isStreaming: false }
       return next
     })
-    if (historyId) {
+    const currentHistoryId = historyIdRef.current
+    const latestMarkdownContent = markdownContentRef.current
+    if (currentHistoryId) {
       try {
-        await updateWritingStyleHistory(markdownContent, historyId)
+        await updateWritingStyleHistory(latestMarkdownContent, currentHistoryId)
       } catch {
         // ignore
       }
     }
     await fetchHistoryList()
-  }, [historyId, markdownContent, fetchHistoryList])
+  }, [fetchHistoryList])
 
   const handleDoAnalysis = useCallback(async () => {
     trackEvent('Dashboard', 'Generate', 'Style Analysis')
@@ -256,7 +272,9 @@ const WritingStylesPage = () => {
     try {
       const hid: any = await addWritingStyleHistory(uploadedFile.name || '')
       if (hid != null) {
-        setHistoryId(typeof hid === 'object' ? String(hid.id ?? hid) : String(hid))
+        const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
+        historyIdRef.current = nextHistoryId
+        setHistoryId(nextHistoryId)
       }
     } catch {
       // ignore
@@ -295,6 +313,10 @@ const WritingStylesPage = () => {
     setShowUpload(true)
     setChatArr([])
     setUploadedFile(null)
+    setHistoryId('')
+    setMarkdownContent('')
+    historyIdRef.current = ''
+    markdownContentRef.current = ''
     setMarkdownEditing(false)
     setLoading(false)
     setIsPostStream(false)
