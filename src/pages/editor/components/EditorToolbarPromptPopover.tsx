@@ -153,7 +153,14 @@ export const EditorToolbarPromptPopover = ({
                       )}
 
                       {/* 标题 */}
-                      <div className="min-w-0 break-all text-[14px] font-semibold leading-4 text-(--el-text-color-primary,#303133)">
+                      <div
+                        className="min-w-0 overflow-hidden break-all text-[14px] font-semibold leading-4 text-(--el-text-color-primary,#303133)"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitBoxOrient: "vertical",
+                          WebkitLineClamp: 3,
+                        }}
+                      >
                         {item.name}
                       </div>
 
