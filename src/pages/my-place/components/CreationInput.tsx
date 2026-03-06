@@ -758,7 +758,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       >
                         <input
                           type="text"
-                          className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:border-[#ff9500] focus:bg-white focus:text-(--text-primary) focus:ring-2 focus:ring-[#ff9500]/20"
+                          className="input-tag-input inline-block min-w-[80px] max-w-[430px] overflow-hidden text-ellipsis whitespace-nowrap bg-white px-1.5 py-0.5 text-sm leading-tight text-(--text-muted) outline-none transition placeholder:opacity-80 focus:bg-white"
                           style={{ width: inputWidth }}
                           placeholder={item.value}
                           value={richInputValues[inputIndex] ?? ''}
