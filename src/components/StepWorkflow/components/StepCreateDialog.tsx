@@ -641,7 +641,7 @@ export const StepCreateDialog = React.forwardRef<
     }
     try {
       const res: any = await getStoriesReq(
-        { templateContent: description, tagIds },
+        { templateContent: description, tagIds: [] },
         { signal: controller.signal }
       )
       if (controller.signal.aborted) return

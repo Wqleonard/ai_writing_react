@@ -2,7 +2,8 @@
 
 import React, { useCallback, useImperativeHandle, useRef, useState, useEffect } from "react"
 import { StepCreateDialog, type StepCreateDialogRef } from "./components/StepCreateDialog"
-import type { StepSaveData, Mode, CharacterCardData } from "./types"
+import { CreateRecommendDialog } from "./components/CreateRecommendDialog"
+import type { StepSaveData, Mode, CharacterCardData, Template } from "./types"
 import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
@@ -40,6 +41,12 @@ const generateRoleSetting = (character: CharacterCardData | null) => {
 export interface StepWorkflowRef {
   /** 打开步骤创建弹窗（对应 Vue 的 setStepCreateDialogShow(true)） */
   openStepCreateDialog: () => void
+  /** 外部带模板直达“选择故事”步骤 */
+  startTemplateCreate: (template: Template) => boolean
+  /** 打开/关闭创作推荐弹窗（对齐 Vue showCreationDialog） */
+  showCreationDialog: (show?: boolean) => void
+  /** 直接控制步骤创建弹窗显隐（对齐 Vue setStepCreateDialogShow） */
+  setStepCreateDialogShow: (show?: boolean) => void
 }
 
 export interface StepWorkflowProps {
@@ -47,6 +54,8 @@ export interface StepWorkflowProps {
   totalMdContentLength?: number
   /** 兼容历史参数（当前展示判断已切换为基于 serverData） */
   isEditorEmpty?: boolean
+  /** 是否存在模板直达内容（例如从模板卡片跳转进入编辑器） */
+  hasTemplateContent?: boolean
   /** 当前编辑中的文件 id，变化时重算快捷入口 */
   currentEditingId?: string | null
   /** 步骤创建完成：保存到当前作品后的回调（React 侧需自行更新 sidebar/editor 等） */
@@ -57,13 +66,16 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   {
     totalMdContentLength: _totalMdContentLength = 0,
     isEditorEmpty: _isEditorEmpty,
+    hasTemplateContent = false,
     currentEditingId: _currentEditingId,
     onStepConfirm,
   },
   ref
 ) {
+  const [recommendDialogShow, setRecommendDialogShow] = useState(false)
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
+  const prevCanOpenDialogRef = useRef(false)
   const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
   const [isQuickStartActive, setIsQuickStartActive] = useState(false)
   const hideTimerRef = useRef<number | null>(null)
@@ -77,18 +89,101 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     if (!value || value.trim().length === 0) return false
     return !key.startsWith("知识库/")
   }
-  const showQuickStart = !Object.entries(serverData).some(([key, value]) =>
+
+  const canOpenStepCreateDialog = !Object.entries(serverData).some(([key, value]) =>
     hasContentOutsideKnowledgeBase(key, value)
   )
 
+  const showQuickStart = canOpenStepCreateDialog
+
+  const openStepCreateDialogSafely = useCallback(() => {
+    if (!canOpenStepCreateDialog) return
+    setStepCreateDialogShow(true)
+  }, [canOpenStepCreateDialog])
+
+  const startTemplateCreateSafely = useCallback((template: Template) => {
+    if (!canOpenStepCreateDialog) return false
+    setRecommendDialogShow(false)
+    setStepCreateDialogShow(true)
+    // 等 Dialog 挂载后再调用内部跳步方法，避免 ref 尚未可用
+    requestAnimationFrame(() => {
+      stepCreateDialogRef.current?.startTemplateCreate(template)
+    })
+    return true
+  }, [canOpenStepCreateDialog])
+
+  const setStepCreateDialogShowSafely = useCallback((show = true) => {
+    if (!show) {
+      setStepCreateDialogShow(false)
+      return
+    }
+    if (!canOpenStepCreateDialog) return
+    setRecommendDialogShow(false)
+    setStepCreateDialogShow(true)
+  }, [canOpenStepCreateDialog])
+
+  const showCreationDialog = useCallback((show = true) => {
+    if (!show) {
+      setRecommendDialogShow(false)
+      return
+    }
+    if (!canOpenStepCreateDialog) return
+    setRecommendDialogShow(true)
+  }, [canOpenStepCreateDialog])
+
+  const handleCreateWithTags = useCallback(() => {
+    setRecommendDialogShow(false)
+    if (!canOpenStepCreateDialog) return
+    setStepCreateDialogShow(true)
+    requestAnimationFrame(() => {
+      stepCreateDialogRef.current?.startMode("tag")
+    })
+  }, [canOpenStepCreateDialog])
+
+  const handleCreateTemplate = useCallback((template: Template) => {
+    setRecommendDialogShow(false)
+    if (!canOpenStepCreateDialog) return
+    setStepCreateDialogShow(true)
+    requestAnimationFrame(() => {
+      stepCreateDialogRef.current?.startTemplateCreate(template)
+    })
+  }, [canOpenStepCreateDialog])
+
   useImperativeHandle(ref, () => ({
-    openStepCreateDialog: () => setStepCreateDialogShow(true),
-  }), [])
+    openStepCreateDialog: openStepCreateDialogSafely,
+    startTemplateCreate: startTemplateCreateSafely,
+    showCreationDialog,
+    setStepCreateDialogShow: setStepCreateDialogShowSafely,
+  }), [openStepCreateDialogSafely, setStepCreateDialogShowSafely, showCreationDialog, startTemplateCreateSafely])
 
   const handleStartItemClick = useCallback((mode: string) => {
-    setStepCreateDialogShow(true)
+    openStepCreateDialogSafely()
     stepCreateDialogRef.current?.startMode(mode as Mode)
-  }, [])
+  }, [openStepCreateDialogSafely])
+
+  useEffect(() => {
+    if (!canOpenStepCreateDialog && stepCreateDialogShow) {
+      setStepCreateDialogShow(false)
+    }
+    if (!canOpenStepCreateDialog && recommendDialogShow) {
+      setRecommendDialogShow(false)
+    }
+  }, [canOpenStepCreateDialog, recommendDialogShow, stepCreateDialogShow])
+
+  // 当条件从“不可打开”切换到“可打开”时自动弹窗一次：
+  // 有模板内容 -> StepCreateDialog；否则 -> CreateRecommendDialog
+  useEffect(() => {
+    if (canOpenStepCreateDialog && !prevCanOpenDialogRef.current) {
+      if (hasTemplateContent) {
+        setRecommendDialogShow(false)
+        setStepCreateDialogShow(true)
+      } else {
+        setStepCreateDialogShow(false)
+        setRecommendDialogShow(true)
+      }
+    }
+    prevCanOpenDialogRef.current = canOpenStepCreateDialog
+  }, [canOpenStepCreateDialog, hasTemplateContent])
 
   useEffect(() => {
     if (hideTimerRef.current) {
@@ -179,10 +274,16 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
 
   return (
     <>
+      <CreateRecommendDialog
+        open={recommendDialogShow}
+        onOpenChange={setRecommendDialogShow}
+        onCreateWithTags={handleCreateWithTags}
+        onCreateTemplate={handleCreateTemplate}
+      />
       <StepCreateDialog
         ref={stepCreateDialogRef}
-        open={stepCreateDialogShow}
-        onOpenChange={setStepCreateDialogShow}
+        open={stepCreateDialogShow && canOpenStepCreateDialog}
+        onOpenChange={(next) => setStepCreateDialogShow(next && canOpenStepCreateDialog)}
         onConfirm={handleStepConfirm}
       />
 
