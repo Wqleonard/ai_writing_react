@@ -102,6 +102,25 @@ export const SendIdeaTour = ({
 
   const { onStart, onFinish, onSkip, onStepChange } = callbacks;
 
+  const scrollToPageTop = useCallback(() => {
+    // my-place 页面滚动发生在 ScrollArea viewport，而非 window
+    const viewport = document.querySelector(
+      '.workspace-scrollbar [data-slot="scroll-area-viewport"]'
+    ) as HTMLElement | null;
+    if (viewport) {
+      viewport.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      viewport.scrollTop = 0;
+    }
+
+    // 兜底：页面级滚动容器
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = 0;
+    }
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, []);
+
   // 计算进度百分比
   // const progressPercent = useMemo(() => {
   //   return ((stepIndex + 1) / TOTAL_STEPS) * 100
@@ -117,6 +136,7 @@ export const SendIdeaTour = ({
   // 处理下一步
   const handleNext = useCallback(() => {
     if (stepIndex === TOTAL_STEPS - 1) {
+      scrollToPageTop();
       onFinish?.();
       onOpenChange(false);
     } else {
@@ -124,7 +144,7 @@ export const SendIdeaTour = ({
       setStepIndex(newIndex);
       onStepChange?.(newIndex);
     }
-  }, [stepIndex, onOpenChange, onFinish, onStepChange]);
+  }, [stepIndex, onOpenChange, onFinish, onStepChange, scrollToPageTop]);
 
   // 处理跳过
   const handleSkip = useCallback(() => {
@@ -192,6 +212,7 @@ export const SendIdeaTour = ({
       if (status === STATUS.FINISHED) {
         onFinish?.();
         onOpenChange(false);
+        scrollToPageTop();
         return;
       }
 
@@ -233,7 +254,7 @@ export const SendIdeaTour = ({
         }
       }
     },
-    [navigate, onOpenChange, onFinish, onSkip],
+    [navigate, onOpenChange, onFinish, onSkip, scrollToPageTop],
   );
 
   // 监听 open 变化
