@@ -238,7 +238,7 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
 
   const handleCopyLink = useCallback(async () => {
     try {
-      const copyText = `我最近在用【爆文猫】AI写作工具，宝藏功能有：AI教练、拆书仿写、切换文风、小说转剧本……\n${invitationLink} 快帮我点点邀请链接，登录就能薅百万token！`
+      const copyText = `我最近在用【爆文猫】AI写作工具，宝藏功能有：AI教练、拆书仿写、切换文风、小说转剧本……\n${invitationLink} \n快帮我点点邀请链接，登录就能薅百万token！`
       await navigator.clipboard.writeText(copyText)
       toast.success('邀请链接已复制到剪贴板')
     } catch {
