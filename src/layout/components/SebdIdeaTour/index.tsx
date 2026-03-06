@@ -103,22 +103,27 @@ export const SendIdeaTour = ({
   const { onStart, onFinish, onSkip, onStepChange } = callbacks;
 
   const scrollToPageTop = useCallback(() => {
+    const shouldReduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const behavior: ScrollBehavior = shouldReduceMotion ? "auto" : "smooth";
+
     // my-place 页面滚动发生在 ScrollArea viewport，而非 window
     const viewport = document.querySelector(
       '.workspace-scrollbar [data-slot="scroll-area-viewport"]'
     ) as HTMLElement | null;
     if (viewport) {
-      viewport.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      viewport.scrollTop = 0;
+      viewport.scrollTo({ top: 0, left: 0, behavior });
+      return;
     }
 
     // 兜底：页面级滚动容器
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior });
     if (document.scrollingElement) {
-      document.scrollingElement.scrollTop = 0;
+      document.scrollingElement.scrollTo({ top: 0, behavior });
     }
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    document.documentElement.scrollTo({ top: 0, behavior });
+    document.body.scrollTo({ top: 0, behavior });
   }, []);
 
   // 计算进度百分比
