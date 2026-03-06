@@ -233,7 +233,6 @@ const BookAnalysisPage = () => {
     try {
       const hid: any = await addBookAnalysisHistory(uploadedFile.name || '')
       const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
-      console.log('hid', nextHistoryId)
       if (hid != null) {
         historyIdRef.current = nextHistoryId
         setHistoryId(nextHistoryId)
