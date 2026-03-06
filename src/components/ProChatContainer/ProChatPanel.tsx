@@ -178,7 +178,7 @@ export const ProChatPanel = () => {
                 )}
               </div>
             </AutoScrollArea>
-            <div className="shrink-0 w-[95%] self-center rounded-[10px] py-2 px-0 mb-1.5 chat-panel-footer">
+            <div className="shrink-0 w-[95%] self-center rounded-[10px] px-0 chat-panel-footer">
               {slots?.todos}
               {inputBlock}
             </div>

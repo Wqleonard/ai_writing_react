@@ -2146,8 +2146,8 @@ const MarkdownEditorPage = () => {
                       );
                     },
                     footer: (
-                      <div className="text-center py-2 px-4 text-[11px] text-[#ccc] w-full">
-                        AI 生成内容仅供参考
+                      <div className="text-center px-4 text-[11px] text-[#ccc] w-full">
+                        {`<内容由AI生成，仅供参考>`}
                       </div>
                     ),
                   }}
