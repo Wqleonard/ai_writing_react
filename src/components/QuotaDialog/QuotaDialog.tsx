@@ -236,24 +236,59 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
     }
   }, [view, usageFilterType, resetAndLoadUsage])
 
-  const handleCopyLink = useCallback(async () => {
-    try {
-      const copyText = `我最近在用【爆文猫】AI写作工具，宝藏功能有：AI教练、拆书仿写、切换文风、小说转剧本……\n${invitationLink} \n快帮我点点邀请链接，登录就能薅百万token！`
-      await navigator.clipboard.writeText(copyText)
-      toast.success('邀请链接已复制到剪贴板')
-    } catch {
+  const handleCopyLink = useCallback(() => {
+    const copyText = `我最近在用【爆文猫】AI写作工具，宝藏功能有：AI教练、拆书仿写、切换文风、小说转剧本……\n${invitationLink} \n快帮我点点邀请链接，登录就能薅百万token！`
+
+    const fallbackCopy = (text: string) => {
       const textarea = document.createElement('textarea')
-      textarea.value = invitationLink
+      textarea.value = text
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.top = '-9999px'
+      textarea.style.left = '-9999px'
+      textarea.style.opacity = '0'
       document.body.appendChild(textarea)
+      textarea.focus()
       textarea.select()
+      textarea.setSelectionRange(0, text.length)
+      let success = false
       try {
-        document.execCommand('copy')
-        toast.success('邀请链接已复制到剪贴板')
+        success = document.execCommand('copy')
       } catch {
+        success = false
+      } finally {
+        document.body.removeChild(textarea)
+      }
+      return success
+    }
+
+    const canUseClipboardApi =
+      typeof window !== 'undefined' &&
+      window.isSecureContext &&
+      typeof navigator !== 'undefined' &&
+      !!navigator.clipboard?.writeText
+
+    if (!canUseClipboardApi) {
+      if (fallbackCopy(copyText)) {
+        toast.success('邀请链接已复制到剪贴板')
+      } else {
         toast.error('复制失败，请手动复制')
       }
-      document.body.removeChild(textarea)
+      return
     }
+
+    navigator.clipboard
+      .writeText(copyText)
+      .then(() => {
+        toast.success('邀请链接已复制到剪贴板')
+      })
+      .catch(() => {
+        if (fallbackCopy(copyText)) {
+          toast.success('邀请链接已复制到剪贴板')
+        } else {
+          toast.error('复制失败，请手动复制')
+        }
+      })
   }, [invitationLink])
 
   const preventClose = useCallback((e: Event) => {
