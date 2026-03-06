@@ -138,7 +138,7 @@ export const EditorToolbarPromptPopover = ({
                   {filteredList.map((item, index) => (
                     <div
                       key={item.id ?? index}
-                      className="group relative mb-1.5 cursor-pointer overflow-hidden rounded border border-(--el-border-color-light,#e4e7ed) bg-white px-2.5 py-1.5 transition-all last:mb-0 hover:border-[var(--theme-color)]"
+                      className="group relative mb-1.5 min-w-0 cursor-pointer overflow-hidden rounded border border-(--el-border-color-light,#e4e7ed) bg-white px-2.5 py-1.5 transition-all last:mb-0 hover:border-[var(--theme-color)]"
                     >
                       {/* 角标：绝对定位旋转45度三角形 */}
                       {(item.isOfficial || item.isFavorited) && (
@@ -153,13 +153,13 @@ export const EditorToolbarPromptPopover = ({
                       )}
 
                       {/* 标题 */}
-                      <div className="text-[14px] font-semibold leading-4 text-(--el-text-color-primary,#303133)">
+                      <div className="min-w-0 break-all text-[14px] font-semibold leading-4 text-(--el-text-color-primary,#303133)">
                         {item.name}
                       </div>
 
                       {/* 描述：3行截断，固定最小高度 */}
                       <div
-                        className="mt-1 overflow-hidden text-[10px] leading-[14px] text-(--el-text-color-regular,#606266)"
+                        className="mt-1 min-w-0 overflow-hidden break-all text-[10px] leading-[14px] text-(--el-text-color-regular,#606266)"
                         style={{
                           display: "-webkit-box",
                           WebkitBoxOrient: "vertical",
