@@ -53,10 +53,22 @@ const BookAnalysisPage = () => {
   const [historyList, setHistoryList] = useState<HistoryItem[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const historyInitializedRef = useRef(false)
+  const historyIdRef = useRef('')
+  const markdownContentRef = useRef('')
+
+  useEffect(() => {
+    historyIdRef.current = historyId
+  }, [historyId])
+
+  useEffect(() => {
+    markdownContentRef.current = markdownContent
+  }, [markdownContent])
 
   const handleFileChange = useCallback(() => {
     setMarkdownContent('')
     setHistoryId('')
+    markdownContentRef.current = ''
+    historyIdRef.current = ''
   }, [])
 
   const onStreamData = useCallback(
@@ -68,6 +80,7 @@ const BookAnalysisPage = () => {
           const content = getContentFromPartial(d)
           if (!content) return
           setLoading(false)
+          markdownContentRef.current = content
           setMarkdownContent(content)
           break
         }
@@ -90,9 +103,12 @@ const BookAnalysisPage = () => {
 
   const onStreamEnd = useCallback(async () => {
     setIsPostStream(false)
-    if (historyId) {
+    const currentHistoryId = historyIdRef.current
+    const latestMarkdownContent = markdownContentRef.current
+    console.log('historyId', currentHistoryId)
+    if (currentHistoryId) {
       try {
-        await updateBookAnalysisHistory(markdownContent, historyId)
+        await updateBookAnalysisHistory(latestMarkdownContent, currentHistoryId)
       } catch {
         // ignore
       }
@@ -109,7 +125,7 @@ const BookAnalysisPage = () => {
         }))
       )
     }
-  }, [historyId, markdownContent])
+  }, [])
 
   const loadMoreTemplates = useCallback(async () => {
     if (templateLoading || !templateHasMore) return
@@ -216,7 +232,12 @@ const BookAnalysisPage = () => {
     setShowUpload(false)
     try {
       const hid: any = await addBookAnalysisHistory(uploadedFile.name || '')
-      if (hid != null) setHistoryId(typeof hid === 'object' ? String(hid.id ?? hid) : String(hid))
+      const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
+      console.log('hid', nextHistoryId)
+      if (hid != null) {
+        historyIdRef.current = nextHistoryId
+        setHistoryId(nextHistoryId)
+      }
     } catch {
       // ignore
     }
@@ -240,6 +261,9 @@ const BookAnalysisPage = () => {
     setShowUpload(true)
     setMarkdownContent('')
     setUploadedFile(null)
+    setHistoryId('')
+    markdownContentRef.current = ''
+    historyIdRef.current = ''
     setLoading(false)
   }, [])
 
@@ -285,6 +309,7 @@ const BookAnalysisPage = () => {
     async (item: HistoryItem) => {
       setShowUpload(false)
       setUploadedFile({ name: item.name } as UploadFile)
+      historyIdRef.current = item.id
       setHistoryId(item.id)
       try {
         const detail: any = await getBookAnalysisHistoryDetail(item.id)
