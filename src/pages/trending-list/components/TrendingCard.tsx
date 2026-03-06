@@ -137,6 +137,7 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
               className="trending-item flex h-[54px] cursor-pointer items-center rounded-[27px] transition-colors hover:bg-(--el-color-primary-light-8) [&:hover_.create-btn]:visible"
               role="button"
               tabIndex={0}
+              onClick={() => handleItemClick(item)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()

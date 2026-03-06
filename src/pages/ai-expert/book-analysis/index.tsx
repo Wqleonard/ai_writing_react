@@ -352,6 +352,7 @@ const BookAnalysisPage = () => {
 
   const handleTemplateClick = useCallback(
     (template: TemplateCardData) => {
+      console.log(template, 'template')
       void requireLogin(createFromTemplate, template)
     },
     [createFromTemplate, requireLogin]

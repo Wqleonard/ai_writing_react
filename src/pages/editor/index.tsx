@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import clsx from "clsx";
 import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MarkdownEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
+import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
 import IconFont from "@/components/IconFont/Iconfont";
 import {
   EditorTopToolbar,
@@ -24,7 +25,7 @@ import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
 import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
-import { useLLM } from "@/hooks/useLLM";
+import { resetLLMState, useLLM } from "@/hooks/useLLM";
 import type {
   ChatMessage,
   FileItem as FileItemType,
@@ -129,6 +130,7 @@ type EditorInitialParams = {
   isAnswerOnly?: boolean;
   modelLLM?: string;
   selectedWritingStyle?: string;
+  template?: StepTemplate | string;
   associationTags?: string[];
   selectedNotes?: import("@/api/notes").Note[];
   selectedFiles?: FileItemType[];
@@ -138,6 +140,45 @@ type EditorInitialParams = {
 };
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
+const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
+
+type RankingListTransmissionParams = {
+  content?: string;
+  message?: string;
+};
+
+const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
+  if (!input) return null;
+  let raw: unknown = input;
+  if (typeof input === "string") {
+    try {
+      raw = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object") return null;
+
+  const record = raw as Partial<StepTemplate>;
+  if (!record.title || !record.description) return null;
+
+  return {
+    id: String(record.id ?? ""),
+    title: String(record.title),
+    description: String(record.description),
+    tags: Array.isArray(record.tags)
+      ? record.tags.map((tag) => ({
+          id: String((tag as { id?: string | number }).id ?? ""),
+          name: String((tag as { name?: string }).name ?? ""),
+          category: String((tag as { category?: string }).category ?? ""),
+        }))
+      : [],
+    usageCount:
+      typeof record.usageCount === "number"
+        ? record.usageCount
+        : Number(record.usageCount ?? 0) || 0,
+  };
+};
 
 type FileChangesMap = Record<string, EditorChangeItem[]>;
 
@@ -370,6 +411,7 @@ const MarkdownEditorPage = () => {
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
+  const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
 
   // chatheader 相关
   const [
@@ -595,8 +637,13 @@ const MarkdownEditorPage = () => {
   const selectedTexts = useChatInputStore((s) => s.selectedTexts);
   const selectedTools = useChatInputStore((s) => s.selectedTools);
   const addSelectedText = useChatInputStore((s) => s.addSelectedText);
+  const clearAssociationTags = useChatInputStore((s) => s.clearAssociationTags);
   const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
   const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
+  const clearSelectedTexts = useChatInputStore((s) => s.clearSelectedTexts);
+  const resetSelectedTools = useChatInputStore((s) => s.resetSelectedTools);
+  const setShowAnswerTip = useChatInputStore((s) => s.setShowAnswerTip);
+  const setShowWritingStyleTip = useChatInputStore((s) => s.setShowWritingStyleTip);
   const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
   const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
@@ -779,6 +826,7 @@ const MarkdownEditorPage = () => {
 
   useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
+    let rankingParams: RankingListTransmissionParams | null = null;
     if (typeof window !== "undefined") {
       const paramsStr = sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY);
       if (paramsStr) {
@@ -790,9 +838,40 @@ const MarkdownEditorPage = () => {
           sessionStorage.removeItem(EDITOR_INITIAL_PARAMS_KEY);
         }
       }
+
+      const rankingParamsStr = sessionStorage.getItem(RANKING_LIST_TRANSMISSION_KEY);
+      if (rankingParamsStr) {
+        try {
+          rankingParams = JSON.parse(rankingParamsStr) as RankingListTransmissionParams;
+        } catch (e) {
+          console.error("解析 rankingListTransmission 失败:", e);
+        } finally {
+          sessionStorage.removeItem(RANKING_LIST_TRANSMISSION_KEY);
+        }
+      }
     }
     const stateParams = (location.state as EditorInitialParams | null) ?? null;
-    const initialParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
+    const mergedParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
+    const rankingContent = rankingParams?.content?.trim() ?? "";
+    const rankingMessage = rankingParams?.message?.trim() ?? "";
+    const initialParams: EditorInitialParams = {
+      ...mergedParams,
+      selectedTexts: rankingContent
+        ? [
+            ...(mergedParams.selectedTexts ?? []),
+            {
+              id: `ranking-transmission-${Date.now()}`,
+              file: "",
+              content: rankingContent,
+            },
+          ]
+        : mergedParams.selectedTexts,
+      message: rankingMessage || mergedParams.message,
+    };
+    const initialTemplate = parseStepTemplate(initialParams.template);
+    if (initialTemplate) {
+      setPendingStepTemplate(initialTemplate);
+    }
 
     if (initialParams.modelLLM) setModelLLM(initialParams.modelLLM);
     if (initialParams.selectedWritingStyle) setSelectedWritingStyle(initialParams.selectedWritingStyle);
@@ -819,6 +898,14 @@ const MarkdownEditorPage = () => {
     }
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams]);
 
+  useEffect(() => {
+    if (!pendingStepTemplate) return;
+    const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
+    if (opened) {
+      setPendingStepTemplate(null);
+    }
+  }, [pendingStepTemplate, serverData, currentEditingId]);
+
   // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
   useEffect(() => {
     // serverData 还未加载完成
@@ -844,10 +931,33 @@ const MarkdownEditorPage = () => {
   }, [serverData, currentEditingId]);
 
   const handleBackClick = useCallback(() => {
+    // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
+    clearAssociationTags();
+    clearSelectedNotes();
+    clearSelectedFiles();
+    clearSelectedTexts();
+    resetSelectedTools();
+    setShowAnswerTip(false);
+    setShowWritingStyleTip(false);
+    resetLLMState();
+    setPendingInitialMessage("");
+    setShouldAutoSubmitInitialMessage(false);
+    setIsAnswerOnly(true);
+
     // 返回时先清空编辑器 store，避免下次进入短暂展示上一次作品内容
     initEditorStore();
     navigate("/workspace/my-place", { replace: true });
-  }, [initEditorStore, navigate]);
+  }, [
+    clearAssociationTags,
+    clearSelectedNotes,
+    clearSelectedFiles,
+    clearSelectedTexts,
+    resetSelectedTools,
+    setShowAnswerTip,
+    setShowWritingStyleTip,
+    initEditorStore,
+    navigate,
+  ]);
 
   const handleSaveClick = useCallback(async () => {
     await saveEditorData("0", true);
@@ -1859,6 +1969,7 @@ const MarkdownEditorPage = () => {
                           ref={stepWorkflowRef}
                           totalMdContentLength={wordCount}
                           isEditorEmpty={isEditorActuallyEmpty}
+                          hasTemplateContent={!!pendingStepTemplate}
                           currentEditingId={currentEditingId}
                         />
                       </div>

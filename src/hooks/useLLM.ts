@@ -38,6 +38,11 @@ function emit(): void {
   listeners.forEach((l) => l());
 }
 
+export function resetLLMState(): void {
+  state = { ...initialState };
+  emit();
+}
+
 export function useLLM() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
