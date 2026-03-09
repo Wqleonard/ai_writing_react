@@ -34,11 +34,11 @@ import { WritingStyleCard } from './components/WritingStyleCard'
 import type { WritingStyleCardData } from './types'
 import { useLLM } from '@/hooks/useLLM'
 import clsx from 'clsx'
-import EMPTY_IMG from '@/assets/images/empty.webp'
 import './writing-styles.css'
 import { Iconfont } from "@/components/IconFont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import Empty from '@/components/ui/Empty'
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
 
@@ -448,8 +448,7 @@ const WritingStylesPage = () => {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                  <img src={EMPTY_IMG} alt="" className="h-30 w-30 object-contain"/>
-                  <p className="mt-2 text-sm">暂无历史记录</p>
+                  <Empty description="暂无历史记录" />
                 </div>
               )}
             </div>
