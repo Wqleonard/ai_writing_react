@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
@@ -283,12 +283,14 @@ const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string,
 
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
 function CanvasToolbar({
-  apiRef,
+  api,
 }: {
-  apiRef: RefObject<InsCanvasApi | null>
+  api: InsCanvasApi | null
 }) {
-  const api = apiRef.current;
   if (!api) return null;
+  const canSaveCanvas = !!api.inspirationDrawId;
+  const addCanvasTitle = api.isLoading ? "生成选题中，请稍候" : "新增画布";
+  const saveCanvasTitle = canSaveCanvas ? "保存画布" : "请先创建画布";
   return (
     <div className="flex h-10 items-center gap-1 px-1.5">
       <Button
@@ -297,7 +299,7 @@ function CanvasToolbar({
         size="icon"
         disabled={api.isLoading}
         onClick={api.addNewCanvas}
-        title={api.isLoading ? "生成选题中，请稍候" : "新增画布"}
+        title={addCanvasTitle}
         aria-label="新增画布"
       >
         <span className="iconfont !text-xs">&#xe625;</span>
@@ -316,9 +318,9 @@ function CanvasToolbar({
         type="button"
         variant="ghost"
         size="icon"
-        disabled={!api.inspirationDrawId}
+        disabled={!canSaveCanvas}
         onClick={() => void api.saveCanvas()}
-        title={api.inspirationDrawId ? "保存画布" : "请先创建画布"}
+        title={saveCanvasTitle}
         aria-label="保存画布"
       >
         <span className="iconfont">&#xe936;</span>
@@ -2092,7 +2094,7 @@ const MarkdownEditorPage = () => {
             canvasActionsSlot={
               activeTab === "canvas" ? (
                 <CanvasToolbar
-                  apiRef={insCanvasRef}
+                  api={insCanvasRef.current}
                 />
               ) : null
             }
