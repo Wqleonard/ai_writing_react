@@ -1369,7 +1369,7 @@ export const StepCreateDialog = React.forwardRef<
                       <div className="flex h-full flex-col overflow-y-auto px-[50px] pt-[30px]">
                         <div className="flex h-full flex-col gap-[22px]">
                           <div className="flex items-start gap-[50px]">
-                            <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">书名：</label>
+                            <div className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">书名：</div>
                             <div className="relative min-w-0 flex-1">
                               <input
                                 className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 text-base shadow-none focus:outline-none"
@@ -1382,10 +1382,10 @@ export const StepCreateDialog = React.forwardRef<
                             </div>
                           </div>
                           <div className="flex items-start gap-[50px]">
-                            <label className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">
+                            <div className="w-[124px] shrink-0 text-2xl leading-8 text-[#464646]">
                               故事简介：
-                            </label>
-                            <ScrollArea className="relative min-w-0 flex-1 max-h-[240px]">
+                            </div>
+                            <ScrollArea className="relative min-w-0 h-full max-h-[240px]">
                               <MarkdownEditor
                                 className="h-[260px] w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 pr-[70px] text-base shadow-none focus:outline-none"
                                 maxlength={MAX_INTRO_LENGTH}
@@ -1526,10 +1526,11 @@ export const StepCreateDialog = React.forwardRef<
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="mb-2 block text-sm text-gray-700">人物小传</label>
+                          <label className="mb-2 block text-base text-gray-700">人物小传</label>
                           <textarea
                             className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={300}
+
                             value={editingCharacter.experiences}
                             onChange={(e) =>
                               setEditingCharacter((prev) => ({ ...prev, experiences: e.target.value }))

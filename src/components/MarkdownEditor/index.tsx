@@ -91,7 +91,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       onBlur,
       onKeyDown,
       minHeight = 200,
-      needSelectionToolbar = true,
+      needSelectionToolbar = false,
       btns,
       selectionToolbarBtns = ['edit', 'expand', 'add', 'note'],
       onSelectionAction,
