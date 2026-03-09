@@ -918,11 +918,11 @@ const MarkdownEditorPage = () => {
       const msg = initialParams.message.trim();
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
-        // 通过桥接触发 QuillChatInput 的提交逻辑（兼容“仅回答”场景）
-        emitCreationInputSubmit(msg);
+        // 交由 ProChatContainer 自动提交，避免桥接事件时序导致漏提
+        setShouldAutoSubmitInitialMessage(true);
+      } else {
+        setShouldAutoSubmitInitialMessage(false);
       }
-      // 避免与 ProChatContainer 的自动提交重复触发
-      setShouldAutoSubmitInitialMessage(false);
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
