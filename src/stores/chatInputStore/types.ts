@@ -23,9 +23,15 @@ export interface ChatInputStore {
   isShowAnswerTip: boolean
   /** 是否展示“文风提示”的提示 */
   isShowWritingStyleTip: boolean
+  /** 递增即表示请求打开文风选择弹窗（popover） */
+  writingStylePopoverRequest: number
+  /** 请求打开时希望选中的文风 id */
+  requestedWritingStyleId: string | null
 
   setShowAnswerTip: (value: boolean) => void
   setShowWritingStyleTip: (value: boolean) => void
+  requestOpenWritingStylePopover: (styleId?: string) => void
+  clearWritingStylePopoverRequest: () => void
 
   // ========= 关联关系相关 =========
   setAssociationTags: (tags: string[]) => void

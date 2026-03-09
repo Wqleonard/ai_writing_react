@@ -101,6 +101,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     removeSelectedText,
   } = useChatInputStore()
 
+  const writingStylePopoverRequest = useChatInputStore((s) => s.writingStylePopoverRequest)
+  const requestedWritingStyleId = useChatInputStore((s) => s.requestedWritingStyleId)
+  const clearWritingStylePopoverRequest = useChatInputStore((s) => s.clearWritingStylePopoverRequest)
+
   const { quickChatInputChannels } = useModels()
   const {
     modelsLLM,
@@ -140,10 +144,35 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const [hovered, setHovered] = useState(false)
   const valueRef = useRef(value)
   const pendingBridgeSubmitTextRef = useRef<string | null>(null)
+  const lastWritingStylePopoverRequestRef = useRef<number>(0)
 
   useEffect(() => {
     valueRef.current = value
   }, [value])
+
+  // 外部（如：创建文风后跳转 my-place）请求打开“文风选择弹窗”
+  useEffect(() => {
+    if (!writingStylePopoverRequest) return
+    if (lastWritingStylePopoverRequestRef.current === writingStylePopoverRequest) return
+    lastWritingStylePopoverRequestRef.current = writingStylePopoverRequest
+
+    // 对齐 Vue：只展示提示气泡，不自动展开下拉
+    if (isAnswerOnly) setShowAnswerTip(true)
+
+    if (requestedWritingStyleId) {
+      setSelectedWritingStyle(String(requestedWritingStyleId))
+    }
+    setShowWritingStyleTip(true)
+    clearWritingStylePopoverRequest()
+  }, [
+    writingStylePopoverRequest,
+    requestedWritingStyleId,
+    clearWritingStylePopoverRequest,
+    isAnswerOnly,
+    setShowAnswerTip,
+    setShowWritingStyleTip,
+    setSelectedWritingStyle,
+  ])
 
   const isExternalFileDrag = useCallback((e: React.DragEvent) => {
     const transfer = e.dataTransfer
@@ -499,13 +528,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                           }))
                           : []
                         setWritingStyles(list)
-                        if (list.length > 0 && !selectedWritingStyle) {
-                          setSelectedWritingStyle(list[0].id)
-                        } else if (
-                          selectedWritingStyle &&
-                          !list.some((s) => s.id === selectedWritingStyle) &&
-                          list.length > 0
-                        ) {
+                        // 优先：如果外部请求指定了文风，并且列表里存在，则选中它
+                        if (requestedWritingStyleId && list.some((s) => s.id === requestedWritingStyleId)) {
+                          setSelectedWritingStyle(requestedWritingStyleId)
+                        } else if (list.length > 0 && !selectedWritingStyle) {
                           setSelectedWritingStyle(list[0].id)
                         }
                       })

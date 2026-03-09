@@ -20,9 +20,18 @@ export const useChatInputStore = create<ChatInputStore>((set, get) => ({
   selectedTools: DEFAULT_TOOLS,
   isShowAnswerTip: false,
   isShowWritingStyleTip: false,
+  writingStylePopoverRequest: 0,
+  requestedWritingStyleId: null,
 
   setShowAnswerTip: (value) => set({ isShowAnswerTip: value }),
   setShowWritingStyleTip: (value) => set({ isShowWritingStyleTip: value }),
+  requestOpenWritingStylePopover: (styleId) =>
+    set((state) => ({
+      writingStylePopoverRequest: state.writingStylePopoverRequest + 1,
+      requestedWritingStyleId: styleId ? String(styleId) : state.requestedWritingStyleId,
+    })),
+  clearWritingStylePopoverRequest: () =>
+    set({ requestedWritingStyleId: null }),
 
   // 关联关系
   setAssociationTags: (tags: string[]) => set({ associationTags: [...tags] }),
@@ -99,6 +108,8 @@ export const useChatInputStore = create<ChatInputStore>((set, get) => ({
       selectedTexts: [],
       isShowAnswerTip: false,
       isShowWritingStyleTip: state.isShowWritingStyleTip,
+      // 保留 writingStylePopoverRequest（仅作为触发信号），清掉 requestedWritingStyleId
+      requestedWritingStyleId: null,
       // 保留 selectedTools
     })),
 

@@ -202,11 +202,66 @@ export const CreationInput = (props: CreationInputProps) => {
     clearSelectedFiles,
     isShowWritingStyleTip,
     setShowWritingStyleTip,
+    writingStylePopoverRequest,
+    requestedWritingStyleId,
+    clearWritingStylePopoverRequest,
     removeAssociationTag,
     removeNote,
     removeFile,
     removeSelectedText,
   } = useChatInputStore()
+
+  const lastWritingStylePopoverRequestRef = useRef<number>(0)
+
+  // 外部（如：创建文风后跳转 my-place）请求打开“文风选择弹窗”
+  useEffect(() => {
+    if (!writingStylePopoverRequest) return
+    if (lastWritingStylePopoverRequestRef.current === writingStylePopoverRequest) return
+    lastWritingStylePopoverRequestRef.current = writingStylePopoverRequest
+
+    // 与 Vue 行为一致：展示“保存的文风在这”提示，并关闭仅回答（否则触发器 disabled）
+    if (isAnswerOnly) onAnswerOnlyChange(false)
+
+    if (requestedWritingStyleId) {
+      setSelectedWritingStyle(String(requestedWritingStyleId))
+    }
+    setShowWritingStyleTip(true)
+    void (async () => {
+      try {
+        const res = await getWritingStylesListReq()
+        const list = Array.isArray(res)
+          ? res.map((item: { id?: string; name?: string; isPublic?: boolean }) => ({
+            id: String(item?.id ?? ''),
+            name: String(item?.name ?? ''),
+            isPublic: item?.isPublic !== false,
+          }))
+          : []
+        setWritingStyles(list)
+        if (
+          requestedWritingStyleId &&
+          list.some((s) => s.id === String(requestedWritingStyleId))
+        ) {
+          setSelectedWritingStyle(String(requestedWritingStyleId))
+        } else if (list.length > 0 && !list.some((s) => s.id === selectedWritingStyle)) {
+          setSelectedWritingStyle(list[0].id)
+        }
+      } catch {
+        // ignore
+      } finally {
+        clearWritingStylePopoverRequest()
+      }
+    })()
+  }, [
+    writingStylePopoverRequest,
+    requestedWritingStyleId,
+    clearWritingStylePopoverRequest,
+    isAnswerOnly,
+    onAnswerOnlyChange,
+    setSelectedWritingStyle,
+    selectedWritingStyle,
+    setWritingStyles,
+    setShowWritingStyleTip,
+  ])
 
   const writingStyleOptions =
     writingStyles.length > 0 ? writingStyles : [{ id: selectedWritingStyle, name: '默认' }]
@@ -891,7 +946,7 @@ export const CreationInput = (props: CreationInputProps) => {
             </div>
             <div className="control-right flex h-full items-center gap-3">
               {/* 文风选择器 */}
-              <div className="answer-only-wrap relative">
+              <div className="answer-only-wrap relative quill-chat-input" style={{ width: 'auto' }}>
                 {isShowWritingStyleTip && (
                   <div className="answer-tip-box">
                     <div className="answer-tip-content">

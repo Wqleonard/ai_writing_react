@@ -378,7 +378,7 @@ const WritingStylesPage = () => {
     setSuccessDialogOpen(false)
     setSelectedWritingStyle(newAddStyleId)
     navigate('/workspace/my-place', {
-      state: { shouldAnimate: true, newStyleId: newAddStyleId },
+      state: { shouldAnimate: true, newStyleId: newAddStyleId, showWritingStylePop: true },
     })
   }, [newAddStyleId, setSelectedWritingStyle, navigate])
 

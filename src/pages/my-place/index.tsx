@@ -63,6 +63,7 @@ export default function MyPlacePage() {
   const { setSelectedWritingStyle, modelLLM, selectedWritingStyle } = useLLM()
   const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes)
   const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles)
+  const requestOpenWritingStylePopover = useChatInputStore((s) => s.requestOpenWritingStylePopover)
 
   const [loading, setLoading] = useState(false)
   const [bannerConfig, setBannerConfig] = useState<{
@@ -394,13 +395,31 @@ export default function MyPlacePage() {
   }, [updateMyWorks, isLoggedIn])
 
   useEffect(() => {
-    const state = location.state as { shouldAnimate?: boolean; newStyleId?: string } | null
-    if (state?.shouldAnimate === true) {
-      if (state.newStyleId) {
-        setSelectedWritingStyle(state.newStyleId)
-      }
+    const state = location.state as
+      | { shouldAnimate?: boolean; newStyleId?: string; showWritingStylePop?: boolean }
+      | null
+    if (!state) return
+
+    if (state?.shouldAnimate === true && state.newStyleId) {
+      setSelectedWritingStyle(state.newStyleId)
     }
-  }, [location.state, setSelectedWritingStyle])
+
+    // 与 Vue 行为对齐：创建文风后跳转到 my-place，自动打开文风弹窗、关闭仅回答、选中新文风
+    if (state?.showWritingStylePop === true && state.newStyleId) {
+      setIsAnswerOnly(false)
+      setSelectedWritingStyle(state.newStyleId)
+      // 触发 QuillChatInput 打开文风选择弹窗
+      requestOpenWritingStylePopover(state.newStyleId)
+      // 清掉 state，避免刷新/重渲染重复触发
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [
+    location.state,
+    location.pathname,
+    navigate,
+    requestOpenWritingStylePopover,
+    setSelectedWritingStyle,
+  ])
 
 
   return (
