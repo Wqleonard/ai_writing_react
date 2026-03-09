@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/Dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
 import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
@@ -26,6 +26,7 @@ import {
   type TagCategoryDataItem,
 } from "@/components/StepWorkflow/components/TagSelector"
 import type { Tag as WorkflowTag } from "@/components/StepWorkflow/types"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
@@ -867,36 +868,59 @@ export const EditorTreeSidebar = ({
       </ScrollArea>
 
       <div className="flex shrink-0 items-center justify-center gap-5 py-2.5">
-        <div
-          role="button"
-          tabIndex={0}
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-          title="添加文件夹"
-          onClick={addFolderAtRoot}
-        >
-          <IconFont unicode="\ue62d" className="text-2xl" />
-        </div>
-        <div
-          role="button"
-          tabIndex={0}
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-          title="添加文件"
-          onClick={addFileAtRoot}
-        >
-          <IconFont unicode="\ue62c" className="text-2xl" />
-        </div>
-        <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
-          <PopoverTrigger asChild>
+        <Tooltip>
+          <TooltipTrigger>
             <div
               role="button"
               tabIndex={0}
               className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-              title="导出作品"
+              title="添加文件夹"
+              onClick={addFolderAtRoot}
             >
-              <IconFont unicode="\ue62e" className="text-2xl" />
+              <IconFont unicode="\ue62d" className="text-2xl" />
             </div>
-          </PopoverTrigger>
-          <PopoverContent align="start" side="top" className="w-auto p-0 rounded-[var(--popover-radius)] border border-[var(--border-color)] shadow-lg editor-sidebar-export-popover">
+          </TooltipTrigger>
+          <TooltipContent side='top' align='center'>
+            添加文件夹
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger>
+            <div
+              role="button"
+              tabIndex={0}
+              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
+              title="添加文件"
+              onClick={addFileAtRoot}
+            >
+              <IconFont unicode="\ue62c" className="text-2xl" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side='top' align='center'>
+            添加文件
+          </TooltipContent>
+        </Tooltip>
+
+        <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
+          <Tooltip>
+            <PopoverAnchor asChild>
+              <TooltipTrigger asChild>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
+                  title="导出作品"
+                  onClick={()=>{
+                    setExportPopoverOpen(true)
+                  }}
+                >
+                  <IconFont unicode="\ue62e" className="text-2xl" />
+                </div>
+              </TooltipTrigger>
+            </PopoverAnchor>
+            <TooltipContent side="top">导出作品</TooltipContent>
+          </Tooltip>
+          <PopoverContent side="top" align='center' className="rounded-md w-auto p-0 border border-[var(--border-color)] shadow-lg editor-sidebar-export-popover">
             <ExportWorkMenu onClose={() => setExportPopoverOpen(false)} />
           </PopoverContent>
         </Popover>
@@ -904,7 +928,7 @@ export const EditorTreeSidebar = ({
 
       {contextMenu && (
         <div
-          className="fixed z-[2000] min-w-[120px] rounded border border-[#e4e7ed] bg-[var(--bg-dialog)] py-1 shadow-lg"
+          className="fixed z-2000 min-w-[120px] rounded border border-[#e4e7ed] bg-[var(--bg-dialog)] py-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
