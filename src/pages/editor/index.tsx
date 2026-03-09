@@ -171,10 +171,10 @@ const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate
     description: String(record.description),
     tags: Array.isArray(record.tags)
       ? record.tags.map((tag) => ({
-          id: String((tag as { id?: string | number }).id ?? ""),
-          name: String((tag as { name?: string }).name ?? ""),
-          category: String((tag as { category?: string }).category ?? ""),
-        }))
+        id: String((tag as { id?: string | number }).id ?? ""),
+        name: String((tag as { name?: string }).name ?? ""),
+        category: String((tag as { category?: string }).category ?? ""),
+      }))
       : [],
     usageCount:
       typeof record.usageCount === "number"
@@ -283,8 +283,8 @@ const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string,
 
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
 function CanvasToolbar({
-  api,
-}: {
+                         api,
+                       }: {
   api: InsCanvasApi | null
 }) {
   if (!api) return null;
@@ -312,7 +312,7 @@ function CanvasToolbar({
         title="历史版本"
         aria-label="历史版本"
       >
-        <span className="iconfont icon-BtnChatHistory" aria-hidden />
+        <span className="iconfont icon-BtnChatHistory" aria-hidden/>
       </Button>
       <Button
         type="button"
@@ -406,7 +406,7 @@ function MermaidRelationPreview({ markdown }: { markdown: string }) {
 function RoleTablePreview({ markdown }: { markdown: string }) {
   return (
     <div className="h-full w-full overflow-auto rounded-md border bg-background p-4">
-      <MarkdownRenderer content={markdown} />
+      <MarkdownRenderer content={markdown}/>
     </div>
   );
 }
@@ -557,8 +557,8 @@ const MarkdownEditorPage = () => {
         ((lastCustom as { hiltTodos?: unknown[] }).hiltTodos?.length
           ? hiltStatus === "in_progress"
           : ((lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
-              (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-            ));
+            (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+          ));
       if (pending?.sessionId && pending?.workId && !hasHiltPending) {
         const { sessionId, workId: wid } = pending;
         try {
@@ -568,13 +568,13 @@ const MarkdownEditorPage = () => {
             ? raw
             : typeof raw === "string"
               ? (() => {
-                  try {
-                    const parsed = JSON.parse(raw) as string[] | unknown;
-                    return Array.isArray(parsed) ? parsed : [];
-                  } catch {
-                    return [];
-                  }
-                })()
+                try {
+                  const parsed = JSON.parse(raw) as string[] | unknown;
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
               : [];
           if (guides.length > 0) {
             updateLastChatMessage((prev) => {
@@ -727,9 +727,9 @@ const MarkdownEditorPage = () => {
         const attachments =
           selectedFiles.length > 0
             ? selectedFiles.map((file) => ({
-                name: file.serverFileName,
-                remoteAddress: file.putFilePath,
-              }))
+              name: file.serverFileName,
+              remoteAddress: file.putFilePath,
+            }))
             : undefined;
         langGraphStream.submit(
           message,
@@ -884,19 +884,19 @@ const MarkdownEditorPage = () => {
       ...mergedParams,
       selectedTexts: rankingContent
         ? [
-            ...(mergedParams.selectedTexts ?? []),
-            {
-              id: `ranking-transmission-${Date.now()}`,
-              file: "",
-              content: rankingContent,
-            },
-          ]
+          ...(mergedParams.selectedTexts ?? []),
+          {
+            id: `ranking-transmission-${Date.now()}`,
+            file: "",
+            content: rankingContent,
+          },
+        ]
         : mergedParams.selectedTexts,
       message: rankingMessage || mergedParams.message,
     };
     setDisableRecommendAutoOpen(
       !!initialParams.skipRecommendDialog ||
-        !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
+      !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
     );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
@@ -1278,7 +1278,7 @@ const MarkdownEditorPage = () => {
         for (const target of targets) {
           const hit = blockText.includes(target) || target.includes(blockText);
           if (!hit) continue;
-            const score = Math.min(blockText.length, target.length) + (target.length > 18 ? 8 : 0);
+          const score = Math.min(blockText.length, target.length) + (target.length > 18 ? 8 : 0);
           if (score > bestScore) {
             bestScore = score;
             matchedBlock = block;
@@ -1473,17 +1473,14 @@ const MarkdownEditorPage = () => {
     [serverData]
   );
   const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
-  
+
   const currentLabel = useMemo(
     () => (currentEditingId ? findNodeLabelById(treeData, currentEditingId) : ""),
     [treeData, currentEditingId]
   );
 
   const currentContent = serverData[fileKey] ?? "";
-  const roleFileMatchTarget = `${fileKey} ${currentLabel}`;
-  const isRoleRelationFile = /(角色关系网|角色关系图|人物关系网|人物关系图|人物关系|角色关系|关系图|关系网)/.test(roleFileMatchTarget);
-  const isRoleTableFile = /(角色表|人物表|角色列表|人物列表)/.test(roleFileMatchTarget);
-  const isRoleSettingPreviewFile = isRoleRelationFile || isRoleTableFile;
+
   const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
   const isCurrentEditorEmpty = useMemo(
     () => isEditorContentEffectivelyEmpty(currentContent),
@@ -1550,10 +1547,6 @@ const MarkdownEditorPage = () => {
     if (!el) return;
     if (el.scrollTop !== 0) el.scrollTop = 0;
   }, [isEditorActuallyEmpty]);
-
-  useEffect(() => {
-    setRelationViewMode(isRoleSettingPreviewFile ? "preview" : "edit");
-  }, [fileKey, isRoleSettingPreviewFile]);
 
   // 点击标题进入编辑（与 Vue startEditingLabel 一致）
   const startEditingLabel = useCallback((label: string) => {
@@ -1707,7 +1700,7 @@ const MarkdownEditorPage = () => {
           className="box-border shrink-0 h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-primary) p-2"
           style={{ width: `${leftPanelWidthRem}rem` }}
         >
-          <EditorTreeSidebar className="h-full" />
+          <EditorTreeSidebar className="h-full"/>
         </div>
 
         <EditorResizeHandle
@@ -1727,7 +1720,7 @@ const MarkdownEditorPage = () => {
             <div className="flex flex-row-reverse h-[38px] px-6 items-center shrink-0 min-w-0">
               <div className="flex h-full items-center gap-0 min-w-0">
                 <span className="text-sm text-(--text-primary)">字数: {wordCount}</span>
-                <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5" />
+                <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5"/>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1736,7 +1729,7 @@ const MarkdownEditorPage = () => {
                   title="撤销 (Ctrl+Z)"
                   onClick={handleUndo}
                 >
-                  <IconFont unicode="\ue61b" className="text-base" />
+                  <IconFont unicode="\ue61b" className="text-base"/>
                 </Button>
                 <Button
                   type="button"
@@ -1746,7 +1739,7 @@ const MarkdownEditorPage = () => {
                   title="反撤销 (Ctrl+Y)"
                   onClick={handleRedo}
                 >
-                  <IconFont unicode="\ue61c" className="text-base" />
+                  <IconFont unicode="\ue61c" className="text-base"/>
                 </Button>
                 <Button
                   type="button"
@@ -1756,9 +1749,9 @@ const MarkdownEditorPage = () => {
                   title="查找替换"
                   onClick={handleSearchReplace}
                 >
-                  <IconFont unicode="\ue61e" className="text-base" />
+                  <IconFont unicode="\ue61e" className="text-base"/>
                 </Button>
-                <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5" />
+                <div className="w-px h-[14px] bg-[#9a9a9a] mx-2.5"/>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1767,7 +1760,7 @@ const MarkdownEditorPage = () => {
                   title="时光机"
                   onClick={() => void openTimeMachine()}
                 >
-                  <IconFont unicode="\ue61f" className="text-base" />
+                  <IconFont unicode="\ue61f" className="text-base"/>
                 </Button>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -1778,11 +1771,12 @@ const MarkdownEditorPage = () => {
                       className="size-6"
                       title="字体设置"
                     >
-                      <IconFont unicode="\ue61d" className="text-base" />
+                      <IconFont unicode="\ue61d" className="text-base"/>
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-80 p-0">
-                    <div className="px-5 py-4 border-b border-(--el-border-color-lighter) text-sm font-semibold text-center">
+                    <div
+                      className="px-5 py-4 border-b border-(--el-border-color-lighter) text-sm font-semibold text-center">
                       编辑器设置
                     </div>
                     <div className="p-5 space-y-5">
@@ -1831,10 +1825,9 @@ const MarkdownEditorPage = () => {
                           }
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="请选择字重" />
+                            <SelectValue placeholder="请选择字重"/>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="100">极细 (100)</SelectItem>
                             <SelectItem value="300">细体 (300)</SelectItem>
                             <SelectItem value="400">常规 (400)</SelectItem>
                             <SelectItem value="500">中等 (500)</SelectItem>
@@ -1879,7 +1872,8 @@ const MarkdownEditorPage = () => {
 
             {/* 编辑区主体 */}
             <div className="flex flex-1 min-h-0 min-w-0 relative">
-              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col" style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem`, }}>
+              <div className="relative flex flex-1 min-h-0 min-w-0 flex-col"
+                   style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem`, }}>
                 <div
                   ref={editorMainScrollRef}
                   className={clsx(
@@ -1938,58 +1932,20 @@ const MarkdownEditorPage = () => {
                             </div>
                           )}
                           <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
-                            {isRoleSettingPreviewFile && (
-                              <div className="flex items-center gap-2 text-xs">
-                                <button
-                                  type="button"
-                                  className={clsx(
-                                    "px-2 py-1 rounded border transition-colors",
-                                    relationViewMode === "edit"
-                                      ? "bg-(--bg-editor-save) text-white border-(--bg-editor-save)"
-                                      : "bg-background text-muted-foreground border-border"
-                                  )}
-                                  onClick={() => setRelationViewMode("edit")}
-                                >
-                                  编辑
-                                </button>
-                                <button
-                                  type="button"
-                                  className={clsx(
-                                    "px-2 py-1 rounded border transition-colors",
-                                    relationViewMode === "preview"
-                                      ? "bg-(--bg-editor-save) text-white border-(--bg-editor-save)"
-                                      : "bg-background text-muted-foreground border-border"
-                                  )}
-                                  onClick={() => setRelationViewMode("preview")}
-                                >
-                                  {isRoleRelationFile ? "关系图预览" : "表格预览"}
-                                </button>
-                              </div>
-                            )}
-                            {relationViewMode === "preview" && isRoleRelationFile ? (
-                              <div className="flex-1 min-h-0">
-                                <MermaidRelationPreview markdown={currentContent} />
-                              </div>
-                            ) : relationViewMode === "preview" && isRoleTableFile ? (
-                              <div className="flex-1 min-h-0">
-                                <RoleTablePreview markdown={currentContent} />
-                              </div>
-                            ) : (
-                              <MainEditor
-                                ref={markdownEditorRef}
-                                key={fileKey}
-                                className="editor-outer-scroll-mode"
-                                fontClassName="font-KaiTi"
-                                value={currentContent}
-                                onChange={(markdown) => setServerDataFile(fileKey, markdown)}
-                                placeholder={EDITOR_PLACEHOLDER}
-                                readonly={!isEditorEditable}
-                                btns={["edit", "expand", "add", "note"]}
-                                onSelectionAdd={handleEditorSelectionAdd}
-                                onSelectionNote={handleEditorSelectionNote}
-                                needSelectionToolbar
-                              />
-                            )}
+                            <MainEditor
+                              ref={markdownEditorRef}
+                              key={fileKey}
+                              className="editor-outer-scroll-mode"
+                              fontClassName="font-KaiTi"
+                              value={currentContent}
+                              onChange={(markdown) => setServerDataFile(fileKey, markdown)}
+                              placeholder={EDITOR_PLACEHOLDER}
+                              readonly={!isEditorEditable}
+                              btns={["edit", "expand", "add", "note"]}
+                              onSelectionAdd={handleEditorSelectionAdd}
+                              onSelectionNote={handleEditorSelectionNote}
+                              needSelectionToolbar
+                            />
                           </div>
                         </div>
                         <StepWorkflow
@@ -2003,15 +1959,14 @@ const MarkdownEditorPage = () => {
                       </div>
                     </div>
                     {!isEditorEditable && (
-                      <div
-                        className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"
-                      />
+                      <div className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
                     )}
                   </div>
                 </div>
                 {shouldShowRemarkOverlay && (
                   <div className="pointer-events-none absolute bottom-3 left-2 z-40">
-                    <div className="pointer-events-auto flex w-fit items-center gap-2 rounded-md bg-[rgba(255,255,255,0.92)] px-2 py-1 shadow-sm">
+                    <div
+                      className="pointer-events-auto flex w-fit items-center gap-2 rounded-md bg-[rgba(255,255,255,0.92)] px-2 py-1 shadow-sm">
                       <Button
                         type="button"
                         size="sm"
@@ -2178,36 +2133,38 @@ const MarkdownEditorPage = () => {
                                 : "rounded-lg px-3 py-2 max-w-[85%] bg-primary text-primary-foreground"
                             )}
                           >
-                          {hasCustomMessage ? (
-                            <AgentCustomMessageRenderer
-                              customMessage={msg.customMessage!}
-                              activeTab="chat"
-                              isLastMessage={options?.isLastMessage ?? false}
-                              streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
-                              currentMessageId={msg.id}
-                              streamingMessageId={streamingMessageIdRef.current}
-                              onFileNameClick={(_fileName: string) => {
-                                // TODO: 与编辑器联动定位到文件
-                              }}
-                              onHiltReject={async (rejectedMsg) => {
-                                const sessionId = chatCurrentSession?.id ?? "";
-                                if (!sessionId || !workId) return;
-                                updateLastChatMessage((prev) => {
-                                  const custom = prev.customMessage ?? [];
-                                  return {
-                                    ...prev,
-                                    customMessage: custom.map((item) =>
-                                      item.id === rejectedMsg.id ? { ...item, hiltStatus: "rejected" as const } : item
-                                    ),
-                                  };
-                                });
-                                try {
-                                  const res = await generateGuideReq(sessionId, Number(workId)) as { guides?: string[] | string } | undefined;
-                                  const raw = res?.guides;
-                                  const guides = Array.isArray(raw)
-                                    ? raw
-                                    : typeof raw === "string"
-                                      ? (() => {
+                            {hasCustomMessage ? (
+                              <AgentCustomMessageRenderer
+                                customMessage={msg.customMessage!}
+                                activeTab="chat"
+                                isLastMessage={options?.isLastMessage ?? false}
+                                streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
+                                currentMessageId={msg.id}
+                                streamingMessageId={streamingMessageIdRef.current}
+                                onFileNameClick={(_fileName: string) => {
+                                  // TODO: 与编辑器联动定位到文件
+                                }}
+                                onHiltReject={async (rejectedMsg) => {
+                                  const sessionId = chatCurrentSession?.id ?? "";
+                                  if (!sessionId || !workId) return;
+                                  updateLastChatMessage((prev) => {
+                                    const custom = prev.customMessage ?? [];
+                                    return {
+                                      ...prev,
+                                      customMessage: custom.map((item) =>
+                                        item.id === rejectedMsg.id ? { ...item, hiltStatus: "rejected" as const } : item
+                                      ),
+                                    };
+                                  });
+                                  try {
+                                    const res = await generateGuideReq(sessionId, Number(workId)) as {
+                                      guides?: string[] | string
+                                    } | undefined;
+                                    const raw = res?.guides;
+                                    const guides = Array.isArray(raw)
+                                      ? raw
+                                      : typeof raw === "string"
+                                        ? (() => {
                                           try {
                                             const parsed = JSON.parse(raw) as string[] | unknown;
                                             return Array.isArray(parsed) ? parsed : [];
@@ -2215,71 +2172,73 @@ const MarkdownEditorPage = () => {
                                             return [];
                                           }
                                         })()
-                                      : [];
-                                  if (guides.length > 0) {
-                                    updateLastChatMessage((prev) => {
-                                      const custom = prev.customMessage ?? [];
-                                      return {
-                                        ...prev,
-                                        customMessage: custom.map((item) =>
-                                          item.id === rejectedMsg.id ? { ...item, suggestions: guides } : item
-                                        ),
-                                      };
-                                    });
+                                        : [];
+                                    if (guides.length > 0) {
+                                      updateLastChatMessage((prev) => {
+                                        const custom = prev.customMessage ?? [];
+                                        return {
+                                          ...prev,
+                                          customMessage: custom.map((item) =>
+                                            item.id === rejectedMsg.id ? { ...item, suggestions: guides } : item
+                                          ),
+                                        };
+                                      });
+                                    }
+                                  } catch (_) {
+                                    // 联想提示词失败静默忽略
                                   }
-                                } catch (_) {
-                                  // 联想提示词失败静默忽略
-                                }
-                              }}
-                              onHiltApprove={(approvedMsg) => {
-                                updateLastChatMessage((prev) => {
-                                  const custom = prev.customMessage ?? [];
-                                  return {
-                                    ...prev,
-                                    customMessage: custom.map((item) =>
-                                      item.id === approvedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
-                                    ),
-                                  };
-                                });
-                                sendChatText("", { command: "approve", addUserMessage: false });
-                              }}
-                              onSendMessage={(text, reload = false) => {
-                                sendChatText(text, { reload, addUserMessage: !reload });
-                              }}
-                            />
-                          ) : (
-                            <>
-                              {hasFilesOrSelected && (
-                                <div className="message-with-files space-y-1">
-                                  {hasSelectedTexts && (
-                                    <SelectedTextDisplay
-                                      texts={msg.selectedTexts!}
-                                    />
-                                  )}
-                                  {hasFiles && (
-                                    <FileMessageDisplay
-                                      files={msg.files as FileItemType[]}
-                                      onFileClick={handleMessageFileClick}
-                                    />
-                                  )}
-                                  <div className="message-content-wrapper text-right">
+                                }}
+                                onHiltApprove={(approvedMsg) => {
+                                  updateLastChatMessage((prev) => {
+                                    const custom = prev.customMessage ?? [];
+                                    return {
+                                      ...prev,
+                                      customMessage: custom.map((item) =>
+                                        item.id === approvedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
+                                      ),
+                                    };
+                                  });
+                                  sendChatText("", { command: "approve", addUserMessage: false });
+                                }}
+                                onSendMessage={(text, reload = false) => {
+                                  sendChatText(text, { reload, addUserMessage: !reload });
+                                }}
+                              />
+                            ) : (
+                              <>
+                                {hasFilesOrSelected && (
+                                  <div className="message-with-files space-y-1">
+                                    {hasSelectedTexts && (
+                                      <SelectedTextDisplay
+                                        texts={msg.selectedTexts!}
+                                      />
+                                    )}
+                                    {hasFiles && (
+                                      <FileMessageDisplay
+                                        files={msg.files as FileItemType[]}
+                                        onFileClick={handleMessageFileClick}
+                                      />
+                                    )}
+                                    <div className="message-content-wrapper text-right">
+                                      <MarkdownRenderer
+                                        content={msg.content || ""}
+                                        onFileNameClick={() => {
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                {!hasFilesOrSelected && (
+                                  <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
                                     <MarkdownRenderer
                                       content={msg.content || ""}
-                                      onFileNameClick={() => {}}
+                                      onFileNameClick={() => {
+                                      }}
                                     />
                                   </div>
-                                </div>
-                              )}
-                              {!hasFilesOrSelected && (
-                                <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
-                                  <MarkdownRenderer
-                                    content={msg.content || ""}
-                                    onFileNameClick={() => {}}
-                                  />
-                                </div>
-                              )}
-                            </>
-                          )}
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -2291,7 +2250,7 @@ const MarkdownEditorPage = () => {
                     ),
                   }}
                 >
-                  <ProChatPanel />
+                  <ProChatPanel/>
                 </ProChatContainer>
                 <AssociationSelectorDialog
                   open={showAssociationSelector}
@@ -2338,7 +2297,8 @@ const MarkdownEditorPage = () => {
             </div>
             {searchText.trim() && searchMatches.length > 0 && (
               <div className="w-full min-w-0 rounded-md border border-(--el-border-color-lighter) overflow-hidden">
-                <div className="px-3 py-2 text-xs text-(--text-secondary) bg-(--bg-secondary) border-b border-(--el-border-color-lighter)">
+                <div
+                  className="px-3 py-2 text-xs text-(--text-secondary) bg-(--bg-secondary) border-b border-(--el-border-color-lighter)">
                   找到 {searchMatches.length} 个匹配项
                 </div>
                 <div className="max-h-[200px] overflow-y-auto overflow-x-hidden">
@@ -2359,8 +2319,9 @@ const MarkdownEditorPage = () => {
               </div>
             )}
             {searchText.trim() && searchMatches.length === 0 && (
-              <div className="w-full flex items-center align-middle justify-center gap-2 min-w-0 rounded-md px-3 py-4 text-xs text-center text-muted-foreground">
-                <CircleAlert size={12} strokeWidth={1.25} />
+              <div
+                className="w-full flex items-center align-middle justify-center gap-2 min-w-0 rounded-md px-3 py-4 text-xs text-center text-muted-foreground">
+                <CircleAlert size={12} strokeWidth={1.25}/>
                 <span className="text-xs text-muted-foreground">未找到匹配的内容</span>
               </div>
             )}
