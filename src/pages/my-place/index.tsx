@@ -215,7 +215,8 @@ export default function MyPlacePage() {
     ]
   )
 
-  const onSubmitCreationCallbackRef = useRef<(text: string) => void>(() => {})
+  const onSubmitCreationCallbackRef = useRef<(text: string) => void>(() => {
+  })
   useEffect(() => {
     onSubmitCreationCallbackRef.current = (text: string) => {
       requireLogin(async () => {
@@ -231,14 +232,15 @@ export default function MyPlacePage() {
     }, 2000, { leading: true, trailing: false })
   ).current
 
-  const handleJumpCallbackRef = useRef<(data: MyWorkData) => Promise<void>>(async () => {})
+  const handleJumpCallbackRef = useRef<(data: MyWorkData) => Promise<void>>(async () => {
+  })
   useEffect(() => {
     handleJumpCallbackRef.current = async (data: MyWorkData) => {
       if (!data.id) {
         toast.error('作品ID不存在，无法跳转')
         return
       }
-      if (data.workType != 'editor'){
+      if (data.workType != 'editor') {
         toast.error('敬请期待！')
         return
       }
@@ -493,8 +495,10 @@ export default function MyPlacePage() {
                 </div>
                 {isBatchDelete ? (
                   <div className="flex gap-2">
-                    <Button className='h-7 leading-7 text-sm! font-normal' variant="outline"
-                            onClick={cancelBatchDelete}>
+                    <Button
+                      className='h-7 leading-7 text-sm! font-normal' variant="outline"
+                      onClick={cancelBatchDelete}
+                    >
                       退出
                     </Button>
                     <Button className='h-7 leading-7 text-sm! font-normal' onClick={doBatchDelete}>批量删除</Button>
