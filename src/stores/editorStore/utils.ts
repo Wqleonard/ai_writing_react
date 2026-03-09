@@ -24,12 +24,14 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
   const nodeMap = new Map<string, FileTreeNode>();
   const rootChildren: FileTreeNode[] = [];
   const keys = Object.keys(serverData);
+  const attachedNodePaths = new Set<string>();
 
   for (const key of keys) {
     if (!key.endsWith("/") && !HAS_EXT.test(key)) continue;
     const pathParts = key.split("/").filter((p) => p !== "");
     const isDir = key.endsWith("/");
     const nodePath = pathParts.join("/");
+    if (!nodePath || nodeMap.has(nodePath)) continue;
     const label = isDir
       ? pathParts[pathParts.length - 1]
       : pathParts[pathParts.length - 1].replace(/\.[^.]+$/, "") || pathParts[pathParts.length - 1];
@@ -52,12 +54,16 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
     if (!key.endsWith("/") && !HAS_EXT.test(key)) continue;
     const pathParts = key.split("/").filter((p) => p !== "");
     const nodePath = pathParts.join("/");
+    if (!nodePath || attachedNodePaths.has(nodePath)) continue;
     const node = nodeMap.get(nodePath);
     if (!node) continue;
+    attachedNodePaths.add(nodePath);
 
     const parentPath = pathParts.slice(0, -1).join("/");
     if (parentPath === "") {
-      rootChildren.push(node);
+      if (!rootChildren.some((c) => c.id === node.id)) {
+        rootChildren.push(node);
+      }
     } else {
       let parent = nodeMap.get(parentPath);
       if (!parent) {
@@ -74,11 +80,19 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
         };
         nodeMap.set(parentPath, parent);
         const grandParentPath = parts.slice(0, -1).join("/");
-        if (grandParentPath === "") rootChildren.push(parent);
-        else {
+        if (grandParentPath === "") {
+          if (!rootChildren.some((c) => c.id === parent!.id)) {
+            rootChildren.push(parent);
+          }
+        } else {
           const grandParent = nodeMap.get(grandParentPath);
-          if (grandParent) grandParent.children.push(parent);
-          else rootChildren.push(parent);
+          if (grandParent) {
+            if (!grandParent.children.some((c) => c.id === parent!.id)) {
+              grandParent.children.push(parent);
+            }
+          } else if (!rootChildren.some((c) => c.id === parent!.id)) {
+            rootChildren.push(parent);
+          }
         }
       }
       if (!parent.children.some((c) => c.id === node.id)) {
