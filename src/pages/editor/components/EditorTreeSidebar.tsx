@@ -986,12 +986,9 @@ export const EditorTreeSidebar = ({
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>重命名</DialogTitle>
+            <DialogTitle>重命名{renameTarget?.isDirectory ? "文件夹" : "文件"}</DialogTitle>
           </DialogHeader>
           <div className="rename-dialog-content">
-            <p className="dialog-label mb-3 text-sm text-foreground">
-              重命名 {renameTarget?.isDirectory ? "文件夹" : "文件"}：
-            </p>
             <Input
               // className="w-full outline-none focus:border-none rounded border border-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
               value={renameValue}
@@ -1015,17 +1012,13 @@ export const EditorTreeSidebar = ({
           <DialogFooter className="flex flex-row justify-end gap-2">
             <Button
               variant="outline"
-              className="cursor-pointer rounded px-4 py-2 text-sm hover:bg-muted"
               onClick={() => setRenameOpen(false)}
             >
               取消
             </Button>
             <Button
               disabled={!renameValue.trim()}
-              className={clsx(
-                "cursor-pointer rounded px-4 py-2 text-sm text-white bg-[var(--theme-color)] hover:bg-[var(--theme-color-hover)]",
-                !renameValue.trim() && "cursor-not-allowed opacity-50"
-              )}
+              variant="default"
               onClick={() => renameValue.trim() && confirmRename()}
             >
               确定
@@ -1057,22 +1050,22 @@ export const EditorTreeSidebar = ({
             </div>
           </div>
           <DialogFooter className="flex flex-row justify-end gap-2">
-            <div
-              role="button"
+            <Button
+              variant="outline"
               tabIndex={0}
               className="cursor-pointer rounded px-4 py-2 text-sm hover:bg-muted"
               onClick={() => setDeleteOpen(false)}
             >
               取消
-            </div>
-            <div
-              role="button"
+            </Button>
+            <Button
+              variant='destructive'
               tabIndex={0}
               className="cursor-pointer rounded px-4 py-2 text-sm text-white bg-destructive hover:opacity-90"
               onClick={confirmDelete}
             >
               确定删除
-            </div>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
