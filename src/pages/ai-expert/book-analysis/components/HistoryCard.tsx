@@ -1,5 +1,8 @@
 import dayjs from 'dayjs'
 import type { HistoryItem } from '../types'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
 
 export interface HistoryCardProps {
   data: HistoryItem
@@ -25,7 +28,7 @@ export const HistoryCard = ({ data, onClick }: HistoryCardProps) => {
         {data.description || '暂无内容'}
       </div>
       <div className="mt-3 text-xs text-[#dedede]">
-        创建时间:{dayjs(data.updatedAt).format('YYYY-MM-DD HH:mm:ss')}
+        创建时间:{dayjs.utc(data.updatedAt).local().format('YYYY-MM-DD HH:mm:ss')}
       </div>
     </div>
   )

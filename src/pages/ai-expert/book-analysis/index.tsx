@@ -55,6 +55,7 @@ const BookAnalysisPage = () => {
   const historyInitializedRef = useRef(false)
   const historyIdRef = useRef('')
   const markdownContentRef = useRef('')
+  const isPostStreamRef = useRef(false)
 
   useEffect(() => {
     historyIdRef.current = historyId
@@ -63,6 +64,33 @@ const BookAnalysisPage = () => {
   useEffect(() => {
     markdownContentRef.current = markdownContent
   }, [markdownContent])
+
+  useEffect(() => {
+    isPostStreamRef.current = isPostStream
+  }, [isPostStream])
+
+  const saveHistorySnapshot = useCallback(async () => {
+    const currentHistoryId = historyIdRef.current
+    const latestMarkdownContent = markdownContentRef.current
+    if (!currentHistoryId || !latestMarkdownContent) return
+    try {
+      await updateBookAnalysisHistory(latestMarkdownContent, currentHistoryId)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    const saveWhenLeaving = () => {
+      if (!isPostStreamRef.current) return
+      void saveHistorySnapshot()
+    }
+    window.addEventListener('beforeunload', saveWhenLeaving)
+    return () => {
+      window.removeEventListener('beforeunload', saveWhenLeaving)
+      saveWhenLeaving()
+    }
+  }, [saveHistorySnapshot])
 
   const handleFileChange = useCallback(() => {
     setMarkdownContent('')
@@ -103,16 +131,7 @@ const BookAnalysisPage = () => {
 
   const onStreamEnd = useCallback(async () => {
     setIsPostStream(false)
-    const currentHistoryId = historyIdRef.current
-    const latestMarkdownContent = markdownContentRef.current
-    console.log('historyId', currentHistoryId)
-    if (currentHistoryId) {
-      try {
-        await updateBookAnalysisHistory(latestMarkdownContent, currentHistoryId)
-      } catch {
-        // ignore
-      }
-    }
+    await saveHistorySnapshot()
     const list = await getBookAnalysisHistoryList()
     if (Array.isArray(list)) {
       setHistoryList(
@@ -125,7 +144,7 @@ const BookAnalysisPage = () => {
         }))
       )
     }
-  }, [])
+  }, [saveHistorySnapshot])
 
   const loadMoreTemplates = useCallback(async () => {
     if (templateLoading || !templateHasMore) return
@@ -296,7 +315,7 @@ const BookAnalysisPage = () => {
           message: '仿照文件中作品信息，做出微创新，创作一篇短篇小说',
         })
       )
-      navigate(`/workspace/editor/${req.id}`, { state: { isNew: false } })
+      navigate(`/editor/${req.id}`, { state: { isNew: false } })
     } catch {
       toast.error('创建作品失败，请重试')
     } finally {
@@ -397,7 +416,7 @@ const BookAnalysisPage = () => {
               value={uploadedFile}
               onChange={setUploadedFile}
               onChangeFile={handleFileChange}
-              accept={['.txt', '.doc', '.docx']}
+              accept={['.txt', '.pdf']}
               sizeLimit={SIZE_LIMIT}
             />
             <Button
