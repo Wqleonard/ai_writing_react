@@ -14,6 +14,7 @@ import {
   type EditorChangeItem,
 } from "./components";
 import { ProChatContainer, ProChatPanel } from "@/components/ProChatContainer";
+import { emitCreationInputSubmit } from "@/services/chatSubmitBridge";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { FileMessageDisplay } from "@/components/FileMessageDisplay";
 import { SelectedTextDisplay } from "@/components/SelectedTextDisplay";
@@ -887,12 +888,12 @@ const MarkdownEditorPage = () => {
       isShowAnswerTip: initialParams.isShowAnswerTip,
     });
     if (initialParams.message?.trim()) {
-      setPendingInitialMessage(initialParams.message.trim());
-      if (typeof initialParams.autoSubmitInitialMessage === "boolean") {
-        setShouldAutoSubmitInitialMessage(initialParams.autoSubmitInitialMessage);
-      } else {
-        setShouldAutoSubmitInitialMessage(true);
-      }
+      const msg = initialParams.message.trim();
+      setPendingInitialMessage(msg);
+      // 通过桥接触发 QuillChatInput 的提交逻辑（兼容“仅回答”场景）
+      emitCreationInputSubmit(msg);
+      // 避免与 ProChatContainer 的自动提交重复触发
+      setShouldAutoSubmitInitialMessage(false);
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }

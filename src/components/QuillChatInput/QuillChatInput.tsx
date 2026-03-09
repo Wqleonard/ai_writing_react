@@ -88,9 +88,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     selectedFiles,
     selectedTexts,
     isShowAnswerTip,
-    isShowWritingStyleTip,
     setShowAnswerTip,
-    setShowWritingStyleTip,
     addFile,
     addNote,
     removeNote,
@@ -121,6 +119,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
+  const [writingStyleTipOpen, setWritingStyleTipOpen] = useState(false)
 
   const openToolPopover = useCallback(() => setToolPopoverOpen(true), [])
   const openFilePopover = useCallback(() => setFilePopoverOpen(true), [])
@@ -156,21 +155,15 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     if (lastWritingStylePopoverRequestRef.current === writingStylePopoverRequest) return
     lastWritingStylePopoverRequestRef.current = writingStylePopoverRequest
 
-    // 对齐 Vue：只展示提示气泡，不自动展开下拉
-    if (isAnswerOnly) setShowAnswerTip(true)
-
     if (requestedWritingStyleId) {
       setSelectedWritingStyle(String(requestedWritingStyleId))
     }
-    setShowWritingStyleTip(true)
     clearWritingStylePopoverRequest()
   }, [
     writingStylePopoverRequest,
     requestedWritingStyleId,
     clearWritingStylePopoverRequest,
     isAnswerOnly,
-    setShowAnswerTip,
-    setShowWritingStyleTip,
     setSelectedWritingStyle,
   ])
 
@@ -271,11 +264,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   }, [isShowAnswerTip, setShowAnswerTip])
 
   useEffect(() => {
-    if (!isShowWritingStyleTip) return
-    const close = () => setShowWritingStyleTip(false)
+    if (!writingStyleTipOpen) return
+    const close = () => setWritingStyleTipOpen(false)
     document.addEventListener("click", close)
     return () => document.removeEventListener("click", close)
-  }, [isShowWritingStyleTip, setShowWritingStyleTip])
+  }, [writingStyleTipOpen])
 
   const handleSubmitClick = useCallback(() => {
     if (disabled) return
@@ -505,7 +498,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
           {/* 文风选择器 - 参照 Vue WritingStylePopup */}
           {!hideAssistUI && (
             <div className="answer-only-wrap relative">
-              {isShowWritingStyleTip && (
+              {writingStyleTipOpen && (
                 <div className="answer-tip-box">
                   <div className="answer-tip-content">
                     <div className="answer-tip-line1">保存的文风在这</div>
@@ -1232,9 +1225,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
             })
             setWritingStyles(list)
             if (list.length > 0) setSelectedWritingStyle(list[list.length - 1].id)
-            setShowWritingStyleTip(true)
+            setWritingStyleTipOpen(true)
           } catch {
             // ignore
+            console.log('文风提炼 onAdd error')
           }
         }}
       />

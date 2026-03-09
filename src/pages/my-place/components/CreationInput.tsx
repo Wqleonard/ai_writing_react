@@ -200,8 +200,6 @@ export const CreationInput = (props: CreationInputProps) => {
     addNote,
     clearSelectedNotes,
     clearSelectedFiles,
-    isShowWritingStyleTip,
-    setShowWritingStyleTip,
     writingStylePopoverRequest,
     requestedWritingStyleId,
     clearWritingStylePopoverRequest,
@@ -210,6 +208,8 @@ export const CreationInput = (props: CreationInputProps) => {
     removeFile,
     removeSelectedText,
   } = useChatInputStore()
+
+  const [writingStyleTipOpen, setWritingStyleTipOpen] = useState(false)
 
   const lastWritingStylePopoverRequestRef = useRef<number>(0)
 
@@ -225,7 +225,6 @@ export const CreationInput = (props: CreationInputProps) => {
     if (requestedWritingStyleId) {
       setSelectedWritingStyle(String(requestedWritingStyleId))
     }
-    setShowWritingStyleTip(true)
     void (async () => {
       try {
         const res = await getWritingStylesListReq()
@@ -251,6 +250,11 @@ export const CreationInput = (props: CreationInputProps) => {
         clearWritingStylePopoverRequest()
       }
     })()
+    setWritingStyleTipOpen(true)
+
+    return () => {
+      setWritingStyleTipOpen(false)
+    }
   }, [
     writingStylePopoverRequest,
     requestedWritingStyleId,
@@ -260,8 +264,14 @@ export const CreationInput = (props: CreationInputProps) => {
     setSelectedWritingStyle,
     selectedWritingStyle,
     setWritingStyles,
-    setShowWritingStyleTip,
   ])
+
+  useEffect(() => {
+    if (!writingStyleTipOpen) return
+    const close = () => setWritingStyleTipOpen(false)
+    document.addEventListener("click", close)
+    return () => document.removeEventListener("click", close)
+  }, [writingStyleTipOpen])
 
   const writingStyleOptions =
     writingStyles.length > 0 ? writingStyles : [{ id: selectedWritingStyle, name: '默认' }]
@@ -461,13 +471,6 @@ export const CreationInput = (props: CreationInputProps) => {
       // ignore
     }
   }, [selectedWritingStyle, setSelectedWritingStyle, setWritingStyles])
-
-  useEffect(() => {
-    if (!isShowWritingStyleTip) return
-    const close = () => setShowWritingStyleTip(false)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [isShowWritingStyleTip, setShowWritingStyleTip])
 
   return (
     <div
@@ -947,7 +950,7 @@ export const CreationInput = (props: CreationInputProps) => {
             <div className="control-right flex h-full items-center gap-3">
               {/* 文风选择器 */}
               <div className="answer-only-wrap relative quill-chat-input" style={{ width: 'auto' }}>
-                {isShowWritingStyleTip && (
+                {writingStyleTipOpen && (
                   <div className="answer-tip-box">
                     <div className="answer-tip-content">
                       <div className="answer-tip-line1">保存的文风在这</div>
