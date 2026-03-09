@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useState, useMemo, type RefObject } fro
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
-import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MarkdownEditor";
+import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
 import IconFont from "@/components/IconFont/Iconfont";
@@ -1976,7 +1976,7 @@ const MarkdownEditorPage = () => {
                                 <RoleTablePreview markdown={currentContent} />
                               </div>
                             ) : (
-                              <MarkdownEditor
+                              <MainEditor
                                 ref={markdownEditorRef}
                                 key={fileKey}
                                 className="editor-outer-scroll-mode"

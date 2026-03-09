@@ -357,8 +357,8 @@ export const ChapterGenerateDialog = ({
             </ScrollArea>
           ) : (
             <div className="mt-2 px-5 flex flex-col gap-1 h-full">
-              <AutoScrollArea className={clsx('flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3', markdownEditing && 'outline-2 outline-(--theme-color)')} autoScroll>
-                <MarkdownEditor value={markdownContent} onChange={v => setMarkdownContent(v)} readonly={!markdownEditing} loading={showIndicator} placeholder="请等待输出..." />
+              <AutoScrollArea className={clsx('flex-1 min-h-0 rounded-lg bg-[#f6f6f6]', markdownEditing && 'outline-2 outline-(--theme-color)')} autoScroll>
+                <MarkdownEditor value={markdownContent} onChange={setMarkdownContent} readonly={!markdownEditing} loading={showIndicator} placeholder="请等待输出..." />
               </AutoScrollArea>
               <div className="mt-2 flex justify-center gap-4">
                 <LinkButton type="button" disabled={streaming} onClick={handleFresh} className="text-[#909399] text-sm">
