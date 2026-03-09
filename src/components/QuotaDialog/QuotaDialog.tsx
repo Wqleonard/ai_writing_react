@@ -469,24 +469,30 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
                     邀请记录
                   </span>
                 </div>
-                <div className="flex items-center justify-center mb-5 h-[122px] w-full rounded-[20px] border border-transparent bg-linear-to-b from-[#fff8e5] to-white bg-clip-padding relative">
-                  <div className="absolute inset-0 rounded-[20px] p-px bg-linear-to-r from-[#efaf00] to-[#ff9500] mask-exclude [mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)]" />
-                  <div className="flex-1 flex flex-col items-center text-center">
-                    <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
-                      {bonusPoints}
+                <div className="mb-5 h-[122px] w-full rounded-[20px] bg-linear-to-r from-[#efaf00] to-[#ff9500] p-px">
+                  <div className="flex h-full w-full items-center justify-center rounded-[19px] bg-linear-to-b from-[#fff8e5] to-white">
+                    <div className="flex flex-1 flex-col items-center text-center">
+                      <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
+                        {bonusPoints}
+                      </div>
+                      <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
+                        （累计获赠积分）
+                      </div>
                     </div>
-                    <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
-                      （累计获赠积分）
-                    </div>
-                  </div>
-                  <img src={separateYellowIcon} alt="" className="w-px h-12 shrink-0" aria-hidden />
-                  <div className="flex-1 flex flex-col items-center text-center">
-                    <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
-                      {inviteeCount}
-                      <span className="text-[15px]">人</span>
-                    </div>
-                    <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
-                      （邀请人数）
+                    <img
+                      src={separateYellowIcon}
+                      alt=""
+                      className="h-12 w-px shrink-0"
+                      aria-hidden
+                    />
+                    <div className="flex flex-1 flex-col items-center text-center">
+                      <div className="text-2xl font-normal text-[#464646] leading-[1.32]">
+                        {inviteeCount}
+                        <span className="text-[15px]">人</span>
+                      </div>
+                      <div className="text-[13px] text-[#999] mt-[11px] leading-[1.32]">
+                        （邀请人数）
+                      </div>
                     </div>
                   </div>
                 </div>
