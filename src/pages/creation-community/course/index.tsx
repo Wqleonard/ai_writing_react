@@ -3,6 +3,7 @@ import { getCourses, likeCourse } from '@/api/community'
 import { useNavigation } from '@/hooks/useNavigation'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/ScrollArea'
+import { Empty } from '@/components/ui/Empty'
 import { CourseCard } from './components/CourseCard'
 import type { CourseData } from './types'
 import { useLoginStore } from "@/stores/loginStore";
@@ -202,8 +203,8 @@ const CoursePage = () => {
       >
         <ScrollArea className="h-full w-full">
         {showEmpty ? (
-          <div className="flex w-full flex-col items-center justify-center py-12 text-gray-500">
-            <p className="text-sm">暂无课程数据</p>
+          <div className="flex w-full flex-col items-center justify-center py-12">
+            <Empty description="暂无课程数据" />
           </div>
         ) : (
           <div className="w-full">

@@ -326,7 +326,7 @@ export const NotesSelectorDialog = ({
           ) : (
             <div>
               <ScrollArea className="h-[480px]">
-                <div className="space-y-3 px-6">
+                <div className="py-3 px-6 flex flex-col gap-3">
                   {isLoadingNotes && notesList.length === 0 ? (
                     <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
                       <span>加载中...</span>

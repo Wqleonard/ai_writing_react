@@ -1988,6 +1988,7 @@ const MarkdownEditorPage = () => {
                                 btns={["edit", "expand", "add", "note"]}
                                 onSelectionAdd={handleEditorSelectionAdd}
                                 onSelectionNote={handleEditorSelectionNote}
+                                needSelectionToolbar
                               />
                             )}
                           </div>

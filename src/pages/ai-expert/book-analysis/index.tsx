@@ -29,10 +29,10 @@ import { Button } from '@/components/ui/Button'
 import { HistoryCard } from './components/HistoryCard'
 import { TemplateCard } from './components/TemplateCard'
 import type { TemplateCardData, HistoryItem } from './types'
-import EMPTY_IMG from '@/assets/images/empty.webp'
 import { Iconfont } from "@/components/IconFont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import Empty from '@/components/ui/Empty'
 
 const SIZE_LIMIT = 8 * 1024 * 1024 // 8MB
 const TEMPLATE_PAGE_SIZE = 20
@@ -470,9 +470,7 @@ const BookAnalysisPage = () => {
                       ))}
                     </div>
                   ) : !templateLoading ? (
-                    <div className="py-8 text-center text-gray-500">
-                      暂无热门模板
-                    </div>
+                    <Empty description="暂无热门仿写模板" />
                   ) : null}
                   {templateLoading ? (
                     <div className="py-4 text-center text-secondary">
@@ -494,8 +492,7 @@ const BookAnalysisPage = () => {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                      <img src={EMPTY_IMG} alt="" className="h-30 w-30 object-contain" />
-                      <p className="text-sm">暂无历史记录</p>
+                      <Empty description="暂无历史记录" />
                     </div>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 import {
   Dialog,
-  DialogContent,
+  DialogContent, DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/Dialog'
@@ -21,36 +21,38 @@ export const MessageDetailDialog = ({
 }: MessageDetailDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton className="message-detail-dialog max-w-lg">
+      <DialogContent showCloseButton className="w-200">
         <DialogHeader>
           <DialogTitle>{message?.title || '消息详情'}</DialogTitle>
         </DialogHeader>
-        {message ? (
-          <div className="message-detail-content">
-            <div className="border-b border-gray-200 pb-2">
-              {message.timestamp ? (
-                <span className="text-sm text-gray-500">{message.timestamp}</span>
-              ) : null}
-            </div>
-            <ScrollArea className="max-h-[500px]">
-              <div className="min-h-[100px] py-2">
-                {message.content?.trim() ? (
-                  <div
-                    className="message-content-text whitespace-pre-wrap text-sm"
-                    dangerouslySetInnerHTML={{ __html: message.content }}
-                  />
-                ) : (
-                  <div className="text-gray-500">暂无内容</div>
-                )}
+        <div className="h-120">
+          {message ? (
+            <div className="message-detail-content">
+              <div className="border-b border-gray-200 pb-2">
+                {message.timestamp ? (
+                  <span className="text-sm text-gray-500">{message.timestamp}</span>
+                ) : null}
               </div>
-            </ScrollArea>
-            <div className="mt-4 flex justify-end">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                关闭
-              </Button>
+              <ScrollArea className="max-h-[500px]">
+                <div className="min-h-[100px] py-2">
+                  {message.content?.trim() ? (
+                    <div
+                      className="message-content-text whitespace-pre-wrap text-sm"
+                      dangerouslySetInnerHTML={{ __html: message.content }}
+                    />
+                  ) : (
+                    <div className="text-gray-500">暂无内容</div>
+                  )}
+                </div>
+              </ScrollArea>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+        <DialogFooter className="flex-row justify-end">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            关闭
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

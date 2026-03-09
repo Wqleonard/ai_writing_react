@@ -26,6 +26,7 @@ import { useLoginStore } from '@/stores/loginStore'
 import { openAddNewPromptsDialog } from '@/components/Community/AddNewPromptsDialog'
 import { Iconfont } from '@/components/IconFont'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import Empty from '@/components/ui/Empty'
 
 const PAGE_SIZE = 12
 const USE_PROMPT_DEBOUNCE_MS = 500
@@ -285,9 +286,8 @@ export const PromptsArea = ({
       <div ref={scrollRef} className="page-content-scroll flex min-h-0 flex-1 w-full">
         <ScrollArea className="h-full w-full">
           {showEmpty ? (
-            <div className="flex min-h-[500px] flex-col items-center justify-center py-16 text-gray-500">
-              <img src={EMPTY} alt="" className="w-40 h-43 object-center" />
-              <div className="mt-5 text-sm">{emptyLabel}</div>
+            <div className="flex min-h-[500px] flex-col items-center justify-center py-16">
+              <Empty description={emptyLabel} />
             </div>
           ) : (
             <div className="page-content mx-auto grid w-265 grid-cols-3 gap-5 pb-6">

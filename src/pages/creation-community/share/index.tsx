@@ -24,6 +24,7 @@ import { MyShareCard } from './components/MyShareCard'
 import type { ShareData } from './types'
 import { useLoginStore } from "@/stores/loginStore";
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import Empty from "@/components/ui/Empty.tsx";
 
 const transformShareData = (item: {
   id: number
@@ -329,7 +330,7 @@ const SharePage = () => {
             <ScrollArea className="h-full w-full">
               {!myShareLoading && myShares.length === 0 ? (
                 <div className="mt-[130px] flex w-full flex-col items-center justify-center text-gray-500">
-                  <p className="text-sm">暂无分享数据</p>
+                  <Empty description="暂无分享数据"/>
                 </div>
               ) : (
                 <div className="w-full px-4">
