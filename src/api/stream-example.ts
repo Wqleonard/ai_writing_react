@@ -1,5 +1,5 @@
 import apiClient, {
-  WRITE_SREAM_URL,
+  WRITE_STREAM_URL,
   type PostStreamData,
 } from "./index";
 
@@ -18,7 +18,7 @@ interface WritingRequest {
 export async function streamWritingWithAxios(request: WritingRequest) {
   let fullContent = "";
   await apiClient.postStream(
-    WRITE_SREAM_URL,
+    WRITE_STREAM_URL,
     request,
     (chunk: any) => {
       fullContent += chunk?.data?.content ?? "";
@@ -37,7 +37,7 @@ export async function streamWritingWithAxios(request: WritingRequest) {
 export function streamWritingWithSSE(request: WritingRequest) {
   let fullContent = "";
   const eventSource = apiClient.postStreamSSE<StreamChunk>(
-    WRITE_SREAM_URL,
+    WRITE_STREAM_URL,
     request,
     (chunk) => {
       fullContent += chunk?.content ?? "";
@@ -56,7 +56,7 @@ export function streamWritingWithSSE(request: WritingRequest) {
 export function streamWritingWithXHR(request: WritingRequest) {
   let fullContent = "";
   const xhr = apiClient.postStreamXHR<StreamChunk>(
-    WRITE_SREAM_URL,
+    WRITE_STREAM_URL,
     request,
     (chunk) => {
       fullContent += chunk?.content ?? "";

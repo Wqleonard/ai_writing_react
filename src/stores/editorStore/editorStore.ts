@@ -213,7 +213,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       }
     } catch (e) {
       console.error("[editorStore] initEditorData failed:", e);
-      toast.error("加载作品失败");
+      // toast.error("加载作品失败");
     }
   },
 
