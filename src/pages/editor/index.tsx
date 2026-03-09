@@ -830,6 +830,7 @@ const MarkdownEditorPage = () => {
 
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
+  const resetEditorStoreTimerRef = useRef<number | null>(null);
 
   // 标题（当前文件名）编辑：与 Vue startEditingLabel / saveLabelEdit / cancelLabelEdit 对齐
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -846,8 +847,15 @@ const MarkdownEditorPage = () => {
 
   // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
   useEffect(() => {
+    if (resetEditorStoreTimerRef.current != null) {
+      window.clearTimeout(resetEditorStoreTimerRef.current);
+      resetEditorStoreTimerRef.current = null;
+    }
     return () => {
-      initEditorStore();
+      resetEditorStoreTimerRef.current = window.setTimeout(() => {
+        initEditorStore();
+        resetEditorStoreTimerRef.current = null;
+      }, 0);
     };
   }, [initEditorStore]);
 

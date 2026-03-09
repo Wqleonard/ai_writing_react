@@ -17,7 +17,6 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
 import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
-import { serverDataToTree } from "@/stores/editorStore/utils"
 import type { FileTreeNode, ServerData } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
@@ -191,11 +190,10 @@ const TreeNodeRow = ({
   onDragEnd,
 }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
-  const showNewBadge = !!newNodeIdMap[node.id]
+  const showNewBadge = newNodeIdMap[node.id]
   const isSelected = currentKey === node.id
   const isMd = !isDir && node.fileType === "md"
   const expanded = expandedIds.has(node.id)
-  const hasChildren = !!(node.children && node.children.length > 0)
   const isDragged = dragState.draggedId === node.id
   const showDropLine = dragState.dropTargetId === node.id
 
@@ -245,9 +243,8 @@ const TreeNodeRow = ({
         <div
           className={clsx(
             "mr-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-all duration-200",
-            isDir ? "opacity-100 text-(--text-secondary) hover:text-(--theme-color)" : "opacity-0"
+            isDir ? "w-5 opacity-100 text-(--text-secondary) hover:text-(--theme-color)" : "opacity-0"
           )}
-          style={!isDir ? { width: 20, minWidth: 20 } : undefined}
           onClick={(e) => {
             if (isDir) {
               e.stopPropagation()
@@ -343,6 +340,7 @@ export const EditorTreeSidebar = ({
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
   const serverData = useEditorStore((s) => s.serverData)
+  const treeData = useEditorStore((s) => s.treeData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
   const newNodeIdMap = useEditorStore((s) => s.newNodeIdMap)
   const markNewNodeId = useEditorStore((s) => s.markNewNodeId)
@@ -393,8 +391,6 @@ export const EditorTreeSidebar = ({
   const tagsGroupRef = useRef<HTMLDivElement>(null)
   const [tagsDragging, setTagsDragging] = useState(false)
   const dragStart = useRef({ x: 0, scrollLeft: 0 })
-
-  const treeData = useMemo(() => serverDataToTree(serverData), [serverData])
 
   useEffect(() => {
     setEditingTitleValue(workInfo.title)

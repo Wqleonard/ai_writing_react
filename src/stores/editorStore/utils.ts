@@ -70,7 +70,7 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
         const parts = parentPath.split("/").filter((p) => p !== "");
         parent = {
           id: parentPath,
-          key: parts.join("-"),
+          key: buildNodeKey(parentPath, true),
           label: parts[parts.length - 1] ?? parentPath,
           content: "",
           isDirectory: true,

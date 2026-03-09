@@ -1,11 +1,18 @@
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import { toast } from "sonner";
+import { serverDataToTree } from "@/stores/editorStore/utils";
 import {
   getWorksByIdReq,
   updateWorkVersionReq,
   updateWorkInfoReq,
 } from "@/api/works";
-import type { WorkInfo, ServerData, EditorSaveStatus } from "@/stores/editorStore/types";
+import type {
+  WorkInfo,
+  ServerData,
+  EditorSaveStatus,
+  FileTreeNode,
+} from "@/stores/editorStore/types";
 
 const defaultWorkInfo: WorkInfo = {
   workId: "",
@@ -28,6 +35,8 @@ interface EditorState {
   workInfo: WorkInfo;
   /** 服务端文件数据：路径 -> 内容，与 Vue serverData 一致 */
   serverData: ServerData;
+  /** 侧边栏树数据（由 serverData 手动同步更新） */
+  treeData: FileTreeNode[];
   /** 当前编辑文件内容（与 currentEditingId 对应） */
   currentContent: string;
   /** 树节点 new 标记：id -> true */
@@ -68,6 +77,7 @@ const initialState: EditorState = {
   workId: "",
   workInfo: defaultWorkInfo,
   serverData: {},
+  treeData: [],
   currentContent: "",
   newNodeIdMap: {},
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
@@ -100,8 +110,9 @@ const normalizeServerData = (data: ServerData): ServerData => {
   return next;
 };
 
-export const useEditorStore = create<EditorState & EditorActions>((set, get) => ({
-  ...initialState,
+export const useEditorStore = create<EditorState & EditorActions>()(
+  devtools((set, get) => ({
+    ...initialState,
 
   setWorkId: (workId) => set({ workId }),
 
@@ -117,6 +128,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       return {
         serverData: normalized,
+        treeData: serverDataToTree(normalized),
         currentContent: normalized[fileKey] ?? "",
       };
     }),
@@ -127,6 +139,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       const nextServerData = { ...state.serverData, [path]: normalizedContent };
       return {
         serverData: nextServerData,
+        treeData: serverDataToTree(nextServerData),
         currentContent: path === state.currentEditingId ? normalizedContent : state.currentContent,
       };
     }),
@@ -134,11 +147,19 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
   setCurrentContent: (content) =>
     set((state) => {
       const normalizedContent = normalizeServerContent(content);
-      const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
-      return {
-        currentContent: normalizedContent,
-        serverData: { ...state.serverData, [fileKey]: normalizedContent },
-      };
+      const node = get().serverData[state.currentEditingId]
+      if(!node) {
+        return {
+          currentContent: normalizedContent,
+        } 
+      } else{
+        const fileKey = state.currentEditingId
+        return {
+          currentContent: normalizedContent,
+          serverData: { ...state.serverData, [fileKey]: normalizedContent },
+          treeData: serverDataToTree({ ...state.serverData, [fileKey]: normalizedContent }),
+        };
+      }
     }),
 
   setNewNodeIds: (ids) =>
@@ -170,6 +191,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       const normalizedContent = normalizeServerContent(content);
       return {
         serverData: { ...state.serverData, [path]: normalizedContent },
+        treeData: serverDataToTree({ ...state.serverData, [path]: normalizedContent }),
         currentContent: path === state.currentEditingId ? normalizedContent : state.currentContent,
       };
     }),
@@ -189,6 +211,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       });
       return {
         serverData: next,
+        treeData: serverDataToTree(next),
         newNodeIdMap: nextNewNodeIdMap,
         currentContent: next[state.currentEditingId] ?? "",
       };
@@ -230,6 +253,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       );
       return {
         serverData: next,
+        treeData: serverDataToTree(next),
         currentEditingId,
         newNodeIdMap,
         currentContent: next[currentEditingId] ?? "",
@@ -282,6 +306,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       const fileKey = get().currentEditingId || DEFAULT_EDITING_FILE_KEY;
       set({
         serverData: normalizedServerData,
+        treeData: serverDataToTree(normalizedServerData),
         currentContent: normalizedServerData[fileKey] ?? "",
       });
       set({ newNodeIdMap: {} });
@@ -322,5 +347,10 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
     }
   },
 
-  initEditorStore: () => set(initialState),
-}));
+    initEditorStore: () => set(initialState),
+  }),
+  {
+    name: "editor-store",
+    enabled: import.meta.env.DEV,
+  })
+);
