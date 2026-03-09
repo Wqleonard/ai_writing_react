@@ -356,10 +356,11 @@ const BookAnalysisPage = () => {
           JSON.stringify({
             isNew: true,
             template: JSON.stringify(template),
+            skipRecommendDialog: true,
           })
         )
         navigate(`/editor/${req.id}`, {
-          state: { isNew: true, template: JSON.stringify(template) },
+          state: { isNew: true, template: JSON.stringify(template), skipRecommendDialog: true },
         })
       } catch {
         toast.error('创建作品失败，请重试')

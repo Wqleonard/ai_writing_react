@@ -56,6 +56,8 @@ export interface StepWorkflowProps {
   isEditorEmpty?: boolean
   /** 是否存在模板直达内容（例如从模板卡片跳转进入编辑器） */
   hasTemplateContent?: boolean
+  /** 跳转进入编辑器时不自动展示“创作推荐弹窗” */
+  disableRecommendAutoOpen?: boolean
   /** 当前编辑中的文件 id，变化时重算快捷入口 */
   currentEditingId?: string | null
   /** 步骤创建完成：保存到当前作品后的回调（React 侧需自行更新 sidebar/editor 等） */
@@ -67,6 +69,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     totalMdContentLength: _totalMdContentLength = 0,
     isEditorEmpty: _isEditorEmpty,
     hasTemplateContent = false,
+    disableRecommendAutoOpen = false,
     currentEditingId: _currentEditingId,
     onStepConfirm,
   },
@@ -75,7 +78,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   const [recommendDialogShow, setRecommendDialogShow] = useState(false)
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
-  const prevCanOpenDialogRef = useRef(false)
+  const autoOpenedOnceRef = useRef(false)
   const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
   const [isQuickStartActive, setIsQuickStartActive] = useState(false)
   const hideTimerRef = useRef<number | null>(null)
@@ -168,22 +171,34 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     if (!canOpenStepCreateDialog && recommendDialogShow) {
       setRecommendDialogShow(false)
     }
+    if (!canOpenStepCreateDialog) {
+      autoOpenedOnceRef.current = false
+    }
   }, [canOpenStepCreateDialog, recommendDialogShow, stepCreateDialogShow])
 
-  // 当条件从“不可打开”切换到“可打开”时自动弹窗一次：
-  // 有模板内容 -> StepCreateDialog；否则 -> CreateRecommendDialog
   useEffect(() => {
-    if (canOpenStepCreateDialog && !prevCanOpenDialogRef.current) {
-      if (hasTemplateContent) {
-        setRecommendDialogShow(false)
-        setStepCreateDialogShow(true)
-      } else {
-        setStepCreateDialogShow(false)
-        setRecommendDialogShow(true)
-      }
+    if (!disableRecommendAutoOpen) return
+    if (recommendDialogShow) setRecommendDialogShow(false)
+  }, [disableRecommendAutoOpen, recommendDialogShow])
+
+  // 自动弹窗（仅一次）：有模板内容 -> StepCreateDialog；否则 -> CreateRecommendDialog
+  useEffect(() => {
+    if (!canOpenStepCreateDialog) return
+    if (autoOpenedOnceRef.current) return
+
+    if (hasTemplateContent) {
+      setRecommendDialogShow(false)
+      setStepCreateDialogShow(true)
+      autoOpenedOnceRef.current = true
+      return
     }
-    prevCanOpenDialogRef.current = canOpenStepCreateDialog
-  }, [canOpenStepCreateDialog, hasTemplateContent])
+
+    if (!disableRecommendAutoOpen) {
+      setStepCreateDialogShow(false)
+      setRecommendDialogShow(true)
+      autoOpenedOnceRef.current = true
+    }
+  }, [canOpenStepCreateDialog, hasTemplateContent, disableRecommendAutoOpen])
 
   useEffect(() => {
     if (hideTimerRef.current) {

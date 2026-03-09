@@ -88,9 +88,9 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
         onLoadingChange?.(true)
         const req: any = await createWorkReq()
         if (req?.id) {
-          const stateData = { message: '请为我生成一篇主题为 #' + word + '的小说' }
+          const stateData = { message: '请为我生成一篇主题为 #' + word + '的小说', skipRecommendDialog: true }
           sessionStorage.setItem('editorInitialParams', JSON.stringify(stateData))
-          navigate(`/workspace/editor/${req.id}`)
+          navigate(`/editor/${req.id}`, { state: { skipRecommendDialog: true } })
         } else {
           onLoadingChange?.(false)
         }

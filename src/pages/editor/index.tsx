@@ -132,6 +132,7 @@ type EditorInitialParams = {
   modelLLM?: string;
   selectedWritingStyle?: string;
   template?: StepTemplate | string;
+  skipRecommendDialog?: boolean;
   associationTags?: string[];
   selectedNotes?: import("@/api/notes").Note[];
   selectedFiles?: FileItemType[];
@@ -146,6 +147,7 @@ const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
 type RankingListTransmissionParams = {
   content?: string;
   message?: string;
+  disableAutoSubmit?: boolean;
 };
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
@@ -413,7 +415,21 @@ const MarkdownEditorPage = () => {
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
-
+  const [disableRecommendAutoOpen, setDisableRecommendAutoOpen] = useState(() => {
+    try {
+      const stateParams = (location.state as { skipRecommendDialog?: boolean } | null) ?? null;
+      if (stateParams?.skipRecommendDialog) return true;
+      const paramsStr =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY)
+          : null;
+      if (!paramsStr) return false;
+      const parsed = JSON.parse(paramsStr) as { skipRecommendDialog?: boolean } | null;
+      return !!parsed?.skipRecommendDialog;
+    } catch {
+      return false;
+    }
+  });
   // chatheader 相关
   const [
     activeTab,
@@ -855,6 +871,7 @@ const MarkdownEditorPage = () => {
     const mergedParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
     const rankingContent = rankingParams?.content?.trim() ?? "";
     const rankingMessage = rankingParams?.message?.trim() ?? "";
+    const rankingDisableAutoSubmit = !!rankingParams?.disableAutoSubmit;
     const initialParams: EditorInitialParams = {
       ...mergedParams,
       selectedTexts: rankingContent
@@ -869,6 +886,10 @@ const MarkdownEditorPage = () => {
         : mergedParams.selectedTexts,
       message: rankingMessage || mergedParams.message,
     };
+    setDisableRecommendAutoOpen(
+      !!initialParams.skipRecommendDialog ||
+        !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
+    );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
       setPendingStepTemplate(initialTemplate);
@@ -890,8 +911,10 @@ const MarkdownEditorPage = () => {
     if (initialParams.message?.trim()) {
       const msg = initialParams.message.trim();
       setPendingInitialMessage(msg);
-      // 通过桥接触发 QuillChatInput 的提交逻辑（兼容“仅回答”场景）
-      emitCreationInputSubmit(msg);
+      if (!rankingDisableAutoSubmit) {
+        // 通过桥接触发 QuillChatInput 的提交逻辑（兼容“仅回答”场景）
+        emitCreationInputSubmit(msg);
+      }
       // 避免与 ProChatContainer 的自动提交重复触发
       setShouldAutoSubmitInitialMessage(false);
     } else {
@@ -1453,6 +1476,9 @@ const MarkdownEditorPage = () => {
     () => (currentEditingId ? findNodeLabelById(treeData, currentEditingId) : ""),
     [treeData, currentEditingId]
   );
+
+  console.log(JSON.stringify(treeData), 'treeData', currentEditingId, 'currentEditingId', currentLabel, 'currentLabel', JSON.stringify(serverData), 'serverData'
+  )
   const currentContent = serverData[fileKey] ?? "";
   const roleFileMatchTarget = `${fileKey} ${currentLabel}`;
   const isRoleRelationFile = /(角色关系网|角色关系图|人物关系网|人物关系图|人物关系|角色关系|关系图|关系网)/.test(roleFileMatchTarget);
@@ -1971,6 +1997,7 @@ const MarkdownEditorPage = () => {
                           totalMdContentLength={wordCount}
                           isEditorEmpty={isEditorActuallyEmpty}
                           hasTemplateContent={!!pendingStepTemplate}
+                          disableRecommendAutoOpen={disableRecommendAutoOpen}
                           currentEditingId={currentEditingId}
                         />
                       </div>

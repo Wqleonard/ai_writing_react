@@ -67,7 +67,7 @@ export const AddNewWorkPopover = ({
     try {
       const req: any = await createWorkReq('doc' as any)
       if (req?.id) {
-        navigate(`/workspace/editor/${req.id}`, { state: { isNew: true } })
+        navigate(`/editor/${req.id}`, { state: { isNew: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')

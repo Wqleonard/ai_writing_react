@@ -66,9 +66,9 @@ export const KeywordsDetailDialog = ({
         if (req?.id) {
           sessionStorage.setItem(
             'rankingListTransmission',
-            JSON.stringify({ content, message })
+            JSON.stringify({ content, message, disableAutoSubmit: true })
           )
-          navigate(`/editor/${req.id}`)
+          navigate(`/editor/${req.id}`, { state: { skipRecommendDialog: true } })
         }
       } catch (e) {
         console.error('创建作品失败:', e)
