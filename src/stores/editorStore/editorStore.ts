@@ -28,8 +28,8 @@ interface EditorState {
   workInfo: WorkInfo;
   /** 服务端文件数据：路径 -> 内容，与 Vue serverData 一致 */
   serverData: ServerData;
-  /** 树节点 new 标记（与 Vue 节点 data.new 对齐） */
-  newNodeIds: string[];
+  /** 树节点 new 标记：id -> true */
+  newNodeIdMap: Record<string, boolean>;
   /** 当前编辑中的文件路径 key */
   currentEditingId: string;
 }
@@ -41,6 +41,7 @@ interface EditorActions {
   /** 更新单个文件内容（对应 Vue updateNodeContentById 的简化） */
   setServerDataFile: (path: string, content: string) => void;
   setNewNodeIds: (ids: string[]) => void;
+  markNewNodeId: (id: string) => void;
   clearNewNodeId: (id: string) => void;
   /** 新增路径（文件或目录）。目录 path 需以 / 结尾，内容传空；文件为完整路径如 "正文/正文.md" */
   addServerDataPath: (path: string, content?: string) => void;
@@ -64,7 +65,7 @@ const initialState: EditorState = {
   workId: "",
   workInfo: defaultWorkInfo,
   serverData: {},
-  newNodeIds: [],
+  newNodeIdMap: {},
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
 };
 
@@ -113,12 +114,29 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
     })),
 
-  setNewNodeIds: (ids) => set({ newNodeIds: Array.from(new Set(ids)) }),
+  setNewNodeIds: (ids) =>
+    set({
+      newNodeIdMap: Array.from(new Set(ids)).reduce<Record<string, boolean>>((acc, id) => {
+        acc[id] = true;
+        return acc;
+      }, {}),
+    }),
+
+  markNewNodeId: (id) =>
+    set((state) => ({
+      newNodeIdMap: {
+        ...state.newNodeIdMap,
+        [id]: true,
+      },
+    })),
 
   clearNewNodeId: (id) =>
-    set((state) => ({
-      newNodeIds: state.newNodeIds.filter((nodeId) => nodeId !== id),
-    })),
+    set((state) => {
+      if (!state.newNodeIdMap[id]) return state;
+      const next = { ...state.newNodeIdMap };
+      delete next[id];
+      return { newNodeIdMap: next };
+    }),
 
   addServerDataPath: (path, content = "") =>
     set((state) => ({
@@ -132,10 +150,13 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       Object.keys(state.serverData).forEach((k) => {
         if (k !== path && k !== path + "/" && !k.startsWith(prefix)) next[k] = state.serverData[k];
       });
-      const nextNewNodeIds = state.newNodeIds.filter(
-        (nodeId) => nodeId !== path && !nodeId.startsWith(prefix)
-      );
-      return { serverData: next, newNodeIds: nextNewNodeIds };
+      const nextNewNodeIdMap: Record<string, boolean> = {};
+      Object.keys(state.newNodeIdMap).forEach((nodeId) => {
+        if (nodeId !== path && !nodeId.startsWith(prefix)) {
+          nextNewNodeIdMap[nodeId] = true;
+        }
+      });
+      return { serverData: next, newNodeIdMap: nextNewNodeIdMap };
     }),
 
   renameServerDataPath: (oldPath, newPath) =>
@@ -157,14 +178,22 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
       if (state.currentEditingId === oldPath) currentEditingId = newPath;
       else if (state.currentEditingId.startsWith(oldPrefix))
         currentEditingId = newPrefix + state.currentEditingId.slice(oldPrefix.length);
-      const newNodeIds = state.newNodeIds.map((nodeId) => {
-        if (nodeId === oldPath) return newPath;
-        if (nodeId.startsWith(oldPrefix)) {
-          return newPrefix + nodeId.slice(oldPrefix.length);
-        }
-        return nodeId;
-      });
-      return { serverData: next, currentEditingId, newNodeIds };
+      const newNodeIdMap = Object.keys(state.newNodeIdMap).reduce<Record<string, boolean>>(
+        (acc, nodeId) => {
+          if (nodeId === oldPath) {
+            acc[newPath] = true;
+            return acc;
+          }
+          if (nodeId.startsWith(oldPrefix)) {
+            acc[newPrefix + nodeId.slice(oldPrefix.length)] = true;
+            return acc;
+          }
+          acc[nodeId] = true;
+          return acc;
+        },
+        {}
+      );
+      return { serverData: next, currentEditingId, newNodeIdMap };
     }),
 
   setCurrentEditingId: (id) => set({ currentEditingId: id }),
@@ -205,7 +234,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
         }
       }
       set({ serverData: normalizeServerData(serverData) });
-      set({ newNodeIds: [] });
+      set({ newNodeIdMap: {} });
 
       const sessions = req?.sessions;
       if (Array.isArray(sessions)) {

@@ -151,6 +151,7 @@ function buildServerDataByTreeOrder(
 
 interface TreeNodeRowProps {
   node: FileTreeNode
+  newNodeIdMap: Record<string, boolean>
   level: number
   currentKey: string
   onMarkNodeAsRead: (id: string) => void
@@ -173,6 +174,7 @@ interface TreeNodeRowProps {
 
 const TreeNodeRow = ({
   node,
+  newNodeIdMap,
   level,
   currentKey,
   onMarkNodeAsRead,
@@ -189,6 +191,7 @@ const TreeNodeRow = ({
   onDragEnd,
 }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
+  const showNewBadge = !!newNodeIdMap[node.id]
   const isSelected = currentKey === node.id
   const isMd = !isDir && node.fileType === "md"
   const expanded = expandedIds.has(node.id)
@@ -271,7 +274,7 @@ const TreeNodeRow = ({
           <div className="inline-block min-w-0 max-w-[calc(100%-50px)] truncate align-top text-[14px] leading-[1.4]">
             {node.label}
           </div>
-          {node.new && !isDir && (
+          {showNewBadge && (
             <span className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
               new
             </span>
@@ -304,6 +307,7 @@ const TreeNodeRow = ({
             <TreeNodeRow
               key={child.id}
               node={child}
+              newNodeIdMap={newNodeIdMap}
               level={level + 1}
               currentKey={currentKey}
               onMarkNodeAsRead={onMarkNodeAsRead}
@@ -340,7 +344,8 @@ export const EditorTreeSidebar = ({
   const workId = useEditorStore((s) => s.workId)
   const serverData = useEditorStore((s) => s.serverData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
-  const newNodeIds = useEditorStore((s) => s.newNodeIds)
+  const newNodeIdMap = useEditorStore((s) => s.newNodeIdMap)
+  const markNewNodeId = useEditorStore((s) => s.markNewNodeId)
   const clearNewNodeId = useEditorStore((s) => s.clearNewNodeId)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
@@ -389,16 +394,7 @@ export const EditorTreeSidebar = ({
   const [tagsDragging, setTagsDragging] = useState(false)
   const dragStart = useRef({ x: 0, scrollLeft: 0 })
 
-  const treeData = useMemo(() => {
-    const newNodeIdSet = new Set(newNodeIds)
-    const attachNewFlags = (nodes: FileTreeNode[]): FileTreeNode[] =>
-      nodes.map((node) => ({
-        ...node,
-        new: !node.isDirectory && newNodeIdSet.has(node.id),
-        children: attachNewFlags(node.children ?? []),
-      }))
-    return attachNewFlags(serverDataToTree(serverData))
-  }, [newNodeIds, serverData])
+  const treeData = useMemo(() => serverDataToTree(serverData), [serverData])
 
   useEffect(() => {
     setEditingTitleValue(workInfo.title)
@@ -543,9 +539,10 @@ export const EditorTreeSidebar = ({
           ? [...parent.path, `${unique}.md`].join("/")
           : `${unique}.md`
       addServerDataPath(path, "")
+      markNewNodeId(path)
       setCurrentEditingId(path)
     },
-    [addServerDataPath, setCurrentEditingId]
+    [addServerDataPath, markNewNodeId, setCurrentEditingId]
   )
 
   const handleAddFolderUnder = useCallback(
@@ -557,9 +554,10 @@ export const EditorTreeSidebar = ({
           ? [...parent.path, unique].join("/") + "/"
           : unique + "/"
       addServerDataPath(path, "")
+      markNewNodeId(path.slice(0, -1))
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [addServerDataPath]
+    [addServerDataPath, markNewNodeId]
   )
 
   const handleRename = useCallback(() => {
@@ -632,15 +630,17 @@ export const EditorTreeSidebar = ({
     const unique = generateUniqueName(treeData, "新文件", false)
     const path = `${unique}.md`
     addServerDataPath(path, "")
+    markNewNodeId(path)
     setCurrentEditingId(path)
-  }, [treeData, addServerDataPath, setCurrentEditingId])
+  }, [treeData, addServerDataPath, markNewNodeId, setCurrentEditingId])
 
   const addFolderAtRoot = useCallback(() => {
     const unique = generateUniqueName(treeData, "新文件夹", true)
     const path = unique + "/"
     addServerDataPath(path, "")
+    markNewNodeId(unique)
     setExpandedIds((prev) => new Set(prev))
-  }, [treeData, addServerDataPath])
+  }, [treeData, addServerDataPath, markNewNodeId])
 
   const resetDragState = useCallback(() => {
     setDragState({
@@ -841,6 +841,7 @@ export const EditorTreeSidebar = ({
             <TreeNodeRow
               key={node.id}
               node={node}
+              newNodeIdMap={newNodeIdMap}
               level={0}
               currentKey={currentEditingId}
               onMarkNodeAsRead={clearNewNodeId}
@@ -928,7 +929,7 @@ export const EditorTreeSidebar = ({
 
       {contextMenu && (
         <div
-          className="fixed z-2000 min-w-[120px] rounded border border-[#e4e7ed] bg-[var(--bg-dialog)] py-1 shadow-lg"
+          className="fixed z-2000 min-w-[120px] rounded border border-[#e4e7ed] bg-[var(--bg-dialog)] p-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -937,7 +938,7 @@ export const EditorTreeSidebar = ({
               <div
                 role="button"
                 tabIndex={0}
-                className="cursor-pointer px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
                 onClick={() => {
                   handleAddFolderUnder(contextMenu.node)
                   hideContextMenu()
@@ -948,7 +949,7 @@ export const EditorTreeSidebar = ({
               <div
                 role="button"
                 tabIndex={0}
-                className="cursor-pointer px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
                 onClick={() => {
                   handleAddFileUnder(contextMenu.node)
                   hideContextMenu()
@@ -962,7 +963,7 @@ export const EditorTreeSidebar = ({
           <div
             role="button"
             tabIndex={0}
-            className="cursor-pointer px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
             onClick={handleRename}
           >
             重命名
@@ -970,7 +971,7 @@ export const EditorTreeSidebar = ({
           <div
             role="button"
             tabIndex={0}
-            className="cursor-pointer px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
             onClick={handleDelete}
           >
             删除
