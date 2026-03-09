@@ -208,6 +208,10 @@ const generateInspirationReqNew = (inspiration?: string) => {
   });
 };
 
+const exportRecordReq = () => {
+  return apiClient.post("/api/works/export-record")
+}
+
 export {
   getWorksListReq,
   createWorkReq,
@@ -235,5 +239,6 @@ export {
   addCustomTagReq,
   delCustomTagReq,
   batchDeleteWorkReq,
+  exportRecordReq
 };
 

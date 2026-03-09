@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -52,9 +52,12 @@ export const MyWorks = ({
     [batchDelete, data, onJump, onDeleteCheckbox]
   )
 
+  const [popoverShow, setPopoverShow] = useState(false)
+
   const handleMenuAction = useCallback(
     (fn: () => void) => (e: React.MouseEvent) => {
       e.stopPropagation()
+      setPopoverShow(false)
       fn()
     },
     []
@@ -63,6 +66,7 @@ export const MyWorks = ({
   const workTypeLabel =
     data.workType === 'doc' ? '快捷创作' : data.workType === 'script' ? '剧本创作' : null
 
+
   return (
     <div
       className="my-works-item relative flex h-32 cursor-pointer flex-col rounded-lg p-5 shadow-sm transition-shadow hover:shadow-md"
@@ -70,11 +74,14 @@ export const MyWorks = ({
       onClick={handleClick}
     >
       {!batchDelete ? (
-        <Popover>
+        <Popover  open={popoverShow} onOpenChange={setPopoverShow}>
           <PopoverTrigger asChild>
             <div
               className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded p-1 text-[#efaf00] hover:bg-(--bg-hover)"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                setPopoverShow(true)
+              }}
             >
               <MoreHorizontal className="h-4 w-4" />
             </div>

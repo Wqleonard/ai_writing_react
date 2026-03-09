@@ -11,7 +11,7 @@ import { debounce } from 'lodash-es'
 import {
   batchDeleteWorkReq,
   createWorkReq,
-  deleteWorkReq,
+  deleteWorkReq, exportRecordReq,
   getWorksByIdReq,
   getWorksListReq,
   updateWorkInfoReq,
@@ -39,6 +39,8 @@ import clsx from 'clsx'
 import LOGO from '@/assets/images/logo.webp'
 import './my-place.css'
 import { useLoginStore } from "@/stores/loginStore";
+import { ExportUtils } from "@/utils/exportUtils.ts";
+import type { FileTreeNode } from "@/stores/editorStore";
 
 const PAGE_SIZE = 20
 
@@ -54,8 +56,6 @@ const convertWorkItemToMyWorkData = (item: WorkItem): MyWorkData => ({
   workType: item.workType as MyWorkData['workType'],
   deleteChecked: false,
 })
-
-
 
 export default function MyPlacePage() {
   const navigate = useNavigate()
@@ -353,10 +353,10 @@ export default function MyPlacePage() {
       workNode.key = workTitle
       workNode.id = workTitle
       workNode.label = workTitle
-      // TODO: 接入 ExportUtils.exportWorkAsZipDoc 或 React 版导出
-      toast.info('导出 Word 功能开发中')
+      await ExportUtils.exportWorkAsZipDoc(workNode)
+      await exportRecordReq()
     } catch {
-      // ignore
+      toast.error('导出失败，请稍后重试')
     }
   }, [])
 
@@ -370,10 +370,10 @@ export default function MyPlacePage() {
       workNode.key = workTitle
       workNode.id = workTitle
       workNode.label = workTitle
-      // TODO: 接入 ExportUtils.exportWorkAsZipTxt 或 React 版导出
-      toast.info('导出 Txt 功能开发中')
+      await ExportUtils.exportWorkAsZipTxt(workNode)
+      await exportRecordReq()
     } catch {
-      // ignore
+      toast.error('导出失败，请稍后重试')
     }
   }, [])
 

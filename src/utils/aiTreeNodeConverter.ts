@@ -1,20 +1,11 @@
+import type { FileTreeNode } from "@/stores/editorStore";
+
 /**
  * Minimal file tree converter for React app (no mdConverter dependency).
  * Server data keys are file paths; values are string content.
  */
 export interface ServerData {
   [key: string]: string;
-}
-
-export interface FileTreeNode {
-  id: string;
-  key: string;
-  label: string;
-  content: unknown;
-  isDirectory: boolean;
-  path: string[];
-  fileType?: string;
-  children: FileTreeNode[];
 }
 
 function hasFileExtension(fileName: string): boolean {
