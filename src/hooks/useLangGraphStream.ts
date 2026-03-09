@@ -239,7 +239,8 @@ export function useLangGraphStream(
         stream_mode: ["messages", "updates"],
         stream_subgraphs: true,
         model: model ?? "",
-        tools: tools ?? [],
+        // tools暂时传空，后续真正扩展了再传
+        tools: [],
         quotedFiles,
         quotedContents,
         notes,
