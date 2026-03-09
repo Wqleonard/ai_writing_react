@@ -782,11 +782,13 @@ const MarkdownEditorPage = () => {
   // editor 相关
   const workInfo = useEditorStore((s) => s.workInfo);
   const serverData = useEditorStore((s) => s.serverData);
+  const currentContent = useEditorStore((s) => s.currentContent);
   const currentEditingId = useEditorStore((s) => s.currentEditingId);
   const initEditorData = useEditorStore((s) => s.initEditorData);
   const saveEditorData = useEditorStore((s) => s.saveEditorData);
   const setServerData = useEditorStore((s) => s.setServerData);
   const setServerDataFile = useEditorStore((s) => s.setServerDataFile);
+  const setCurrentContent = useEditorStore((s) => s.setCurrentContent);
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo);
   const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath);
   const initEditorStore = useEditorStore((s) => s.initEditorStore);
@@ -1479,8 +1481,6 @@ const MarkdownEditorPage = () => {
     [treeData, currentEditingId]
   );
 
-  const currentContent = serverData[fileKey] ?? "";
-
   const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
   const isCurrentEditorEmpty = useMemo(
     () => isEditorContentEffectivelyEmpty(currentContent),
@@ -1938,7 +1938,7 @@ const MarkdownEditorPage = () => {
                               className="editor-outer-scroll-mode"
                               fontClassName="font-KaiTi"
                               value={currentContent}
-                              onChange={(markdown) => setServerDataFile(fileKey, markdown)}
+                              onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
                               readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
@@ -1948,14 +1948,14 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow
+                        {/* <StepWorkflow
                           ref={stepWorkflowRef}
                           totalMdContentLength={wordCount}
                           isEditorEmpty={isEditorActuallyEmpty}
                           hasTemplateContent={!!pendingStepTemplate}
                           disableRecommendAutoOpen={disableRecommendAutoOpen}
                           currentEditingId={currentEditingId}
-                        />
+                        /> */}
                       </div>
                     </div>
                     {!isEditorEditable && (

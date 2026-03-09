@@ -221,10 +221,10 @@ const TreeNodeRow = ({
           isDragged && "opacity-50 scale-[0.98]",
           showDropLine &&
             dragState.dropPosition === "above" &&
-            "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-[var(--theme-color)] before:content-['']",
+            "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-(--theme-color) before:content-['']",
           showDropLine &&
             dragState.dropPosition === "below" &&
-            "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-[var(--theme-color)] after:content-['']"
+            "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-(--theme-color) after:content-['']"
         )}
         style={{ paddingLeft: 8 + level * 16 }}
         onClick={handleClick}
@@ -268,7 +268,7 @@ const TreeNodeRow = ({
         </div>
         <IconFont
           unicode={getTreeIcon(node)}
-          className="ml-1 shrink-0 text-sm text-[var(--text-secondary)]"
+          className="ml-1 shrink-0 text-sm text-(--text-secondary)"
         />
         <div className="ml-1 min-w-0 flex-1 flex items-center gap-1 overflow-hidden">
           <div className="inline-block min-w-0 max-w-[calc(100%-50px)] truncate align-top text-[14px] leading-[1.4]">
@@ -285,7 +285,7 @@ const TreeNodeRow = ({
           <div
             role="button"
             tabIndex={0}
-            className="ml-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--theme-color)] text-white text-sm font-bold opacity-0 group-hover/node:opacity-100 transition-opacity duration-200 hover:opacity-90"
+            className="ml-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-(--theme-color) text-white text-sm font-bold opacity-0 group-hover/node:opacity-100 transition-opacity duration-200 hover:opacity-90"
             onClick={(e) => {
               e.stopPropagation()
               onAddFile(node)
@@ -755,11 +755,11 @@ export const EditorTreeSidebar = ({
   return (
     <div
       className={clsx(
-        "editor-tree-sidebar flex h-full flex-col overflow-hidden bg-[var(--bg-primary)]",
+        "editor-tree-sidebar flex h-full flex-col overflow-hidden bg-(--bg-primary)",
         className
       )}
     >
-      <div className="shrink-0 border-b border-[var(--border-color)] pb-2">
+      <div className="shrink-0 border-b border-(--border-color) pb-2">
         {isEditingTitle ? (
           <input
             ref={titleInputRef}
@@ -774,7 +774,7 @@ export const EditorTreeSidebar = ({
           <div
             role="button"
             tabIndex={0}
-            className="truncate cursor-pointer rounded px-1 py-0.5 text-xl leading-8 hover:bg-[var(--bg-tertiary)]"
+            className="truncate cursor-pointer rounded px-1 py-0.5 text-xl leading-8 hover:bg-(--bg-tertiary)"
             title="点击编辑作品名称"
             onClick={() => setIsEditingTitle(true)}
             onKeyDown={(e) => {
@@ -812,7 +812,7 @@ export const EditorTreeSidebar = ({
             {workInfo.workTags.map((tag) => (
               <span
                 key={tag.id}
-                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-[var(--bg-tertiary)]"
+                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-(--bg-tertiary)"
               >
                 {tag.name}
               </span>
@@ -921,7 +921,7 @@ export const EditorTreeSidebar = ({
             </PopoverAnchor>
             <TooltipContent side="top">导出作品</TooltipContent>
           </Tooltip>
-          <PopoverContent side="top" align='center' className="rounded-md w-auto p-0 border border-[var(--border-color)] shadow-lg editor-sidebar-export-popover">
+          <PopoverContent side="top" align='center' className="rounded-md w-auto p-0 border border-(--border-color) shadow-lg editor-sidebar-export-popover">
             <ExportWorkMenu onClose={() => setExportPopoverOpen(false)} />
           </PopoverContent>
         </Popover>
@@ -929,7 +929,7 @@ export const EditorTreeSidebar = ({
 
       {contextMenu && (
         <div
-          className="fixed z-2000 min-w-[120px] rounded border border-[#e4e7ed] bg-[var(--bg-dialog)] p-1 shadow-lg"
+          className="fixed z-2000 min-w-[120px] rounded border border-[#e4e7ed] bg-(--bg-dialog) p-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -938,7 +938,7 @@ export const EditorTreeSidebar = ({
               <div
                 role="button"
                 tabIndex={0}
-                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"
                 onClick={() => {
                   handleAddFolderUnder(contextMenu.node)
                   hideContextMenu()
@@ -949,7 +949,7 @@ export const EditorTreeSidebar = ({
               <div
                 role="button"
                 tabIndex={0}
-                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+                className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"
                 onClick={() => {
                   handleAddFileUnder(contextMenu.node)
                   hideContextMenu()
@@ -963,7 +963,7 @@ export const EditorTreeSidebar = ({
           <div
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"
             onClick={handleRename}
           >
             重命名
@@ -971,7 +971,7 @@ export const EditorTreeSidebar = ({
           <div
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-[var(--bg-hover)]"
+            className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"
             onClick={handleDelete}
           >
             删除
@@ -1072,24 +1072,27 @@ export const EditorTreeSidebar = ({
 
       <Dialog open={tagSelectDialogOpen} onOpenChange={setTagSelectDialogOpen}>
         <DialogContent
-          className="flex h-[80vh] max-h-[80vh] w-[820px] max-w-[95vw] flex-col overflow-hidden p-0"
+          className="h-[80vh] max-h-[80vh] w-[820px] max-w-[95vw]"
           showCloseButton
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <div className="flex flex-1 flex-col overflow-hidden p-[50px_32px]">
+          <DialogHeader>
+            <DialogTitle>编辑标签</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex flex-1 flex-col overflow-hidden px-4 py-5">
             <WorkflowTagSelector
               categories={tagCategories}
               updateTagCategories={updateTagCategories}
               selectedTags={selectedTags}
               onSelectedTagsChange={setSelectedTags}
             />
-          </div>
-          <DialogFooter className="flex flex-row-reverse gap-3 px-6 py-4">
-            <Button type="button" onClick={handleSaveTags} disabled={tagSaving}>
-              确定
-            </Button>
+          </ScrollArea>
+          <DialogFooter className="flex flex-row-reverse gap-3">
             <Button type="button" variant="outline" onClick={() => setTagSelectDialogOpen(false)}>
               取消
+            </Button>
+            <Button type="button" onClick={handleSaveTags} disabled={tagSaving}>
+              确定
             </Button>
           </DialogFooter>
         </DialogContent>
