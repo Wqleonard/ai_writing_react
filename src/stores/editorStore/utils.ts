@@ -10,6 +10,15 @@ function getFileExtension(fileName: string): string {
   return ext ?? "file";
 }
 
+/**
+ * 统一路径比较格式：
+ * - 忽略前导 "/"
+ * - 忽略尾随 "/"（目录也按同一规则比较）
+ */
+function normalizeNodeIdForCompare(id: string): string {
+  return (id ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
 /** ServerData 转为树根节点的 children（用于侧边栏展示） */
 export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
   const nodeMap = new Map<string, FileTreeNode>();
@@ -112,8 +121,9 @@ export function fileTreeData2ServerData(root: FileTreeNode): ServerData {
 
 /** 从树中根据 id 查找节点，返回 label；找不到返回空字符串 */
 export function findNodeLabelById(nodes: FileTreeNode[], id: string): string {
+  const targetId = normalizeNodeIdForCompare(id);
   for (const node of nodes) {
-    if (node.id === id) return node.label;
+    if (normalizeNodeIdForCompare(node.id) === targetId) return node.label;
     if (node.children?.length) {
       const found = findNodeLabelById(node.children, id);
       if (found) return found;
@@ -124,8 +134,9 @@ export function findNodeLabelById(nodes: FileTreeNode[], id: string): string {
 
 /** 从树中根据 id 查找节点，返回节点；找不到返回 null（与 Vue findNodeById 对齐） */
 export function findNodeById(nodes: FileTreeNode[], id: string): FileTreeNode | null {
+  const targetId = normalizeNodeIdForCompare(id);
   for (const node of nodes) {
-    if (node.id === id) return node;
+    if (normalizeNodeIdForCompare(node.id) === targetId) return node;
     if (node.children?.length) {
       const found = findNodeById(node.children, id);
       if (found) return found;

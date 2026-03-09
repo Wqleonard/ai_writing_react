@@ -482,7 +482,6 @@ const MarkdownEditorPage = () => {
       });
     },
     onUpdateFiles: (files, fileId, editInfoList) => {
-      console.log(editInfoList, 'editInfoList')
       const mergedFiles = { ...useEditorStore.getState().serverData, ...files };
       setServerData(mergedFiles);
       const targetFileId =
@@ -841,6 +840,13 @@ const MarkdownEditorPage = () => {
     void initEditorData(workId);
   }, [workId, initEditorData]);
 
+  // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
+  useEffect(() => {
+    return () => {
+      initEditorStore();
+    };
+  }, [initEditorStore]);
+
   useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
     let rankingParams: RankingListTransmissionParams | null = null;
@@ -967,9 +973,6 @@ const MarkdownEditorPage = () => {
     setPendingInitialMessage("");
     setShouldAutoSubmitInitialMessage(false);
     setIsAnswerOnly(true);
-
-    // 返回时先清空编辑器 store，避免下次进入短暂展示上一次作品内容
-    initEditorStore();
     navigate("/workspace/my-place", { replace: true });
   }, [
     clearAssociationTags,
@@ -979,7 +982,6 @@ const MarkdownEditorPage = () => {
     resetSelectedTools,
     setShowAnswerTip,
     setShowWritingStyleTip,
-    initEditorStore,
     navigate,
   ]);
 
@@ -1477,8 +1479,6 @@ const MarkdownEditorPage = () => {
     [treeData, currentEditingId]
   );
 
-  console.log(JSON.stringify(treeData), 'treeData', currentEditingId, 'currentEditingId', currentLabel, 'currentLabel', JSON.stringify(serverData), 'serverData'
-  )
   const currentContent = serverData[fileKey] ?? "";
   const roleFileMatchTarget = `${fileKey} ${currentLabel}`;
   const isRoleRelationFile = /(角色关系网|角色关系图|人物关系网|人物关系图|人物关系|角色关系|关系图|关系网)/.test(roleFileMatchTarget);

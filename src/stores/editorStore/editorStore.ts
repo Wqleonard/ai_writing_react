@@ -21,7 +21,7 @@ const defaultWorkInfo: WorkInfo = {
 };
 
 /** 默认当前编辑文件 key（单文件最简版） */
-export const DEFAULT_EDITING_FILE_KEY = "正文/正文.md";
+export const DEFAULT_EDITING_FILE_KEY = "大纲.md";
 
 interface EditorState {
   workId: string;
