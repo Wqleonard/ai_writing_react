@@ -28,6 +28,8 @@ interface EditorState {
   workInfo: WorkInfo;
   /** 服务端文件数据：路径 -> 内容，与 Vue serverData 一致 */
   serverData: ServerData;
+  /** 当前编辑文件内容（与 currentEditingId 对应） */
+  currentContent: string;
   /** 树节点 new 标记：id -> true */
   newNodeIdMap: Record<string, boolean>;
   /** 当前编辑中的文件路径 key */
@@ -40,6 +42,7 @@ interface EditorActions {
   setServerData: (data: ServerData) => void;
   /** 更新单个文件内容（对应 Vue updateNodeContentById 的简化） */
   setServerDataFile: (path: string, content: string) => void;
+  setCurrentContent: (content: string) => void;
   setNewNodeIds: (ids: string[]) => void;
   markNewNodeId: (id: string) => void;
   clearNewNodeId: (id: string) => void;
@@ -65,6 +68,7 @@ const initialState: EditorState = {
   workId: "",
   workInfo: defaultWorkInfo,
   serverData: {},
+  currentContent: "",
   newNodeIdMap: {},
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
 };
@@ -107,12 +111,35 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
         typeof info === "function" ? info(state.workInfo) : { ...state.workInfo, ...info },
     })),
 
-  setServerData: (data) => set({ serverData: normalizeServerData(data) }),
+  setServerData: (data) =>
+    set((state) => {
+      const normalized = normalizeServerData(data);
+      const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
+      return {
+        serverData: normalized,
+        currentContent: normalized[fileKey] ?? "",
+      };
+    }),
 
   setServerDataFile: (path, content) =>
-    set((state) => ({
-      serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
-    })),
+    set((state) => {
+      const normalizedContent = normalizeServerContent(content);
+      const nextServerData = { ...state.serverData, [path]: normalizedContent };
+      return {
+        serverData: nextServerData,
+        currentContent: path === state.currentEditingId ? normalizedContent : state.currentContent,
+      };
+    }),
+
+  setCurrentContent: (content) =>
+    set((state) => {
+      const normalizedContent = normalizeServerContent(content);
+      const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
+      return {
+        currentContent: normalizedContent,
+        serverData: { ...state.serverData, [fileKey]: normalizedContent },
+      };
+    }),
 
   setNewNodeIds: (ids) =>
     set({
@@ -139,9 +166,13 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
     }),
 
   addServerDataPath: (path, content = "") =>
-    set((state) => ({
-      serverData: { ...state.serverData, [path]: normalizeServerContent(content) },
-    })),
+    set((state) => {
+      const normalizedContent = normalizeServerContent(content);
+      return {
+        serverData: { ...state.serverData, [path]: normalizedContent },
+        currentContent: path === state.currentEditingId ? normalizedContent : state.currentContent,
+      };
+    }),
 
   deleteServerDataPath: (path) =>
     set((state) => {
@@ -156,7 +187,11 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
           nextNewNodeIdMap[nodeId] = true;
         }
       });
-      return { serverData: next, newNodeIdMap: nextNewNodeIdMap };
+      return {
+        serverData: next,
+        newNodeIdMap: nextNewNodeIdMap,
+        currentContent: next[state.currentEditingId] ?? "",
+      };
     }),
 
   renameServerDataPath: (oldPath, newPath) =>
@@ -193,13 +228,23 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
         },
         {}
       );
-      return { serverData: next, currentEditingId, newNodeIdMap };
+      return {
+        serverData: next,
+        currentEditingId,
+        newNodeIdMap,
+        currentContent: next[currentEditingId] ?? "",
+      };
     }),
 
-  setCurrentEditingId: (id) => set({ currentEditingId: id }),
+  setCurrentEditingId: (id) =>
+    set((state) => ({
+      currentEditingId: id,
+      currentContent: state.serverData[id] ?? "",
+    })),
 
   initEditorData: async (workId) => {
     set({ workId });
+    console.log('initEditorData', workId)
     const { useChatStore } = await import("@/stores/chatStore");
     useChatStore.getState().setWorkId(workId);
     try {
@@ -233,13 +278,19 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
           serverData = {};
         }
       }
-      set({ serverData: normalizeServerData(serverData) });
+      const normalizedServerData = normalizeServerData(serverData);
+      const fileKey = get().currentEditingId || DEFAULT_EDITING_FILE_KEY;
+      set({
+        serverData: normalizedServerData,
+        currentContent: normalizedServerData[fileKey] ?? "",
+      });
       set({ newNodeIdMap: {} });
 
       const sessions = req?.sessions;
       if (Array.isArray(sessions)) {
         useChatStore.getState().setCachedSessions(sessions);
       }
+      console.log('initEditorData success', workId)
     } catch (e) {
       console.error("[editorStore] initEditorData failed:", e);
       // toast.error("加载作品失败");
@@ -248,6 +299,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set, get) => 
 
   saveEditorData: async (saveStatus = "0", _needLocalCache = true) => {
     const { workId, workInfo, serverData } = get();
+    console.log('saveEditorData', workId, workInfo, serverData)
     if (!workId) {
       toast.error("无作品 ID，无法保存");
       return;
