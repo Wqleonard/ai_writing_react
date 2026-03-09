@@ -1649,7 +1649,7 @@ const MarkdownEditorPage = () => {
         // 后端保存失败时不打断本地继续创作
       }
 
-      setActiveTab("chat");
+      handleChatHeaderTabChange("chat");
       const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
       setPendingInitialMessage(prompt);
       setShouldAutoSubmitInitialMessage(false);
@@ -1659,6 +1659,7 @@ const MarkdownEditorPage = () => {
       setServerData,
       setWorkInfo,
       saveEditorData,
+      handleChatHeaderTabChange,
     ]
   );
 
