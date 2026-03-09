@@ -922,11 +922,11 @@ const MarkdownEditorPage = () => {
       const msg = initialParams.message.trim();
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
-        // 通过桥接触发 QuillChatInput 的提交逻辑（兼容“仅回答”场景）
-        emitCreationInputSubmit(msg);
+        // 交由 ProChatContainer 自动提交，避免桥接事件时序导致漏提
+        setShouldAutoSubmitInitialMessage(true);
+      } else {
+        setShouldAutoSubmitInitialMessage(false);
       }
-      // 避免与 ProChatContainer 的自动提交重复触发
-      setShouldAutoSubmitInitialMessage(false);
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
@@ -1664,6 +1664,45 @@ const MarkdownEditorPage = () => {
       }
     },
     [navigate]
+  );
+
+  // 与 Vue handleKnowledgeBaseUpdate 对齐：合并知识库文件、定位文件，并在 blank 阶段升级为 final
+  const handleKnowledgeBaseUpdate = useCallback(
+    (knowledgeBase: Record<string, string>) => {
+      const keys = Object.keys(knowledgeBase ?? {});
+      if (keys.length === 0) return;
+
+      const files = ensureCanvasTreeSkeleton({
+        ...useEditorStore.getState().serverData,
+        ...knowledgeBase,
+      });
+      setServerData(files);
+
+      const fileId =
+        keys.find((k) => k !== "知识库/" && !k.endsWith("/")) ??
+        keys.find((k) => !k.endsWith("/")) ??
+        keys[0];
+      if (fileId && files[fileId] !== undefined) {
+        useEditorStore.getState().setCurrentEditingId(fileId);
+        setServerDataFile(fileId, files[fileId] ?? "");
+      }
+
+      if (workId && workInfo.stage === "blank") {
+        setWorkInfo({ stage: "final" });
+        setTimeout(() => {
+          void (async () => {
+            try {
+              await updateWorkInfoReq(workId, { stage: "final" });
+            } catch {
+              // 同 Vue：后端失败时不打断本地状态流转
+            }
+          })();
+        }, 1000);
+      }
+
+      toast.success("已发送到知识库");
+    },
+    [setServerData, setServerDataFile, workId, workInfo.stage, setWorkInfo]
   );
 
   // 进入编辑态后聚焦并选中输入框

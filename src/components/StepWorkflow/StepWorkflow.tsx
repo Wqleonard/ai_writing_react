@@ -89,10 +89,8 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
   const hasContentOutsideKnowledgeBase = (key: string, value: string) => {
-    if (!value || value.trim().length === 0) return false
-    return !key.startsWith("知识库/")
+    if (!value || value.trim().length === 0) return true
   }
-
   const canOpenStepCreateDialog = !Object.entries(serverData).some(([key, value]) =>
     hasContentOutsideKnowledgeBase(key, value)
   )

@@ -186,6 +186,7 @@ export default function MyPlacePage() {
               message: value,
               modelLLM,
               selectedWritingStyle,
+              skipRecommendDialog: true,
               isAnswerOnly,
               associationTags: selectedSnapshot.associationTags,
               selectedNotes: selectedSnapshot.selectedNotes,
@@ -195,7 +196,7 @@ export default function MyPlacePage() {
               isShowAnswerTip: selectedSnapshot.isShowAnswerTip,
             })
           )
-          navigate(`/editor/${req.id}`)
+          navigate(`/editor/${req.id}`, { state: { skipRecommendDialog: true } })
         }
       } catch {
         toast.error('创建作品失败，请重试')
