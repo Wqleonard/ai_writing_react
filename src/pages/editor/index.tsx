@@ -1251,8 +1251,8 @@ const MarkdownEditorPage = () => {
       if (!editorRoot) return;
       const normalize = (input: string) =>
         input
-          .replace(/[`*_#>\-\[\]\(\)!~]/g, " ")
-          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】\[\]{}]/g, " ")
+          .replace(/[`*_#>\-()!~]|\[|\]/g, " ")
+          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】{}]|\[|\]/g, " ")
           .replace(/\s+/g, "")
           .trim();
       const buildTargets = (input: string) => {
@@ -1697,7 +1697,6 @@ const MarkdownEditorPage = () => {
         onHelpWriteClick={helpWriteClick}
         updatedTime={workInfo.updatedTime}
       />
-
       <div
         ref={resizeContainerRef}
         className="flex flex-1 min-h-0 min-w-0 overflow-hidden px-2.5 pb-2.5 pt-0 bg-(--bg-editor)"
@@ -1733,7 +1732,7 @@ const MarkdownEditorPage = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-6"
                   title="撤销 (Ctrl+Z)"
                   onClick={handleUndo}
                 >
@@ -1743,7 +1742,7 @@ const MarkdownEditorPage = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-6"
                   title="反撤销 (Ctrl+Y)"
                   onClick={handleRedo}
                 >
@@ -1753,7 +1752,7 @@ const MarkdownEditorPage = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-6"
                   title="查找替换"
                   onClick={handleSearchReplace}
                 >
@@ -1764,7 +1763,7 @@ const MarkdownEditorPage = () => {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-6"
                   title="时光机"
                   onClick={() => void openTimeMachine()}
                 >
@@ -1776,7 +1775,7 @@ const MarkdownEditorPage = () => {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="size-6"
                       title="字体设置"
                     >
                       <IconFont unicode="\ue61d" className="text-base" />
@@ -2346,7 +2345,7 @@ const MarkdownEditorPage = () => {
                   {searchMatches.slice(0, 10).map((m, idx) => (
                     <div
                       key={`${m.actualIndex}-${idx}`}
-                      className="px-3 py-2  cursor-pointer text-xs border-b border-(--el-border-color-lighter) last:border-b-0 cursor-default transition-colors hover:bg-(--bg-hover)"
+                      className="px-3 py-2 cursor-default text-xs border-b border-(--el-border-color-lighter) last:border-b-0 transition-colors hover:bg-(--bg-hover)"
                     >
                       <div className="text-(--text-secondary) truncate">{m.preview}</div>
                     </div>
