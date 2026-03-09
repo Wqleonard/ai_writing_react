@@ -597,8 +597,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
-            if (trimmed.startsWith("event:")) {
-              currentEvent = trimmed.substring(6).trim();
+            const lowerTrimmed = trimmed.toLowerCase();
+            if (lowerTrimmed.startsWith("event:") || lowerTrimmed.startsWith("type:")) {
+              const sepIdx = trimmed.indexOf(":");
+              currentEvent = sepIdx >= 0 ? trimmed.substring(sepIdx + 1).trim().toLowerCase() : "";
             } else if (trimmed.startsWith("data:")) {
               const dataStr = trimmed.substring(5).trim();
               if (!dataStr) continue;
@@ -610,7 +612,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
                 }
                 if (currentEvent) onEvent(currentEvent, parsed);
               } catch {
-                // ignore parse error
+                // 兼容后端返回纯文本 data（如：敏感词提示）
+                if (currentEvent) onEvent(currentEvent, dataStr);
               }
             }
           }

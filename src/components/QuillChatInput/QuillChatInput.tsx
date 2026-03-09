@@ -278,6 +278,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME 组合输入（如中文选字）时，Enter 仅用于确认候选，不触发发送
+      if (e.nativeEvent.isComposing) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         handleSubmitClick()
@@ -331,6 +333,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const handleRichTextKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // IME 组合输入（如中文选字）时，Enter 仅用于确认候选，不触发发送
+      if (e.nativeEvent.isComposing) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         updateRichTextContent()

@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
+import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
@@ -33,6 +34,7 @@ import type {
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import type { ChatTabType } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
+import type { ChatInputStore } from "@/stores/chatInputStore";
 import {
   getWorksByIdReq,
   getWorksByIdAndVersionReq,
@@ -461,6 +463,7 @@ const MarkdownEditorPage = () => {
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
   const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
+  const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [todosExpanded, setTodosExpanded] = useState(true);
@@ -545,6 +548,11 @@ const MarkdownEditorPage = () => {
 
       // 流式结束后调用 guide 接口，将联想提示词展示在最后一条消息下方（与 Vue 一致）
       // 若最后一条消息存在 write_todos 且人在回路未确认（需先展示外层卡片），则不请求 guide，等用户点击拒绝后再请求
+      if (skipGuideForCurrentStreamRef.current) {
+        skipGuideForCurrentStreamRef.current = false;
+        guideRequestRef.current = null;
+        return;
+      }
       const pending = guideRequestRef.current;
       guideRequestRef.current = null;
       const customMsg = finalized?.customMessage;
@@ -600,11 +608,37 @@ const MarkdownEditorPage = () => {
         }
       }
     },
+    onSensitiveWord: () => {
+      // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
+      skipGuideForCurrentStreamRef.current = true;
+      guideRequestRef.current = null;
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+
+      updateLastChatMessage((prev) => ({
+        ...prev,
+        hasSensitiveWord: true,
+      }));
+
+      const simulatedAssistant: DualTabChatMessage = {
+        id: `assistant_sensitive_${Date.now()}`,
+        role: "assistant",
+        content: "我无法回答你的这个问题，可以尝试下其他话题哦",
+        createdAt: new Date(),
+        messageType: "normal",
+        mode: "chat",
+      };
+      addMessageToDualTab("chat", simulatedAssistant);
+      toast.warning("内容包含敏感词，请尝试其他话题");
+    },
     onError: (err, needSendErrorMsg) => {
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
       }
+      skipGuideForCurrentStreamRef.current = true;
+      guideRequestRef.current = null;
       if (needSendErrorMsg) toast.error(err.message);
       setStreamingMessage(null);
       streamingMessageRef.current = null;
@@ -649,21 +683,39 @@ const MarkdownEditorPage = () => {
     return "ready";
   }, [langGraphStream.error, langGraphStream.isStreaming]);
   const isStreamingOverlayVisible = chatInputStatus === "streaming";
-  const associationTags = useChatInputStore((s) => s.associationTags);
-  const selectedNotes = useChatInputStore((s) => s.selectedNotes);
-  const selectedFiles = useChatInputStore((s) => s.selectedFiles);
-  const selectedTexts = useChatInputStore((s) => s.selectedTexts);
-  const selectedTools = useChatInputStore((s) => s.selectedTools);
-  const addSelectedText = useChatInputStore((s) => s.addSelectedText);
-  const clearAssociationTags = useChatInputStore((s) => s.clearAssociationTags);
-  const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
-  const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
-  const clearSelectedTexts = useChatInputStore((s) => s.clearSelectedTexts);
-  const resetSelectedTools = useChatInputStore((s) => s.resetSelectedTools);
-  const setShowAnswerTip = useChatInputStore((s) => s.setShowAnswerTip);
-  const setShowWritingStyleTip = useChatInputStore((s) => s.setShowWritingStyleTip);
-  const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
-  const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
+  const {
+    associationTags,
+    selectedNotes,
+    selectedFiles,
+    selectedTexts,
+    selectedTools,
+    addSelectedText,
+    clearAssociationTags,
+    clearSelectedNotes,
+    clearSelectedFiles,
+    clearSelectedTexts,
+    resetSelectedTools,
+    setShowAnswerTip,
+    setShowWritingStyleTip,
+    initializeChatInputFromParams,
+    setAssociationTags,
+  } = useChatInputStore(useShallow((s: ChatInputStore) => ({
+      associationTags: s.associationTags,
+      selectedNotes: s.selectedNotes,
+      selectedFiles: s.selectedFiles,
+      selectedTexts: s.selectedTexts,
+      selectedTools: s.selectedTools,
+      addSelectedText: s.addSelectedText,
+      clearAssociationTags: s.clearAssociationTags,
+      clearSelectedNotes: s.clearSelectedNotes,
+      clearSelectedFiles: s.clearSelectedFiles,
+      clearSelectedTexts: s.clearSelectedTexts,
+      resetSelectedTools: s.resetSelectedTools,
+      setShowAnswerTip: s.setShowAnswerTip,
+      setShowWritingStyleTip: s.setShowWritingStyleTip,
+      initializeChatInputFromParams: s.initializeFromParams,
+      setAssociationTags: s.setAssociationTags,
+    })));
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
@@ -711,6 +763,7 @@ const MarkdownEditorPage = () => {
       }
 
       if (workId && sessionId) {
+        skipGuideForCurrentStreamRef.current = false;
         guideRequestRef.current = { sessionId, workId };
         const placeholderId = `assistant_${Date.now()}`;
         streamingMessageIdRef.current = placeholderId;
