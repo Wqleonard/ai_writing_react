@@ -41,6 +41,7 @@ import './my-place.css'
 import { useLoginStore } from "@/stores/loginStore";
 import { ExportUtils } from "@/utils/exportUtils.ts";
 import type { FileTreeNode } from "@/stores/editorStore";
+import { useOptionsStore } from "@/stores/optionsStore";
 
 const PAGE_SIZE = 20
 
@@ -66,13 +67,8 @@ export default function MyPlacePage() {
   const requestOpenWritingStylePopover = useChatInputStore((s) => s.requestOpenWritingStylePopover)
 
   const [loading, setLoading] = useState(false)
-  const [bannerConfig, setBannerConfig] = useState<{
-    title: string
-    icon: string
-    btnText: string
-    content: string
-    canOpen?: boolean
-  } | null>(null)
+  const bannerConfig = useOptionsStore(s => s.bannerConfig)
+
   const [showMessageDetailDialog, setShowMessageDetailDialog] = useState(false)
   const [messageDetail, setMessageDetail] = useState<MessageDetail | null>(null)
   const [currentTheme] = useState<'light' | 'dark' | 'eye-care'>('light')
@@ -424,6 +420,28 @@ export default function MyPlacePage() {
   ])
 
 
+  const Banner = () => {
+    return (
+      <div
+        className="h-8 w-fit bg-[#f9eece] rounded-full flex items-center px-2.5 gap-3"
+        v-if="bannerConfig.title && bannerConfig.icon"
+      >
+        <div className="w-6 h-6">
+          <img src={bannerConfig.icon} alt="" className="w-full h-full object-cover"/>
+        </div>
+        <div>
+          {bannerConfig.title}
+        </div>
+        <div className="cursor-pointer group" onClick={handleBannerClick}>
+        <span className="text-[#ff9500] font-semibold group-hover:opacity-80">
+          {bannerConfig.btnText}
+        </span>
+          <span className="ml-1 iconfont text-[#ff9500] group-hover:opacity-80">&#xe642;</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div ref={scrollRef} className="workspace-scrollbar h-full w-full">
       <ScrollArea className="h-full w-full">
@@ -436,23 +454,7 @@ export default function MyPlacePage() {
             <div className="mb-17 mt-13">
               <div className="title-section relative flex flex-col items-center overflow-visible text-sm">
                 {bannerConfig?.title && bannerConfig?.icon ? (
-                  <div className="flex h-8 w-fit items-center gap-3 rounded-full bg-[#f9eece] px-2.5">
-                    <div className="h-6 w-6">
-                      <img src={bannerConfig.icon} alt="" className="h-full w-full object-cover"/>
-                    </div>
-                    <div>{bannerConfig.title}</div>
-                    <div
-                      className="group cursor-pointer"
-                      onClick={handleBannerClick}
-                    >
-                      <span className="font-semibold text-[#ff9500] group-hover:opacity-80">
-                        {bannerConfig.btnText}
-                      </span>
-                      <span className="iconfont ml-1 text-[#ff9500] group-hover:opacity-80">
-                        &#xe642;
-                      </span>
-                    </div>
-                  </div>
+                  <Banner />
                 ) : null}
                 <div className="mt-4 flex items-center justify-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full shadow-logo">
