@@ -302,7 +302,7 @@ function CanvasToolbar({
         title={addCanvasTitle}
         aria-label="新增画布"
       >
-        <span className="iconfont !text-xs">&#xe625;</span>
+        <span className="iconfont text-xs!">&#xe625;</span>
       </Button>
       <Button
         type="button"
@@ -1472,10 +1472,8 @@ const MarkdownEditorPage = () => {
     () => Object.keys(serverData ?? {}).sort().join(","),
     [serverData]
   );
-  const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [
-    // 仅随路径列表变化重建树；serverData 在 serverDataKeysSig 变化的那次渲染中已为最新
-    serverDataKeysSig,
-  ]);
+  const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
+  
   const currentLabel = useMemo(
     () => (currentEditingId ? findNodeLabelById(treeData, currentEditingId) : ""),
     [treeData, currentEditingId]
@@ -1691,7 +1689,7 @@ const MarkdownEditorPage = () => {
   }, [currentEditingId]);
 
   return (
-    <div className="page-editor-panel flex h-screen w-full flex-col overflow-hidden bg-[var(--bg-primary)]">
+    <div className="page-editor-panel flex h-screen w-full flex-col overflow-hidden bg-(--bg-primary)">
       <EditorTopToolbar
         onBackClick={handleBackClick}
         onSaveClick={handleSaveClick}
@@ -1707,7 +1705,7 @@ const MarkdownEditorPage = () => {
         {/* 左侧面板 */}
         <div
           ref={leftPanelRef}
-          className="box-border shrink-0 h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] p-2"
+          className="box-border shrink-0 h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-primary) p-2"
           style={{ width: `${leftPanelWidthRem}rem` }}
         >
           <EditorTreeSidebar className="h-full" />
@@ -1722,7 +1720,7 @@ const MarkdownEditorPage = () => {
 
         {/* 中间编辑面板 */}
         <div
-          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-editor)]"
+          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-editor)"
           style={{ minWidth: "0rem" }}
         >
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
@@ -1785,7 +1783,7 @@ const MarkdownEditorPage = () => {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-80 p-0">
-                    <div className="px-5 py-4 border-b border-[var(--el-border-color-lighter)] text-sm font-semibold text-center">
+                    <div className="px-5 py-4 border-b border-(--el-border-color-lighter) text-sm font-semibold text-center">
                       编辑器设置
                     </div>
                     <div className="p-5 space-y-5">
@@ -1793,7 +1791,7 @@ const MarkdownEditorPage = () => {
                         <div className="text-sm">字号</div>
                         <div className="flex items-center gap-3">
                           <Slider
-                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            className="**:data-[slot=slider-track]:bg-(--border-color) **:data-[slot=slider-range]:bg-(--bg-editor-save) **:data-[slot=slider-thumb]:border-(--bg-editor-save)"
                             value={[editorSettings.fontSize]}
                             min={12}
                             max={48}
@@ -1811,7 +1809,7 @@ const MarkdownEditorPage = () => {
                         <div className="text-sm">行间距</div>
                         <div className="flex items-center gap-3">
                           <Slider
-                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            className="**:data-[slot=slider-track]:bg-(--border-color) **:data-[slot=slider-range]:bg-(--bg-editor-save) **:data-[slot=slider-thumb]:border-(--bg-editor-save)"
                             value={[editorSettings.lineHeight]}
                             min={1}
                             max={3}
@@ -1851,7 +1849,7 @@ const MarkdownEditorPage = () => {
                         <div className="text-sm">左右边距</div>
                         <div className="flex items-center gap-3">
                           <Slider
-                            className="[&_[data-slot=slider-track]]:bg-[var(--border-color)] [&_[data-slot=slider-range]]:bg-[var(--bg-editor-save)] [&_[data-slot=slider-thumb]]:border-[var(--bg-editor-save)]"
+                            className="**:data-[slot=slider-track]:bg-(--border-color) **:data-[slot=slider-range]:bg-(--bg-editor-save) **:data-[slot=slider-thumb]:border-(--bg-editor-save)"
                             value={[editorSettings.margin]}
                             min={0}
                             max={200}
@@ -1901,7 +1899,7 @@ const MarkdownEditorPage = () => {
                                 ref={labelInputRef}
                                 type="text"
                                 disabled={!isEditorEditable}
-                                className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-[var(--primary)]"
+                                className="px-2 py-1 h-9 w-full leading-9 text-[30px] text-(--text-primary) truncate shrink-0 border border-transparent rounded bg-transparent outline-none focus:border-primary"
                                 value={editingLabelValue}
                                 onChange={(e) => setEditingLabelValue(e.target.value)}
                                 onBlur={saveLabelEdit}
@@ -1919,7 +1917,7 @@ const MarkdownEditorPage = () => {
                               <div
                                 role="button"
                                 tabIndex={0}
-                                className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0 cursor-pointer"
+                                className="h-9 leading-9 text-[30px] text-(--text-primary) truncate shrink-0 cursor-pointer"
                                 onClick={() => {
                                   if (!isEditorEditable) return;
                                   startEditingLabel(currentLabel);
@@ -1936,7 +1934,7 @@ const MarkdownEditorPage = () => {
                               </div>
                             )
                           ) : (
-                            <div className="h-9 leading-9 text-[30px] text-[var(--text-primary)] truncate shrink-0">
+                            <div className="h-9 leading-9 text-[30px] text-(--text-primary) truncate shrink-0">
                               {currentLabel}
                             </div>
                           )}
@@ -1948,7 +1946,7 @@ const MarkdownEditorPage = () => {
                                   className={clsx(
                                     "px-2 py-1 rounded border transition-colors",
                                     relationViewMode === "edit"
-                                      ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                      ? "bg-(--bg-editor-save) text-white border-(--bg-editor-save)"
                                       : "bg-background text-muted-foreground border-border"
                                   )}
                                   onClick={() => setRelationViewMode("edit")}
@@ -1960,7 +1958,7 @@ const MarkdownEditorPage = () => {
                                   className={clsx(
                                     "px-2 py-1 rounded border transition-colors",
                                     relationViewMode === "preview"
-                                      ? "bg-[var(--bg-editor-save)] text-white border-[var(--bg-editor-save)]"
+                                      ? "bg-(--bg-editor-save) text-white border-(--bg-editor-save)"
                                       : "bg-background text-muted-foreground border-border"
                                   )}
                                   onClick={() => setRelationViewMode("preview")}
@@ -2044,7 +2042,7 @@ const MarkdownEditorPage = () => {
               </div>
               {isChangesPanelVisible && (
                 <div
-                  className="h-full shrink-0 min-h-0 overflow-hidden border-l border-[var(--border-color)] bg-[var(--bg-primary)]"
+                  className="h-full shrink-0 min-h-0 overflow-hidden border-l border-(--border-color) bg-(--bg-primary)"
                   style={{ width: `${CHANGES_PANEL_WIDTH_REM}rem` }}
                 >
                   <EditChangesPanel
@@ -2078,7 +2076,7 @@ const MarkdownEditorPage = () => {
         {/* 右侧聊天面板：与 Vue 一致，chat-content 内仅消息区滚动、输入框固定在底部 */}
         <div
           ref={rightPanelRef}
-          className="box-border shrink-0 h-full flex flex-col rounded-[20px] border border-[var(--border-color)] overflow-hidden bg-[var(--bg-primary)] isolate"
+          className="box-border shrink-0 h-full flex flex-col rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-primary) isolate"
           style={{ width: `${rightPanelWidthRem}rem` }}
         >
           <ChatHeader
@@ -2274,7 +2272,7 @@ const MarkdownEditorPage = () => {
                                 </div>
                               )}
                               {!hasFilesOrSelected && (
-                                <div className="message-content-wrapper whitespace-pre-wrap break-words">
+                                <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
                                   <MarkdownRenderer
                                     content={msg.content || ""}
                                     onFileNameClick={() => {}}
@@ -2340,17 +2338,17 @@ const MarkdownEditorPage = () => {
               />
             </div>
             {searchText.trim() && searchMatches.length > 0 && (
-              <div className="w-full min-w-0 rounded-md border border-[var(--el-border-color-lighter)] overflow-hidden">
-                <div className="px-3 py-2 text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)] border-b border-[var(--el-border-color-lighter)]">
+              <div className="w-full min-w-0 rounded-md border border-(--el-border-color-lighter) overflow-hidden">
+                <div className="px-3 py-2 text-xs text-(--text-secondary) bg-(--bg-secondary) border-b border-(--el-border-color-lighter)">
                   找到 {searchMatches.length} 个匹配项
                 </div>
                 <div className="max-h-[200px] overflow-y-auto overflow-x-hidden">
                   {searchMatches.slice(0, 10).map((m, idx) => (
                     <div
                       key={`${m.actualIndex}-${idx}`}
-                      className="px-3 py-2  cursor-pointer text-xs border-b border-[var(--el-border-color-lighter)] last:border-b-0 cursor-default transition-colors hover:bg-[var(--bg-hover)]"
+                      className="px-3 py-2  cursor-pointer text-xs border-b border-(--el-border-color-lighter) last:border-b-0 cursor-default transition-colors hover:bg-(--bg-hover)"
                     >
-                      <div className="text-[var(--text-secondary)] truncate">{m.preview}</div>
+                      <div className="text-(--text-secondary) truncate">{m.preview}</div>
                     </div>
                   ))}
                   {searchMatches.length > 10 && (
