@@ -141,7 +141,6 @@ export const SendIdeaTour = ({
   // 处理下一步
   const handleNext = useCallback(() => {
     if (stepIndex === TOTAL_STEPS - 1) {
-      scrollToPageTop();
       onFinish?.();
       onOpenChange(false);
     } else {
@@ -149,7 +148,7 @@ export const SendIdeaTour = ({
       setStepIndex(newIndex);
       onStepChange?.(newIndex);
     }
-  }, [stepIndex, onOpenChange, onFinish, onStepChange, scrollToPageTop]);
+  }, [stepIndex, onOpenChange, onFinish, onStepChange]);
 
   // 处理跳过
   const handleSkip = useCallback(() => {
@@ -217,7 +216,6 @@ export const SendIdeaTour = ({
       if (status === STATUS.FINISHED) {
         onFinish?.();
         onOpenChange(false);
-        scrollToPageTop();
         return;
       }
 
@@ -267,8 +265,10 @@ export const SendIdeaTour = ({
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStepIndex(0);
+      scrollToPageTop();
+      onStart?.();
     }
-  }, [open, onStart]);
+  }, [open, onStart, scrollToPageTop]);
 
   return (
     <Joyride
@@ -277,6 +277,9 @@ export const SendIdeaTour = ({
       ref={joyrideRef}
       stepIndex={stepIndex}
       continuous
+      // 打开弹窗即滚到顶部；后续步骤不再自动滚动页面
+      disableScrolling={true}
+      scrollToFirstStep={false}
       disableCloseOnEsc={true}
       disableOverlayClose={true}
       callback={handleJoyrideCallback}
