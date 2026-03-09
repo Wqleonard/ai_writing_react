@@ -445,6 +445,7 @@ const MarkdownEditorPage = () => {
     setWorkId,
     createNewSession,
     loadSession,
+    loadLatestSession,
     saveCurrentSession,
     addMessage: addMessageToDualTab,
     updateLastChatMessage,
@@ -828,6 +829,7 @@ const MarkdownEditorPage = () => {
 
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
+  const lastAutoLoadSessionKeyRef = useRef<string>("");
 
   // 标题（当前文件名）编辑：与 Vue startEditingLabel / saveLabelEdit / cancelLabelEdit 对齐
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -841,6 +843,29 @@ const MarkdownEditorPage = () => {
     lastInitWorkIdRef.current = workId;
     void initEditorData(workId);
   }, [workId, initEditorData]);
+
+  useEffect(() => {
+    setWorkId(workId ?? null);
+  }, [workId, setWorkId]);
+
+  useEffect(() => {
+    if (!workId || currentWorkId !== workId) return;
+    if (activeTab === "canvas") return;
+    const hasCurrentSession =
+      activeTab === "chat" ? !!chatCurrentSession : !!faqCurrentSession;
+    if (hasCurrentSession) return;
+    const loadKey = `${workId}_${activeTab}`;
+    if (lastAutoLoadSessionKeyRef.current === loadKey) return;
+    lastAutoLoadSessionKeyRef.current = loadKey;
+    void loadLatestSession(activeTab);
+  }, [
+    workId,
+    currentWorkId,
+    activeTab,
+    chatCurrentSession,
+    faqCurrentSession,
+    loadLatestSession,
+  ]);
 
   // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
   useEffect(() => {
