@@ -477,6 +477,7 @@ export function useLangGraphStream(
       abortControllerRef.current = null;
     }
     setIsStreaming(false);
+    isStreamingRef.current = false;
   }, []);
 
   const fetchSuggestions = useCallback(async () => {}, []);
