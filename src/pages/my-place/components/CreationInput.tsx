@@ -25,7 +25,6 @@ import {
   getQuickChannelInputCount,
 } from '@/services/quickChatComposerService'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
-import { emitCreationInputSubmit } from '@/services/chatSubmitBridge'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 const NOOP = () => {}
@@ -297,7 +296,6 @@ export const CreationInput = (props: CreationInputProps) => {
     }
     const text = value.trim()
     if (!text) return
-    emitCreationInputSubmit(text)
     await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
     onSubmit()
   }, [status, onRetry, value, completeNewbieMissionByCode, onSubmit])

@@ -118,7 +118,8 @@ const ProChatContainer = (props: ProChatContainerProps) => {
   const pendingAutoSubmitMessageRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (initialMessage?.trim()) setInputValue(initialMessage)
+    // 与外部 initialMessage 保持同步：有值时回填，清空时也要清空输入框
+    setInputValue(initialMessage ?? "")
   }, [initialMessage])
 
   const submitText = useCallback(async (rawText: string) => {
@@ -130,6 +131,7 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     }
     if (customOnSubmit) {
       await customOnSubmit(text)
+    console.log('submitText', rawText)
       setInputValue("")
       return
     }

@@ -14,7 +14,6 @@ import {
   type EditorChangeItem,
 } from "./components";
 import { ProChatContainer, ProChatPanel } from "@/components/ProChatContainer";
-import { emitCreationInputSubmit } from "@/services/chatSubmitBridge";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { FileMessageDisplay } from "@/components/FileMessageDisplay";
 import { SelectedTextDisplay } from "@/components/SelectedTextDisplay";
@@ -668,6 +667,7 @@ const MarkdownEditorPage = () => {
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+  const lastInitialAutoSendKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
     const fileUrl = file.displayUrl || file.putFilePath;
@@ -947,15 +947,22 @@ const MarkdownEditorPage = () => {
       const msg = initialParams.message.trim();
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
-        // 交由 ProChatContainer 自动提交，避免桥接事件时序导致漏提
-        setShouldAutoSubmitInitialMessage(true);
+        const submitKey = `${workId ?? ""}:${msg}`;
+        if (lastInitialAutoSendKeyRef.current !== submitKey) {
+          lastInitialAutoSendKeyRef.current = submitKey;
+          setTimeout(() => {
+            sendChatText(msg, { addUserMessage: true });
+            setPendingInitialMessage("");
+          }, 0);
+        }
+        setShouldAutoSubmitInitialMessage(false);
       } else {
         setShouldAutoSubmitInitialMessage(false);
       }
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams]);
+  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   useEffect(() => {
     if (!pendingStepTemplate) return;
