@@ -264,7 +264,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   }, [writingStyleTipOpen])
 
   const handleSubmitClick = useCallback(() => {
-    if (disabled) return
+    if (disabled || status === "streaming") return
     const text = value.trim()
     if (!text) return
     clearSelectedNotes()
@@ -274,7 +274,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
       onChange("")
       clearRichTextDom()
     }
-  }, [disabled, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange, clearRichTextDom])
+  }, [disabled, status, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange, clearRichTextDom])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -910,7 +910,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
         )}
 
         {/* 工具标签（快捷入口） */}
-        {!hideAssistUI && (
+        {!hideAssistUI && !hasMessages && (
           <div className="tool-tags-container-top">
             {quickChatInputChannels.map((channel) => (
               <div
