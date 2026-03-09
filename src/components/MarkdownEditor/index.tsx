@@ -417,7 +417,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             />
           </BubbleMenu>
         )}
-        {loading && <StreamIndicator className="ml-3.5" />}
+        {loading && <StreamIndicator />}
       </div>
     )
   }

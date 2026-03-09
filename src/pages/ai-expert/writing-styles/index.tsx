@@ -88,6 +88,7 @@ const WritingStylesPage = () => {
   const [newAddStyleName, setNewAddStyleName] = useState('')
   const historyIdRef = useRef('')
   const markdownContentRef = useRef('')
+  const isPostStreamRef = useRef(false)
 
   const isLoggedIn = useLoginStore(s=>s.isLoggedIn)
 
@@ -107,6 +108,33 @@ const WritingStylesPage = () => {
   useEffect(() => {
     markdownContentRef.current = markdownContent
   }, [markdownContent])
+
+  useEffect(() => {
+    isPostStreamRef.current = isPostStream
+  }, [isPostStream])
+
+  const saveHistorySnapshot = useCallback(async () => {
+    const currentHistoryId = historyIdRef.current
+    const latestMarkdownContent = markdownContentRef.current
+    if (!currentHistoryId || !latestMarkdownContent) return
+    try {
+      await updateWritingStyleHistory(latestMarkdownContent, currentHistoryId)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    const saveWhenLeaving = () => {
+      if (!isPostStreamRef.current) return
+      void saveHistorySnapshot()
+    }
+    window.addEventListener('beforeunload', saveWhenLeaving)
+    return () => {
+      window.removeEventListener('beforeunload', saveWhenLeaving)
+      saveWhenLeaving()
+    }
+  }, [saveHistorySnapshot])
 
   const handleFileChange = useCallback(() => {
     setChatArr([])
@@ -244,17 +272,9 @@ const WritingStylesPage = () => {
       next[next.length - 1] = { ...next[next.length - 1], isStreaming: false }
       return next
     })
-    const currentHistoryId = historyIdRef.current
-    const latestMarkdownContent = markdownContentRef.current
-    if (currentHistoryId) {
-      try {
-        await updateWritingStyleHistory(latestMarkdownContent, currentHistoryId)
-      } catch {
-        // ignore
-      }
-    }
+    await saveHistorySnapshot()
     await fetchHistoryList()
-  }, [fetchHistoryList])
+  }, [fetchHistoryList, saveHistorySnapshot])
 
   const handleDoAnalysis = useCallback(async () => {
     trackEvent('Dashboard', 'Generate', 'Style Analysis')

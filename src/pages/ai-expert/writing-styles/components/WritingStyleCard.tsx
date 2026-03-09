@@ -1,5 +1,8 @@
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
 import type { WritingStyleCardProps } from '../types'
+
+dayjs.extend(utc)
 
 export const WritingStyleCard = ({ data, onClick }: WritingStyleCardProps) => {
   return (
@@ -15,7 +18,7 @@ export const WritingStyleCard = ({ data, onClick }: WritingStyleCardProps) => {
         {data.description || '暂无内容'}
       </div>
       <div className="mt-3 text-xs text-[#dedede]">
-        创建时间:{dayjs(data.updatedAt).format('YYYY-MM-DD HH:mm:ss')}
+        创建时间:{dayjs.utc(data.updatedAt).local().format('YYYY-MM-DD HH:mm:ss')}
       </div>
       {data.isAdd ? (
         <div className="absolute top-0 right-0 rounded-es-lg bg-theme-500 px-2 py-1.5 text-xs">
