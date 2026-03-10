@@ -923,19 +923,14 @@ const MarkdownEditorPage = () => {
     loadLatestSession,
   ]);
 
-  // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
-  // useEffect(() => {
-  //   if (resetEditorStoreTimerRef.current != null) {
-  //     window.clearTimeout(resetEditorStoreTimerRef.current);
-  //     resetEditorStoreTimerRef.current = null;
-  //   }
-  //   return () => {
-  //     resetEditorStoreTimerRef.current = window.setTimeout(() => {
-  //       initEditorStore();
-  //       resetEditorStoreTimerRef.current = null;
-  //     }, 0);
-  //   };
-  // }, [initEditorStore]);
+  // 页面卸载时再重置 editor store
+  useEffect(() => {
+    return () => {
+      initEditorStore();
+      lastInitWorkIdRef.current = null;
+      lastAutoLoadSessionKeyRef.current = "";
+    };
+  }, [initEditorStore]);
 
   useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
@@ -1026,36 +1021,12 @@ const MarkdownEditorPage = () => {
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   useEffect(() => {
-    if (!pendingStepTemplate) return;
-    const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
-    if (opened) {
-      setPendingStepTemplate(null);
-    }
+    // if (!pendingStepTemplate) return;
+    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
+    // if (opened) {
+    //   setPendingStepTemplate(null);
+    // }
   }, [pendingStepTemplate, serverData, currentEditingId]);
-
-  // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
-  // useEffect(() => {
-  //   // serverData 还未加载完成
-  //   if (!serverData || Object.keys(serverData).length === 0) return;
-  //   // 用户已经有当前编辑文件且存在于 serverData，则不干预
-  //   if (currentEditingId && serverData[currentEditingId] !== undefined) return;
-
-  //   const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
-  //   if (allMdKeys.length === 0) return;
-
-  //   // 优先正文目录下的章节，例如 "正文/第一章.md"
-  //   const chapterCandidates = allMdKeys
-  //     .filter((k) => k.startsWith("正文/"))
-  //     .sort();
-
-  //   const targetKey =
-  //     chapterCandidates[0] ??
-  //     allMdKeys.sort()[0] ??
-  //     DEFAULT_EDITING_FILE_KEY;
-
-  //   const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
-  //   setCurrentEditingId(targetKey);
-  // }, [serverData, currentEditingId]);
 
   const handleBackClick = useCallback(() => {
     // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
@@ -2079,14 +2050,14 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        {/* <StepWorkflow
+                        <StepWorkflow
                           ref={stepWorkflowRef}
                           totalMdContentLength={wordCount}
                           isEditorEmpty={isEditorActuallyEmpty}
                           hasTemplateContent={!!pendingStepTemplate}
                           disableRecommendAutoOpen={disableRecommendAutoOpen}
                           currentEditingId={currentEditingId}
-                        /> */}
+                        />
                       </div>
                     </div>
                     {!isEditorEditable && (

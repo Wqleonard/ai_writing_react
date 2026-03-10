@@ -14,6 +14,8 @@ export interface TemplateCardItemProps {
   data: Template
   showCreate?: boolean
   onClick?: (template: Template) => void
+  tabIndex?: number
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>
   className?: string
 }
 
@@ -21,6 +23,8 @@ export const TemplateCardItem = ({
   data,
   showCreate = false,
   onClick,
+  tabIndex = 0,
+  onKeyDown,
   className,
 }: TemplateCardItemProps) => {
   const handleCreate = (e: React.MouseEvent) => {
@@ -31,9 +35,11 @@ export const TemplateCardItem = ({
   return (
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={tabIndex}
       onClick={() => onClick?.(data)}
       onKeyDown={(e) => {
+        onKeyDown?.(e)
+        if (e.defaultPrevented) return
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
           onClick?.(data)
