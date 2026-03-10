@@ -1,6 +1,10 @@
 import { memo } from "react";
 import { toast } from "sonner";
 import { addNote } from "@/api/notes";
+import MALE from "@/assets/images/quick-editor/character_man_sex.svg";
+import FEMALE from "@/assets/images/quick-editor/character_woman_sex.svg";
+import { Iconfont } from "@/components/IconFont";
+import { LinkButton } from "@/components/ui/LinkButton";
 
 export interface QuickCharacterCardData {
   name: string;
@@ -34,10 +38,10 @@ const QuickCharacterCard = ({
   onEdit,
 }: Props) => {
   const handleClick = (event?: React.MouseEvent) => {
-    if (isSelected && showEdit && !isCustom) {
-      if (event) onEdit?.(event);
-      return;
-    }
+    // if (isSelected && showEdit && !isCustom) {
+    //   if (event) onEdit?.(event);
+    //   return;
+    // }
     onClick?.(event);
   };
 
@@ -105,51 +109,77 @@ const QuickCharacterCard = ({
         </div>
       ) : (
         <>
-          <div className="absolute right-[-23px] bottom-[-23px] z-0 h-[234px] w-[222.3px] opacity-15">
-            <div className="flex h-full w-full items-end justify-center text-[140px]">
-              {data.gender === "女" ? "♀" : "♂"}
-            </div>
-          </div>
+          <img
+            alt=""
+            className="absolute right-[-23px] bottom-[-23px] z-0 w-60 h-auto opacity-75"
+            src={data.gender === "女" ? FEMALE : MALE}
+          />
           <div className="relative z-1 flex h-full flex-col">
             <div className="mb-[clamp(15px,2vh,25px)] flex min-w-0 shrink-0 items-center justify-between">
               <div className="truncate text-[clamp(22px,2.8vw,24px)] leading-[1.32em] font-bold tracking-[0.04em] text-[#464646]">
                 {data.name}
               </div>
               <div className="ml-2 flex items-center gap-3">
-                <button
-                  className="text-[clamp(12px,1.2vw,16px)] leading-[1.32em] tracking-[0.04em] whitespace-nowrap text-[#999] hover:text-(--bg-editor-save)"
+                <LinkButton
+                  className="flex items-center gap-1 text-[#999]"
                   onClick={handleAddNote}
                 >
-                  添加笔记
-                </button>
+                  <Iconfont unicode="&#xe64c;" />
+                  <span>添加笔记</span>
+                </LinkButton>
                 {showEdit && (
-                  <button
-                    className="flex items-center whitespace-nowrap text-[clamp(12px,1.2vw,16px)] leading-[1.32em] tracking-[0.04em] text-[#999] hover:text-(--bg-editor-save)"
+                  <LinkButton
+                    className="flex items-center gap-1 text-[#999]"
                     onClick={(e) => {
                       e.stopPropagation();
                       onEdit?.(e);
                     }}
                   >
-                    <span className="mr-1 text-[clamp(14px,1.5vw,18.56px)]">✎</span>编辑
-                  </button>
+                    <Iconfont unicode="&#xea48;" />
+                    <span>编辑</span>
+                  </LinkButton>
                 )}
               </div>
             </div>
 
             <div className="mt-[-5px] mb-[clamp(18px,2.2vh,28px)] ml-[-5px] flex shrink-0 flex-wrap">
-              {data.gender ? <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">{data.gender}</div> : null}
-              {data.age ? <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">{data.age}</div> : null}
-              {data.bloodType ? <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">{data.bloodType}</div> : null}
-              {data.mbti ? <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">{data.mbti}</div> : null}
+              {data.gender ? (
+                <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">
+                  {data.gender}
+                </div>
+              ) : null}
+              {data.age ? (
+                <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">
+                  {data.age}
+                </div>
+              ) : null}
+              {data.bloodType ? (
+                <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">
+                  {data.bloodType}
+                </div>
+              ) : null}
+              {data.mbti ? (
+                <div className="ml-[5px] mt-[5px] rounded-[21px] bg-[rgba(239,175,0,0.2)] px-[clamp(10px,1.2vw,14px)] py-[clamp(5px,0.6vh,7px)] text-[clamp(12px,1.1vw,14px)] text-[#4d4d4d]">
+                  {data.mbti}
+                </div>
+              ) : null}
             </div>
 
             <div className="mb-[clamp(18px,2.2vh,28px)] min-h-[clamp(140px,18vh,220px)] flex-1 overflow-y-auto text-[clamp(14px,1.3vw,17px)] leading-[1.5em] text-[#464646]">
-              {data.abilities ? <div className="mb-[clamp(14px,1.7vh,18px)] wrap-break-word">{data.abilities}</div> : null}
-              {data.experiences ? <div className="wrap-break-word">{data.experiences}</div> : null}
+              {data.abilities ? (
+                <div className="mb-[clamp(14px,1.7vh,18px)] wrap-break-word">
+                  {data.abilities}
+                </div>
+              ) : null}
+              {data.experiences ? (
+                <div className="wrap-break-word">{data.experiences}</div>
+              ) : null}
             </div>
 
             <div className="shrink-0">
-              <div className="mb-[clamp(4px,0.5vh,6px)] text-[clamp(14px,1.3vw,17px)] text-[#464646]">身份</div>
+              <div className="mb-[clamp(4px,0.5vh,6px)] text-[clamp(14px,1.3vw,17px)] text-[#464646]">
+                身份
+              </div>
               <div className="mb-[clamp(4px,0.5vh,6px)] h-px w-[clamp(100px,11vw,130px)] bg-linear-to-r from-[#dedede] to-transparent" />
               <div className="max-w-[clamp(180px,20vw,240px)] text-[clamp(13px,1.2vw,15px)] leading-[1.32em] text-[#9a9a9a]">
                 {data.identity}

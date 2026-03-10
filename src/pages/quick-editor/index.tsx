@@ -916,7 +916,6 @@ const QuickEditorPage = () => {
                         locked={lockedDirectories.has("主角设定.md")}
                         hasNextContent={hasNextDirectoryContent("主角设定.md")}
                         triggerGenerate={characterGenerateTrigger}
-                        workTags={(workInfo?.workTags ?? []).map((tag) => ({ name: tag.name }))}
                         onConfirm={(characterData) => void handleCharacterConfirmWithData(characterData)}
                         onRevert={() => void handleCharacterRevert()}
                         onRevertToCurrent={() => void handleRevertToCurrentStep("主角设定.md")}

@@ -4,6 +4,7 @@ import { getQuickStoriesReq } from "@/api/generate-quick";
 import QuickStoryCard, { type QuickStoryCardData } from "./QuickStoryCard";
 import { useEditorStore } from "@/stores/editorStore";
 import { LinkButton } from "@/components/ui/LinkButton";
+import { Iconfont } from "@/components/IconFont";
 
 export interface StoryData extends QuickStoryCardData {
   isCustom?: boolean;
@@ -288,7 +289,7 @@ const QuickStorySelector = ({
             ref={storyGridRef}
             className="mt-5 relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-[2px] [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.1)_transparent] [&::-webkit-scrollbar]:w-[2px] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,0.1)]"
           >
-            <div className={`relative mb-8 flex shrink-0 flex-row flex-nowrap gap-7 p-4 justify-between ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
+            <div className={`relative mb-8 flex shrink-0 flex-row flex-wrap gap-7 p-4 justify-between ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
               {displayStories.map((story, index) => {
                 const key = story ? `${story.title}-${index}` : `custom-${index}`;
                 const selected = !!story && !!story.title && selectedStoryIndex === index;
@@ -328,7 +329,7 @@ const QuickStorySelector = ({
                   className="flex items-center gap-3  text-2xl text-[#999]"
                   onClick={() => void generateStories()}
                 >
-                  <span className="mr-[10px] inline-block text-[30px]">↻</span>
+                  <Iconfont unicode="&#xe66f;" className="mr-[10px] inline-block text-[30px]"/>
                   <span>换一批</span>
                 </LinkButton>
               </div>

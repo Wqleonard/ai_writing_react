@@ -1,7 +1,6 @@
 import { memo, useMemo } from "react";
 import { toast } from "sonner";
 import { addNote } from "@/api/notes";
-import IconFont from "@/components/IconFont/Iconfont";
 import { Iconfont } from "@/components/IconFont";
 import { LinkButton } from "@/components/ui/LinkButton";
 
@@ -103,7 +102,7 @@ const QuickStoryCard = ({
               className="flex items-center gap-1 text-base text-[#999]"
               onClick={handleAddNote}
             >
-              <IconFont unicode="&#xe64c;" />
+              <Iconfont unicode="&#xe64c;" />
               <span>添加笔记</span>
             </LinkButton>
             {showEdit && (

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getQuickCharacterSettings } from "@/api/generate-quick";
 import QuickCharacterCard, { type QuickCharacterCardData } from "./QuickCharacterCard";
+import { useEditorStore } from "@/stores/editorStore";
+import { LinkButton } from "@/components/ui/LinkButton";
+import IconFont from "@/components/IconFont/Iconfont";
+import Iconfont from "@/components/IconFont/Iconfont";
 
 interface CharacterCardData extends QuickCharacterCardData {
   isCustom?: boolean;
@@ -14,7 +18,6 @@ type Props = {
   locked?: boolean;
   hasNextContent?: boolean;
   triggerGenerate?: number;
-  workTags?: Array<{ name: string }>;
   onConfirm: (characterData: string) => void;
   onRevert: () => void;
   onRevertToCurrent: () => void;
@@ -51,7 +54,6 @@ const QuickCharacterSelector = ({
   locked = false,
   hasNextContent = false,
   triggerGenerate = 0,
-  workTags = [],
   onConfirm,
   onRevert,
   onRevertToCurrent,
@@ -74,7 +76,21 @@ const QuickCharacterSelector = ({
     transformOrigin: "top left",
   });
   const characterGridRef = useRef<HTMLDivElement | null>(null);
-  const prevTriggerRef = useRef(triggerGenerate);
+  const prevTriggerRef = useRef(0);
+  const latestTriggerParamsRef = useRef({
+    selectedTagIds,
+    storyContent,
+    locked,
+  });
+  const workInfo = useEditorStore((s) => s.workInfo);
+
+  useEffect(() => {
+    latestTriggerParamsRef.current = {
+      selectedTagIds,
+      storyContent,
+      locked,
+    };
+  }, [selectedTagIds, storyContent, locked]);
 
   const hasSelectedCharacter = selectedCharacterIndex !== null && !!characters[selectedCharacterIndex]?.name;
   const displayCharacters = useMemo(() => (locked ? characters.filter((char) => char.name) : [...characters, null] as Array<CharacterCardData | null>), [characters, locked]);
@@ -114,7 +130,7 @@ const QuickCharacterSelector = ({
     setCharacters([...EMPTY_CHARACTERS]);
     setSelectedCharacterIndex(null);
     try {
-      const description = workTags.map((tag) => tag.name).join(",");
+      const description = (workInfo?.workTags ?? []).map((tag) => tag.name).join(",");
       const storyDataWrapper = JSON.parse(storyContent || "{}");
       const storyData = storyDataWrapper.selectedData || storyDataWrapper;
       const brainStorm = {
@@ -147,7 +163,7 @@ const QuickCharacterSelector = ({
     } finally {
       setLoading(false);
     }
-  }, [loading, onErrorAndRevert, selectedTagIds, storyContent, workTags]);
+  }, [loading, onErrorAndRevert, selectedTagIds, storyContent, workInfo]);
 
   const handleSelectCharacter = useCallback(
     (character: CharacterCardData | null, index: number) => {
@@ -264,35 +280,35 @@ const QuickCharacterSelector = ({
 
   useEffect(() => {
     if (triggerGenerate > prevTriggerRef.current && triggerGenerate > 0) {
-      if (storyContent.trim() && selectedTagIds && !locked) {
+      setTimeout(() => {
+        const latest = latestTriggerParamsRef.current;
+        if (!latest.storyContent?.trim() || !latest.selectedTagIds || latest.locked) return;
         setCharacters([...EMPTY_CHARACTERS]);
         setSelectedCharacterIndex(null);
-        setTimeout(() => {
-          void generateCharacters();
-        }, 100);
-      }
+        void generateCharacters();
+      }, 100);
     }
     prevTriggerRef.current = triggerGenerate;
-  }, [generateCharacters, locked, selectedTagIds, storyContent, triggerGenerate]);
+  }, [generateCharacters, triggerGenerate]);
 
   return (
     <div className="flex h-full max-h-full flex-col overflow-hidden pt-[50px] pr-[120px] pb-[50px]">
       <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${showEditPanel ? "edit-mode" : ""}`}>
-        <div className="mb-10 shrink-0 text-2xl leading-[1.32em] font-normal text-black">请选择心仪的男/女主角设定</div>
+        <div className="mb-5 shrink-0 text-2xl px-4 font-normal text-black">请选择心仪的男/女主角设定</div>
 
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div
             ref={characterGridRef}
             className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pt-[5px] pr-[2px] pb-[2px] pl-[2px] [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.1)_transparent] [&::-webkit-scrollbar]:w-[2px] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,0.1)]"
           >
-            <div className={`character-grid relative mt-[5px] ml-[-30px] mb-8 flex shrink-0 flex-row flex-wrap ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
+            <div className={`relative mb-8 flex shrink-0 flex-row flex-wrap gap-7 p-4 justify-between ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
               {displayCharacters.map((character, index) => {
                 const key = character ? `${character.name}-${character.mbti}-${index}` : `custom-${index}`;
                 const selected = !!character?.name && selectedCharacterIndex === index;
                 return (
                   <div
                     key={key}
-                    className={`character-card-wrapper mt-[30px] ml-[30px] flex h-[380px] min-h-[380px] max-h-[380px] basis-[calc(25%-30px)] flex-row ${
+                    className={`character-card-wrapper rounded-[10px] flex h-[380px] min-h-[380px] max-h-[380px] basis-[calc(25%-30px)] flex-row ${
                       character ? "max-w-[calc(25%-30px)]" : "custom-wrapper max-w-[calc(25%-30px)]"
                     } ${selected ? "outline-2 outline-(--theme-color)" : ""}`}
                   >
@@ -322,15 +338,14 @@ const QuickCharacterSelector = ({
 
             {!locked && !showEditPanel && (
               <div className="flex h-8 shrink-0 items-center justify-center">
-                <button
-                  type="button"
+                <LinkButton
                   disabled={loading}
-                  className="flex items-center gap-3 bg-transparent text-2xl leading-[1.32em] font-normal text-[#999] disabled:cursor-not-allowed disabled:opacity-50 hover:text-(--bg-editor-save)"
+                  className="flex items-center gap-3 text-2xl leading-[1.32em] font-normal text-[#999]"
                   onClick={() => void generateCharacters()}
                 >
-                  <span className="mr-[10px] inline-block text-[30px]">↻</span>
+                  <Iconfont unicode="&#xe66f;" className="mr-[10px] inline-block text-[30px]"/>
                   <span>换一批</span>
-                </button>
+                </LinkButton>
               </div>
             )}
           </div>
@@ -482,11 +497,6 @@ const QuickCharacterSelector = ({
         </div>
       )}
 
-      {false && (
-        <button type="button" onClick={onRevert}>
-          回退
-        </button>
-      )}
     </div>
   );
 };
