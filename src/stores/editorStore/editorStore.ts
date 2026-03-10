@@ -254,26 +254,35 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         setCurrentContent: (content) =>
           set((state) => {
             const normalizedContent = normalizeServerContent(content);
-            const node = get().serverData[state.currentEditingId];
-            if (!node) {
-              return {
-                currentContent: normalizedContent,
-              };
-            } else {
-              const fileKey = state.currentEditingId;
-              return {
-                currentContent: normalizedContent,
-                serverData: {
-                  ...state.serverData,
-                  [fileKey]: normalizedContent,
-                },
-                treeData: updateTreeNodeContent(
-                  state.treeData,
-                  fileKey,
-                  normalizedContent,
-                ),
-              };
-            }
+            const fileKey = state.currentEditingId;
+            const editingNode =
+              state.currentEditingNode?.id === fileKey
+                ? state.currentEditingNode
+                : findNodeById(state.treeData, fileKey);
+            const shouldSyncFileNode = !!editingNode && !editingNode.isDirectory;
+            const hasServerFile = Object.prototype.hasOwnProperty.call(
+              state.serverData,
+              fileKey,
+            );
+
+            return {
+              currentContent: normalizedContent,
+              serverData: hasServerFile
+                ? {
+                    ...state.serverData,
+                    [fileKey]: normalizedContent,
+                  }
+                : state.serverData,
+              currentEditingNode: shouldSyncFileNode
+                ? {
+                    ...editingNode,
+                    content: normalizedContent,
+                  }
+                : editingNode,
+              treeData: shouldSyncFileNode
+                ? updateTreeNodeContent(state.treeData, fileKey, normalizedContent)
+                : state.treeData,
+            };
           }),
 
         setNewNodeIds: (ids) =>
