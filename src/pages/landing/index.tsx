@@ -72,7 +72,8 @@ export default function LandingPage() {
   }, [isCreatingWork, navigate])
 
   const handleShortStoryClick = () => {
-    requireLogin(addWork)
+    toast.info('暂未开放')
+    // requireLogin(addWork)
   }
 
   const handleScriptClick = () => {
