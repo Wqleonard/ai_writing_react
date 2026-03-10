@@ -445,7 +445,7 @@ export const PublicGenerateDialog = ({
               <>
                 <AutoScrollArea
                   className={cn(
-                    'mt-2 h-[500px] rounded-lg bg-[#f6f6f6] p-3',
+                    'mt-2 h-[500px] rounded-lg bg-[#f6f6f6]',
                     markdownEditing && 'outline-2 outline-(--theme-color)'
                   )}
                   maxHeight="500px"

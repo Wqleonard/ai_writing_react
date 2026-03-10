@@ -36,7 +36,6 @@ export interface AddNewWorkPopoverProps {
 }
 
 export const AddNewWorkPopover = ({
-  from = 'Workspace',
   placement = 'bottom',
   offset = 2,
   children,
@@ -109,10 +108,10 @@ export const AddNewWorkPopover = ({
         <div className="cursor-pointer">{children}</div>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         side={placement}
         sideOffset={offset}
-        className="w-40 rounded-xl border-0 p-1 shadow-lg"
+        className="w-40 rounded-xl border-0 p-1"
       >
         <div className="flex flex-col gap-0.5">
           {WORK_TYPES.map((workType) => (
@@ -123,7 +122,9 @@ export const AddNewWorkPopover = ({
             >
               <div className="flex items-center justify-between text-sm font-medium leading-6 text-[#1f1f1f]">
                 <span>{workType.label}</span>
-                <ChevronRight className="h-4 w-4 opacity-0 group-hover:opacity-100" />
+                <span className="hidden rounded-full group-hover:inline-block [font-family:iconfont]">
+                    &#xe736;
+                </span>
               </div>
               {workType.description ? (
                 <div className="mt-1 hidden text-xs leading-snug text-[#757575] group-hover:block">

@@ -276,9 +276,8 @@ export function WorkspaceSidebar() {
 
         {/* 创建新作品按钮（与 Vue MainSidebar 用法一致） */}
         <AddNewWorkPopover
-          from="Sidebar"
           popperClass="add-new-work-popover-sidebar"
-          offset={2}
+          offset={-4}
           placement="bottom-end"
         >
           <div

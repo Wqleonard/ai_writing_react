@@ -22,8 +22,8 @@ import { PromptCard } from './PromptCard'
 import { SORT_TYPE_OPTIONS } from '../types'
 import EMPTY from '@/assets/images/empty.webp'
 import { UsePrompts } from '@/components/Community/UsePrompts'
+import { openAddNewPromptsDialog } from '@/components/Community/openAddNewPromptsDialog'
 import { useLoginStore } from '@/stores/loginStore'
-import { openAddNewPromptsDialog } from '@/components/Community/AddNewPromptsDialog'
 import { Iconfont } from '@/components/IconFont'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import Empty from '@/components/ui/Empty'
@@ -193,7 +193,7 @@ export const PromptsArea = ({
         openAddNewPromptsDialog()
       }
     })
-  }, [requireLogin, loadFirstPage, openAddNewPromptsDialog])
+  }, [requireLogin, loadFirstPage])
 
   const handleFavoritePrompt = useCallback(
     async (data: PromptItem) => {

@@ -509,7 +509,7 @@ export default function MyPlacePage() {
               </div>
 
               <div className="works-grid grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-4 pt-2">
-                <AddNewWorkPopover from="Workspace" placement="bottom">
+                <AddNewWorkPopover placement="top" offset={-50}>
                   <div
                     className="add-work flex h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-[#d9d9d9] text-[#c2c2c2] hover:shadow-md">
                     <span className="iconfont text-xl">&#xe60d;</span>

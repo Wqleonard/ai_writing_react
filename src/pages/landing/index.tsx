@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast, Toaster } from 'sonner'
+import { toast } from 'sonner'
 import ReactFullpageLib from '@fullpage/react-fullpage'
 import { createWorkReq } from '@/api/works'
 import { LandingNavbar } from './components/LandingNavbar'
@@ -72,7 +72,8 @@ export default function LandingPage() {
   }, [isCreatingWork, navigate])
 
   const handleShortStoryClick = () => {
-    requireLogin(addWork)
+    toast.info('暂未开放')
+    // requireLogin(addWork)
   }
 
   const handleScriptClick = () => {
@@ -86,8 +87,6 @@ export default function LandingPage() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#f7f7f4', overflow: 'hidden' }}>
-      <Toaster position="top-center" richColors />
-
       {isCreatingWork && (
         <div className="landing-loading-overlay">
           <div className="loading-spinner" style={{ width: 40, height: 40, borderColor: 'rgba(239,175,0,0.3)', borderTopColor: '#efaf00' }} />

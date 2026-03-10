@@ -93,17 +93,13 @@ export interface AddNewWorkPopoverProps {
 }
 
 export const AddNewWorkPopover = ({
-  from = "Sidebar",
   popperClass = "",
-  placement = "bottom-end",
   offset = 4,
   children,
 }: AddNewWorkPopoverProps) => {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  const { side, align } = getPopoverSideAndAlign(placement)
 
   const requireLogin = useLoginStore(s=>s.requireLogin)
 
@@ -204,8 +200,8 @@ export const AddNewWorkPopover = ({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
         <PopoverContent
-          side={side}
-          align={align}
+          align="start"
+          side="right"
           sideOffset={offset}
           className={cn(
             "w-[160px] rounded-xl p-0 shadow-[0_4px_12px_rgba(0,0,0,0.15)]",

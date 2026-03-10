@@ -12,7 +12,7 @@ export function LandingNavbar({
   onShowLogin,
 }: LandingNavbarProps) {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-9999 bg-[#f7f7f4] py-5 px-[86px]">
+    <nav className="fixed top-0 left-0 right-0 z-9 bg-[#f7f7f4] py-5 px-[86px]">
       <div className="flex items-center justify-between">
         {/* Logo */}
         <div className="flex flex-row items-center">
