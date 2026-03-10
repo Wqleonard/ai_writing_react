@@ -10,7 +10,6 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from '@tiptap/markdown'
 import Placeholder from '@tiptap/extension-placeholder'
-import FontFamily from '@tiptap/extension-font-family'
 import EmptyParagraph from '@/extensions/EmptyParagraph'
 import Mermaid from '@/extensions/Mermaid'
 import { StreamIndicator } from '@/components/StreamIndicator'
@@ -108,8 +107,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const readonlyRef = useRef(readonly)
     const onChangeRef = useRef(onChange)
     const onKeyDownRef = useRef(onKeyDown)
-    const isComposingRef = useRef(false)
-    const editorInstanceRef = useRef<Editor | null>(null)
     const [isSelectionToolbarPinned, setIsSelectionToolbarPinned] = useState(false)
     const [selectionToolbarRenderKey, setSelectionToolbarRenderKey] = useState(0)
     const closeSelectionToolbar = useCallback(() => {
@@ -126,26 +123,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       onChangeRef.current = onChange
       onKeyDownRef.current = onKeyDown
     }, [readonly, onChange, onKeyDown])
-
-    const emitMarkdownChange = useCallback(
-      (targetEditor: Editor) => {
-        if (readonlyRef.current) return
-        isInternalUpdate.current = true
-        let content =
-          (targetEditor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
-        if (maxlength != null && content.length > maxlength) {
-          content = content.slice(0, maxlength)
-          onChangeRef.current?.(content)
-          targetEditor.commands.setContent(content, { contentType: 'markdown' })
-        } else {
-          onChangeRef.current?.(content)
-        }
-        queueMicrotask(() => {
-          isInternalUpdate.current = false
-        })
-      },
-      [maxlength]
-    )
 
     const extensions = useMemo(
       () => [
@@ -165,7 +142,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         TableRow,
         TableHeader,
         TableCell,
-        FontFamily,
         Table.configure({
           resizable: true,
         }),
@@ -197,14 +173,13 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
 
     const editor = useEditor(
       {
-        content: isEmptyContent(value) ? undefined : value,
+        content: isEmptyContent(value) ? '' : value,
         editable: !readonly,
         contentType: 'markdown',
         extensions,
         editorProps: {
           attributes: {
-            class: `prose prose-sm max-w-none focus:outline-none ${fontClassName}`.trim(),
-            style: `min-height: ${minHeight}px;`,
+            class: `prose prose-sm max-w-none focus:outline-none min-h-[${minHeight}px] ${fontClassName}`.trim(),
           },
           handleKeyDown: (_, event) => {
             const onKeyDown = onKeyDownRef.current
@@ -214,40 +189,31 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             }
             return false
           },
-          handleDOMEvents: {
-            compositionstart: () => {
-              isComposingRef.current = true
-            },
-            compositionend: () => {
-              isComposingRef.current = false
-              queueMicrotask(() => {
-                const targetEditor = editorInstanceRef.current
-                if (!targetEditor) return
-                emitMarkdownChange(targetEditor)
-              })
-            },
-          },
         },
-        onUpdate: ({ editor }) => {
-          if (isComposingRef.current) return
-          emitMarkdownChange(editor)
+        onUpdate: ({ editor: currentEditor }) => {
+          if (readonlyRef.current) return
+          let nextMarkdown =
+            (currentEditor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
+          if (maxlength != null && nextMarkdown.length > maxlength) {
+            nextMarkdown = nextMarkdown.slice(0, maxlength)
+            isInternalUpdate.current = true
+            currentEditor.commands.setContent(nextMarkdown, {
+              contentType: 'markdown',
+            })
+          }
+          onChangeRef.current?.(nextMarkdown)
+          queueMicrotask(() => {
+            isInternalUpdate.current = false
+          })
         },
       },
       // 不把 readonly/onChange/onKeyDown 放入 deps，避免父组件重渲染导致 editor 重建（光标跳转、中文 IME 打断）
-      [emitMarkdownChange, placeholder, minHeight]
+      [placeholder, minHeight]
     )
 
-    useEffect(() => {
-      editorInstanceRef.current = editor
-      return () => {
-        editorInstanceRef.current = null
-      }
-    }, [editor])
-
-    // 同步外部 value 到编辑器。可编辑态下不回写，避免 setContent 导致失焦/无法输入
+    // 同步外部 value 到编辑器（受控模式）
     useEffect(() => {
       if (!editor || isInternalUpdate.current) return
-      if (!readonlyRef.current) return
       try {
         const currentMarkdown = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
         let valueToSet = value ?? ''
@@ -256,10 +222,20 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         }
         if (isEmptyContent(valueToSet)) {
           if (!editor.isEmpty) {
+            isInternalUpdate.current = true
             editor.commands.clearContent()
+            editor.commands.setTextSelection(0)
+            queueMicrotask(() => {
+              isInternalUpdate.current = false
+            })
           }
         } else if (valueToSet !== currentMarkdown) {
+          isInternalUpdate.current = true
           editor.commands.setContent(valueToSet, { contentType: 'markdown' })
+          editor.commands.setTextSelection(editor.state.doc.content.size)
+          queueMicrotask(() => {
+            isInternalUpdate.current = false
+          })
         }
       } catch (err) {
         console.error('Error setting editor content:', err)
@@ -278,9 +254,9 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             if (view?.dom && typeof view.dom.setAttribute === 'function') {
               view.dom.setAttribute('contenteditable', 'true')
             }
-            editor.commands.focus()
+            editor.commands.focus('end')
           } catch {
-            editor.commands.focus()
+            editor.commands.focus('end')
           }
         }, 50)
         return () => clearTimeout(id)
@@ -365,8 +341,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     return (
       <div
         ref={containerRef}
-        className={`markdown-editor ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
-        style={{ width: '100%', height: '100%' }}
+        className={`markdown-editor w-full h-full ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
       >
         <EditorContent editor={editor} className="editor-content markdown-editor-content" />
         {editor && needSelectionToolbar && (

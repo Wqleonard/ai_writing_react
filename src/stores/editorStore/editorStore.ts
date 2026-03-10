@@ -463,23 +463,16 @@ export const useEditorStore = create<EditorState & EditorActions>()(
               firstMdNode?.id ??
               initializedState.currentEditingId ??
               DEFAULT_EDITING_FILE_KEY;
+            const findNode = findNodeById(initializedState.treeData, fileKey,)
             set({
               currentEditingId: fileKey,
-              currentEditingNode: findNodeById(
-                initializedState.treeData,
-                fileKey,
-              ),
-              currentContent: initializedState.serverData[fileKey] ?? "",
+              currentEditingNode: findNode,
+              currentContent: findNode?.content || '',
             });
-
             const sessions = req?.sessions;
             if (Array.isArray(sessions)) {
               useChatStore.getState().setCachedSessions(sessions);
             }
-            console.log("initEditorData success", workId);
-
-            console.log("serverData", serverData);
-            console.log("treeData", treeData);
           } catch (e) {
             console.error("[editorStore] initEditorData failed:", e);
             // toast.error("加载作品失败");
