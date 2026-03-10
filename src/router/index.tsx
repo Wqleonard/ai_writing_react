@@ -20,6 +20,7 @@ const BookAnalysisPage = lazy(() => import('@/pages/ai-expert/book-analysis'))
 const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
 const MyPlacePage = lazy(() => import('@/pages/my-place'))
 const QuickEditorPage = lazy(() => import('@/pages/quick-editor'))
+const QuickEditorVueHostPage = lazy(() => import('@/pages/quick-editor-vue-host'))
 // const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts
@@ -109,9 +110,14 @@ const routes: RouteObject[] = [
         element: <MarkdownEditorPage/>,
         loader: editorAuthMiddleware,
       },
+      // {
+      //   path: '/quick-editor/:workId',
+      //   element: <QuickEditorPage/>,
+      //   loader: editorAuthMiddleware,
+      // },
       {
         path: '/quick-editor/:workId',
-        element: <QuickEditorPage/>,
+        element: <QuickEditorVueHostPage/>,
         loader: editorAuthMiddleware,
       },
       {

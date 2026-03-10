@@ -108,3 +108,21 @@ export function serverData2FileTreeData(serverData: ServerData): FileTreeNode {
   }
   return root;
 }
+
+export function fileTreeData2ServerData(root: FileTreeNode): ServerData {
+  const result: ServerData = {};
+
+  const walk = (node: FileTreeNode) => {
+    const isRoot = node.id === "root";
+    if (!isRoot) {
+      const key = node.isDirectory ? `${node.id}/` : node.id;
+      result[key] = node.content ?? "";
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child);
+    }
+  };
+
+  walk(root);
+  return result;
+}

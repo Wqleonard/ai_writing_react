@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type PluginOption, type TerserOptions } from 'vite'
 import react from '@vitejs/plugin-react'
+import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import viteCompression from 'vite-plugin-compression'
@@ -22,6 +23,12 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      vue({
+        script: {
+          defineModel: true,
+          propsDestructure: true,
+        },
+      }),
       tailwindcss(),
       viteCompression({
         algorithm: 'gzip',
