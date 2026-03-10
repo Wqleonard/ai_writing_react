@@ -158,8 +158,8 @@ export const AddNewWorkPopover = ({
           debouncedAddNewWork()
           break
         case "short-story-quick":
-          toast.info('敬请期待')
-          // debouncedAddNewQuickWork()
+          // toast.info('敬请期待')
+          debouncedAddNewQuickWork()
           break
         case "short-play-quick":
           toast.info('敬请期待')

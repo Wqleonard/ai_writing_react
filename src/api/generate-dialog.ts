@@ -1,6 +1,6 @@
 import apiClient, { type RequestConfig } from "./index";
 
-export type CreateWorkType = "editor" | "mobile_chat" | "script";
+export type CreateWorkType = "editor" | "mobile_chat" | "script" | 'doc';
 
 const getTemplatesReq = () => {
   return apiClient.get("/api/writing-templates", {

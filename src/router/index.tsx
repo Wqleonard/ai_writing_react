@@ -19,6 +19,7 @@ const PromptPage = lazy(() => import('@/pages/creation-community/prompt'))
 const BookAnalysisPage = lazy(() => import('@/pages/ai-expert/book-analysis'))
 const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
 const MyPlacePage = lazy(() => import('@/pages/my-place'))
+const QuickEditorPage = lazy(() => import('@/pages/quick-editor'))
 // const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts
@@ -106,6 +107,11 @@ const routes: RouteObject[] = [
       {
         path: '/editor/:workId',
         element: <MarkdownEditorPage/>,
+        loader: editorAuthMiddleware,
+      },
+      {
+        path: '/quick-editor/:workId',
+        element: <QuickEditorPage/>,
         loader: editorAuthMiddleware,
       },
       {
