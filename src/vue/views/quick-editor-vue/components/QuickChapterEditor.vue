@@ -3,7 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { ElButton, ElMessage, ElMessageBox } from "element-plus";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/utils/interfaces";
-import TiptapEditor from "@/components/TiptapEditor.vue";
+import TiptapEditor from "@/vue/components/TiptapEditor.vue";
 import { useEditorStore } from "@/vue/stores/editor.ts";
 import type {
   DocChapterStorageData,

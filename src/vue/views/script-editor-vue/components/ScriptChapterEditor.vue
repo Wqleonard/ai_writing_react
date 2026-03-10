@@ -4,7 +4,7 @@ import { ElButton, ElInput, ElMessage, ElMessageBox } from "element-plus";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType, ScriptSplitOutlineDictRequest } from "@/vue/utils/interfaces";
 
-import TiptapEditor from "@/components/TiptapEditor.vue";
+import TiptapEditor from "@/vue/components/TiptapEditor.vue";
 import { useEditorStore } from "@/vue/stores/editor.ts";
 import type {
   ScriptChapterStorageData,

@@ -14,7 +14,7 @@ import type {
 } from "@/vue/utils/interfaces";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/vue/utils/interfaces";
-import TiptapEditor from "@/components/TiptapEditor.vue";
+import TiptapEditor from "@/vue/components/TiptapEditor.vue";
 import { getScriptSplitOutline, postScriptTemplateStreamOutline } from "@/api/generate-quick";
 // import EditScriptSplitOutlineIcon from "@/assets/images/quick_creation/edit_script_split_outline.svg";
 

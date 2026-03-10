@@ -12,7 +12,7 @@ import type {
 } from "@/utils/interfaces";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/utils/interfaces";
-import TiptapEditor from "@/components/TiptapEditor.vue";
+import TiptapEditor from "@/vue/components/TiptapEditor.vue";
 import { postDocTemplateStreamOutline } from "@/api/generate-quick";
 
 interface StoryData {

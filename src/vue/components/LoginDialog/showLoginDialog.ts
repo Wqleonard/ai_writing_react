@@ -1,7 +1,7 @@
 import { createApp, h, ref } from 'vue'
 import LoginDialog from './index.vue'
 import ElementPlus, { ElMessage } from 'element-plus'
-import '@/assets/element-css.css'
+import '@/vue/assets/element-css.css'
 
 /**
  * 登录结果

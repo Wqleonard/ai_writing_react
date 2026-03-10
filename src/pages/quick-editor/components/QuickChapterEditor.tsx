@@ -11,8 +11,8 @@ import { toast } from "sonner";
 import { addNote } from "@/api/notes";
 import type { PostStreamData } from "@/api";
 import {
-  postDocTemplateStreamContent,
-  postDocTemplateStreamDetailedOutline,
+  postDocTemplateStreamContentReq,
+  postDocTemplateStreamDetailedOutlineReq,
 } from "@/api/generate-quick";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import type {

@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { createNewUserReq, loginReq, verifyTicket, getNewbieMission, type GuideTask, completeNewbieMissionReq } from '@/api/users.ts'
 import { useRouter } from 'vue-router'
 import { resetMatomoUser, setMatomoUser } from '@/utils/matomoTrackingEvent/trackingMatomoEvent'
-import { trackingUserLogin, trackingUserRegister } from '@/utils/matomoTrackingEvent/accEvent'
 import { getInsiteNotification, type NotificationItem } from '@/api/insite-notification'
 import { getNewInvitationCode } from '@/utils/invitationCode'
 
@@ -252,7 +251,7 @@ export const useLoginStore = defineStore("login", () => {
 
     if (match && match[2]) {
       // 提取标签内的文本内容，去除 HTML 标签和实体
-      let textContent = match[2]
+      const textContent = match[2]
         .replace(/<[^>]+>/g, "") // 移除所有 HTML 标签
         .replace(/&nbsp;/g, " ") // 替换 &nbsp; 为空格
         .replace(/&lt;/g, "<") // 替换 &lt; 为 <
@@ -525,8 +524,8 @@ export const useLoginStore = defineStore("login", () => {
       interceptedActions.value.push(() => action(...args));
       // 使用 showLoginDialog 显示登录对话框
       try {
-        const { default: showLoginDialog } = await import('@/components/LoginDialog/showLoginDialog.ts')
-        await showLoginDialog()
+        // const { default: showLoginDialog } = await import('@/components/LoginDialog/showLoginDialog.ts')
+        // await showLoginDialog()
         // 执行被拦截的操作
         await executeInterceptedActions();
       } catch (error) {
@@ -617,8 +616,6 @@ export const useLoginStore = defineStore("login", () => {
       // 更新登录状态
       updateLoginStatus();
 
-      // 账号密码登录埋点
-      trackingUserLogin();
       return { success: true, message: "登录成功" };
     } catch (error: any) {
       console.error("登录失败:", error);
@@ -690,9 +687,8 @@ export const useLoginStore = defineStore("login", () => {
       updateLoginStatus();
 
       // 邀请码注册埋点
-      if (userInfo.value) {
-        trackingUserRegister();
-      }
+      // if (userInfo.value) {
+      // }
       return { success: true, message: "注册成功" };
     } catch (error: any) {
       console.log(error);

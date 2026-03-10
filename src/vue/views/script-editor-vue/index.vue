@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import QuickEditorTopToolbar from "@/components/QuickEditorTopToolbar.vue";
+import QuickEditorTopToolbar from "@/vue/components/QuickEditorTopToolbar.vue";
 import ScriptTagSelector from "./components/ScriptTagSelector.vue";
 import ScriptNovelOutlineChapter from "./components/ScriptNovelOutlineChapter.vue";
 import ScriptStorySelector from "./components/ScriptStorySelector.vue";
@@ -2115,7 +2115,7 @@ const isDirectoryDisabled = (dir: string, index: number): boolean => {
 
 // 处理返回按钮点击
 const handleBackClick = async () => {
-  router.replace("/workspace/my-place");
+  window.location.replace("/workspace/my-place");
 };
 
 // 处理保存按钮点击

@@ -3,8 +3,10 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { ArrowDown } from "@element-plus/icons-vue";
 import MainHeader from "@/vue/components/MainHeader.vue";
 import QuickExportDialog from "@/vue/components/QuickExportDialog.vue";
-import { useEditorStore } from "@/stores/editor.ts";
+import { useEditorStore } from "@/vue/stores/editor.ts";
 import { storeToRefs } from "pinia";
+import { ElButton } from "element-plus";
+
 // import { showNotesSelectorDialog } from "@/utils/showNotesSelectorDialog";
 
 interface Props {
@@ -40,12 +42,12 @@ const displayTitle = computed(() => {
 });
 
 watch(
-  () => workInfo.value.title,
-  (newTitle) => {
-    if (!isEditingTitle.value) {
-      editingTitleValue.value = newTitle || "";
+    () => workInfo.value.title,
+    (newTitle) => {
+      if (!isEditingTitle.value) {
+        editingTitleValue.value = newTitle || "";
+      }
     }
-  }
 );
 
 const focusTitleInput = async () => {
@@ -163,14 +165,15 @@ onUnmounted(() => {
           <span class="back-text">返回</span>
         </el-button>
         <span class="divider">|</span>
-        <el-button link @click="handleSaveClick"> 保存 </el-button>
+        <el-button link @click="handleSaveClick"> 保存</el-button>
 
-        <el-button v-if="!isEditingTitle" class="work-title-display" @click="handleWorkTitleClick" :title="'点击编辑作品名称'"
-          link>
+        <el-button v-if="!isEditingTitle" class="work-title-display" @click="handleWorkTitleClick"
+                   :title="'点击编辑作品名称'"
+                   link>
           {{ displayTitle }}
         </el-button>
         <input v-else ref="titleInputRef" :value="editingTitleValue" class="work-title-input" type="text"
-          @blur="handleTitleBlur" @input="handleInput" @keydown="handleTitleKeydown" />
+               @blur="handleTitleBlur" @input="handleInput" @keydown="handleTitleKeydown"/>
       </div>
     </div>
     <div class="right-top-content">
@@ -179,12 +182,13 @@ onUnmounted(() => {
         <el-button class="export-btn" @click="toggleExportDialog" title="导出">
           导出
           <el-icon class="export-icon">
-            <ArrowDown />
+            <ArrowDown/>
           </el-icon>
         </el-button>
-        <QuickExportDialog v-if="showExportDialog" :visible="showExportDialog" :is-script="isScript" @close="closeExportDialog" />
+        <QuickExportDialog v-if="showExportDialog" :visible="showExportDialog" :is-script="isScript"
+                           @close="closeExportDialog"/>
       </div>
-      <MainHeader :hide-feedback="hideFeedback" />
+      <MainHeader :hide-feedback="hideFeedback"/>
     </div>
   </div>
 </template>

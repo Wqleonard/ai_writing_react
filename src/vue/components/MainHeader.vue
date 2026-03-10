@@ -8,10 +8,11 @@ import showLoginDialog from "./LoginDialog/showLoginDialog.ts";
 import { useChatInputStore } from "@/vue/stores/chatInput.ts";
 import { useRoute, useRouter } from "vue-router";
 import { showNotesSelectorDialog } from '@/utils/showNotesSelectorDialog';
+import { ElTooltip } from "element-plus";
 
 // 动态引入对话框组件
-const AccountDialog = defineAsyncComponent(() => import("./AccountDialog.vue"));
-const QuotaDialog = defineAsyncComponent(() => import("./QuotaDialog.vue"));
+// const AccountDialog = defineAsyncComponent(() => import("./AccountDialog.vue"));
+// const QuotaDialog = defineAsyncComponent(() => import("./QuotaDialog.vue"));
 
 const showInsiteMessage = ref(false)
 
@@ -128,54 +129,54 @@ onMounted(() => {
         </div>
       </div>
     </el-tooltip>
-    <div class="w-[1px] h-4.5 bg-[#dedede] my-1"></div>
+<!--    <div class="w-[1px] h-4.5 bg-[#dedede] my-1"></div>-->
 
-    <InsiteMessage v-model="showInsiteMessage"/>
+<!--    <InsiteMessage v-model="showInsiteMessage"/>-->
 
     <!-- 未登录状态：显示登录按钮 -->
-    <div
-      v-if="!isLoggedIn"
-      class="rounded-full cursor-pointer w-6 h-6 text-center leading-6 iconfont text-xl! ml-3"
-      @click="handleUserClick"
-    >
-      &#xe60b;
-    </div>
+<!--    <div-->
+<!--      v-if="!isLoggedIn"-->
+<!--      class="rounded-full cursor-pointer w-6 h-6 text-center leading-6 iconfont text-xl! ml-3"-->
+<!--      @click="handleUserClick"-->
+<!--    >-->
+<!--      &#xe60b;-->
+<!--    </div>-->
 
     <!-- 已登录状态：显示用户头像和退出登录弹窗 -->
-    <el-popover
-      v-else placement="bottom-end"
-      trigger="click"
-      popper-class="user-menu-popover"
-      v-model:visible="visible"
-    >
-      <template #reference>
-        <div class="el-only-child-wrapper">
-          <div
-            class="rounded-full cursor-pointer w-6 h-6 flex items-center justify-center overflow-hidden outline-1 outline-[#dedede] ml-3">
-            <img :src="avatarData" alt=""/>
-          </div>
-        </div>
-      </template>
-      <div class="user-menu-content">
-        <!-- 原方式：账号 / 额度 / 退出登录，保留备用 -->
-        <div class="menu-item" @click="openAccountDialog">账号</div>
-        <div class="menu-item" @click="openQuotaDialog">额度</div>
-        <div class="menu-item logout" @click="handleLogout">退出登录</div>
-      </div>
-    </el-popover>
+<!--    <el-popover-->
+<!--      v-else placement="bottom-end"-->
+<!--      trigger="click"-->
+<!--      popper-class="user-menu-popover"-->
+<!--      v-model:visible="visible"-->
+<!--    >-->
+<!--      <template #reference>-->
+<!--        <div class="el-only-child-wrapper">-->
+<!--          <div-->
+<!--            class="rounded-full cursor-pointer w-6 h-6 flex items-center justify-center overflow-hidden outline-1 outline-[#dedede] ml-3">-->
+<!--            <img :src="avatarData" alt=""/>-->
+<!--          </div>-->
+<!--        </div>-->
+<!--      </template>-->
+<!--      <div class="user-menu-content">-->
+<!--        &lt;!&ndash; 原方式：账号 / 额度 / 退出登录，保留备用 &ndash;&gt;-->
+<!--        <div class="menu-item" @click="openAccountDialog">账号</div>-->
+<!--        <div class="menu-item" @click="openQuotaDialog">额度</div>-->
+<!--        <div class="menu-item logout" @click="handleLogout">退出登录</div>-->
+<!--      </div>-->
+<!--    </el-popover>-->
 
     <!-- 账号对话框 -->
-    <AccountDialog v-model="showAccountDialog"/>
+<!--    <AccountDialog v-model="showAccountDialog"/>-->
 
     <!-- 额度对话框 -->
-    <QuotaDialog v-model="showQuotaDialog"/>
+<!--    <QuotaDialog v-model="showQuotaDialog"/>-->
 
     <!-- 用户中心对话框：修改个人资料 -> openAccountDialog，退出登录 -> handleLogout -->
-    <UserCenterDialog
-      v-model="showUserCenterDialog"
-      @edit-profile="openAccountDialog"
-      @logout="handleLogout"
-    />
+<!--    <UserCenterDialog-->
+<!--      v-model="showUserCenterDialog"-->
+<!--      @edit-profile="openAccountDialog"-->
+<!--      @logout="handleLogout"-->
+<!--    />-->
   </div>
 </template>
 
