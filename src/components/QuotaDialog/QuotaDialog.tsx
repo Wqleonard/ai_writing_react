@@ -11,9 +11,10 @@ import {
 } from '@/components/ui/Select'
 import { getUserBalanceReq, getInvitationCodeReq } from '@/api/users'
 import { getOrderHistory, type Order } from '@/api/order'
+import { redeemCodeReq } from '@/api/redemptionCodes'
 import { formatLocalTime } from '@/utils/formatLocalTime'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Gift } from 'lucide-react'
 import {
   aggregateOrdersBySession,
   filterToOrderType,
@@ -28,7 +29,7 @@ import invitationIcon from '@/assets/images/quota/invitation.svg'
 import separateWhiteIcon from '@/assets/images/quota/separate_white.svg'
 import separateYellowIcon from '@/assets/images/quota/separate_yellow.svg'
 import quotaBackImg from '@/assets/images/quota/quota_back.png'
-import { openDialog } from '@/lib/openDialog'
+import { Input } from '@/components/ui/Input'
 
 export interface QuotaDialogProps {
   open: boolean
@@ -51,6 +52,9 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   const [inviteeCount, setInviteeCount] = useState(0)
   const [invitationLink, setInvitationLink] = useState('https://baowenmao.com')
 
+  const [exchangeRedeemOpen, setExchangeRedeemOpen] = useState(false)
+  const [redeemCode, setRedeemCode] = useState('')
+  const [redeemLoading, setRedeemLoading] = useState(false)
   const [usageFilterType, setUsageFilterType] = useState('0')
   const [ordersList, setOrdersList] = useState<Order[]>([])
   const [isLoadingUsage, setIsLoadingUsage] = useState(false)
@@ -111,8 +115,33 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   }, [])
 
   const handleOpenExchange = useCallback(() => {
-    toast.info('兑换功能暂未开放')
+    setRedeemCode('')
+    setExchangeRedeemOpen(true)
   }, [])
+
+  const handleRedeemClose = useCallback(() => {
+    setExchangeRedeemOpen(false)
+    setRedeemCode('')
+  }, [])
+
+  const handleRedeemSubmit = useCallback(async () => {
+    const code = redeemCode.trim()
+    if (!code) {
+      toast.warning('请填入兑换码')
+      return
+    }
+    setRedeemLoading(true)
+    try {
+      await redeemCodeReq(code)
+      toast.success('兑换成功')
+      handleRedeemClose()
+      await updateQuota()
+    } catch (err: any) {
+      console.error(err)
+    } finally {
+      setRedeemLoading(false)
+    }
+  }, [redeemCode, handleRedeemClose, updateQuota])
 
   const loadMoreUsage = useCallback(async () => {
     if (isLoadingMoreUsage || isLoadingUsage) return
@@ -296,6 +325,7 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
   }, [])
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         showCloseButton
@@ -532,7 +562,43 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
         )}
       </DialogContent>
     </Dialog>
+
+    <Dialog open={exchangeRedeemOpen} onOpenChange={(open) => !open && handleRedeemClose()}>
+      <DialogContent
+        showCloseButton
+        className="w-[440px] p-8 rounded-2xl"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (!redeemLoading) handleRedeemClose()
+          else e.preventDefault()
+        }}
+      >
+        <div className="flex flex-col items-center">
+          <Gift className="h-14 w-14 text-[#ff9500] mb-4" strokeWidth={1.5} />
+          <h3 className="text-lg font-medium text-[#333] mb-6 text-center">
+            使用兑换码换取生文额度
+          </h3>
+          <div className="w-full flex gap-3">
+            <Input
+              value={redeemCode}
+              onChange={(e) => setRedeemCode(e.target.value)}
+              placeholder="请填入您的兑换码"
+              className="flex-1 h-11 rounded-xl border-[#e5e5e5] bg-[#f5f5f5] text-base"
+              disabled={redeemLoading}
+              onKeyDown={(e) => e.key === 'Enter' && handleRedeemSubmit()}
+            />
+            <button
+              type="button"
+              disabled={redeemLoading || !redeemCode.trim()}
+              onClick={() => void handleRedeemSubmit()}
+              className="shrink-0 h-11 px-6 rounded-xl font-medium text-white bg-linear-to-r from-[#efaf00] to-[#ff9500] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+            >
+              {redeemLoading ? '兑换中...' : '兑换'}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   )
 }
-
-export const openQuotaDialog = () => openDialog(QuotaDialog)

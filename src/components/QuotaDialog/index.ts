@@ -1,2 +1,3 @@
-export { QuotaDialog, openQuotaDialog } from './QuotaDialog'
+export { QuotaDialog } from './QuotaDialog'
+export { openQuotaDialog } from './openQuotaDialog'
 export type { QuotaDialogProps } from './QuotaDialog'
