@@ -1,13 +1,9 @@
 "use client"
 
 import React from "react"
-import clsx from "clsx"
-import { Button } from "@/components/ui/Button"
 import { Skeleton } from "@/components/ui/Skeleton"
-
-/** 静态资源：请将 Vue 项目 src/assets/images/character_card/ 下的 female.png、male.png 复制到 react-app/src/assets/images/character_card/ */
-const FEMALE_SRC = "/assets/images/character_card/female.png"
-const MALE_SRC = "/assets/images/character_card/male.png"
+import FEMALE from '@/assets/images/character_card/female.png'
+import MALE from '@/assets/images/character_card/male.png'
 
 export interface CharacterCardData {
   name: string
@@ -60,7 +56,7 @@ export const CharacterCard = ({
     )
   }
 
-  const imgSrc = data.gender === "女" ? FEMALE_SRC : MALE_SRC
+  const imgSrc = data.gender === "女" ? FEMALE : MALE
 
   return (
     <div

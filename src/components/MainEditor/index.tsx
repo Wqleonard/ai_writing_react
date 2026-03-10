@@ -341,9 +341,9 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     return (
       <div
         ref={containerRef}
-        className={`markdown-editor w-full h-full ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
+        className={`main-editor w-full h-full ${readonly ? 'is-readonly' : ''} ${fontClassName} ${className}`.trim()}
       >
-        <EditorContent editor={editor} className="editor-content markdown-editor-content" />
+        <EditorContent editor={editor} className="editor-content main-editor-content" />
         {editor && needSelectionToolbar && (
           <BubbleMenu
             editor={editor}

@@ -58,10 +58,11 @@ import Iconfont from "@/components/IconFont/Iconfont";
 import { getWorkTagsReq } from "@/api/works";
 import { cn } from "@/lib/utils";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { Link } from "react-router-dom";
 import { useEditorStore } from "@/stores/editorStore";
 import { AutoScrollArea } from "@/components/AutoScrollArea";
 import { ScrollArea } from "@/components/ui/ScrollArea";
+import FEMALE from "@/assets/images/character_card/female.png";
+import MALE from "@/assets/images/character_card/male.png";
 
 const CUSTOM_COVER = customCoverImg as string;
 const TEMPLATE_COVER = templateCoverImg as string;
@@ -1597,7 +1598,7 @@ export const StepCreateDialog = React.forwardRef<
                             <MarkdownEditor
                               value={s.intro}
                               readonly
-                              className="font-Yahei!"
+                              className="text-sm p-0!"
                             />
                           </ScrollArea>
                           {/* <div className="book-synopsis line-clamp-6 max-h-[220px] flex-1 overflow-hidden text-sm text-gray-700">
@@ -1608,12 +1609,13 @@ export const StepCreateDialog = React.forwardRef<
                     </div>
                   ))}
                 </div>
-                <div className="footer-actions flex w-full justify-center">
+                <div className="footer-actions flex flex-col items-center w-full justify-center">
+                  <div className="text-xs text-gray-400">服务器火爆，预计等待时间30s</div>
                   <LinkButton
                     onClick={updateStories}
                     disabled={loading}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2 text-gray-500 custom-btn disabled:cursor-not-allowed",
+                      "mt-1 flex cursor-pointer items-center gap-2 text-gray-500 custom-btn disabled:cursor-not-allowed",
                     )}
                   >
                     <span
@@ -1766,13 +1768,19 @@ export const StepCreateDialog = React.forwardRef<
                       )}
                       style={characterEditPanelStyle}
                     >
-                      <div className="grid grid-cols-2 gap-4 overflow-y-auto">
+                      <img
+                        src={editingCharacter.gender == "女" ? FEMALE : MALE}
+                        alt=""
+                        className='absolute rounded-[10px] w-40 h-auto bottom-0 right-10'
+                      />
+                      <div className="grid grid-cols-2 gap-4 overflow-y-auto relative">
+
                         <div>
-                          <label className="mb-2 block text-sm text-gray-700">
+                          <label className="mb-2 block text-xl text-gray-700">
                             角色名
                           </label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                            className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={5}
                             value={editingCharacter.name}
                             onChange={(e) =>
@@ -1784,11 +1792,11 @@ export const StepCreateDialog = React.forwardRef<
                           />
                         </div>
                         <div>
-                          <label className="mb-2 block text-sm text-gray-700">
+                          <label className="mb-2 block text-xl text-gray-700">
                             性别
                           </label>
                           <select
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                            className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             value={editingCharacter.gender}
                             onChange={(e) =>
                               setEditingCharacter((prev) => ({
@@ -1803,11 +1811,11 @@ export const StepCreateDialog = React.forwardRef<
                           </select>
                         </div>
                         <div>
-                          <label className="mb-2 block text-sm text-gray-700">
+                          <label className="mb-2 block text-xl text-gray-700">
                             人物标签
                           </label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                            className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={100}
                             value={editingCharacter.abilities}
                             onChange={(e) =>
@@ -1819,11 +1827,11 @@ export const StepCreateDialog = React.forwardRef<
                           />
                         </div>
                         <div>
-                          <label className="mb-2 block text-sm text-gray-700">
+                          <label className="mb-2 block text-xl text-gray-700">
                             人物身份
                           </label>
                           <input
-                            className="w-full rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                            className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={50}
                             value={editingCharacter.identity}
                             onChange={(e) =>
@@ -1835,11 +1843,11 @@ export const StepCreateDialog = React.forwardRef<
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="mb-2 block text-base text-gray-700">
+                          <label className="mb-2 block text-xl text-gray-700">
                             人物小传
                           </label>
                           <textarea
-                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d9] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             maxLength={300}
                             value={editingCharacter.experiences}
                             onChange={(e) =>
