@@ -6,6 +6,10 @@ import { useCallback, useRef, useState } from "react";
 import type { AgentCustomMessage } from "../types/chat";
 import { apiClient, STREAM_CHAT_URL } from "@/api";
 import { useChatInputStore } from "@/stores/chatInputStore";
+import {
+  suggestionsControllerInstance,
+  useSuggestionsController,
+} from "./useSuggestionsController";
 
 type TodoStatus = "pending" | "in_progress" | "completed";
 type StreamTodo = { content: string; status: TodoStatus };
@@ -86,6 +90,10 @@ export function useLangGraphStream(
   const currentWriteOrEditorFilePathRef = useRef<string>("");
   const currentEditInfoListRef = useRef<EditFileArgsType[]>([]);
   const messagesRef = useRef<AgentCustomMessage[]>([]);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const currentWorkIdRef = useRef<number | string | null>(null);
+  const streamCompletedRef = useRef(false);
+  const suggestionsState = useSuggestionsController();
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
@@ -191,6 +199,61 @@ export function useLangGraphStream(
     optionsRef.current.onUpdateTodos?.(next);
   };
 
+  // 判断是否有待处理的人在回路任务
+  const hasPendingHilt = (list: AgentCustomMessage[]): boolean => {
+    if (list.length === 0) return false;
+    const last = list[list.length - 1];
+    const hiltStatus = last.hiltStatus;
+    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+    if (Array.isArray(last.hiltTodos) && last.hiltTodos.length > 0) {
+      return hiltStatus === "in_progress";
+    }
+    return (last.tool_calls ?? []).some(
+      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+    );
+  };
+
+  // 获取联想提示词
+  const fetchSuggestions = useCallback(
+    async (_sessionId: string, _workId: number | string) => {
+      try {
+        const response = (await suggestionsControllerInstance.fetch(_sessionId, _workId)) as
+          | { guides?: string[] | string }
+          | null;
+        if (!response?.guides) return;
+        const guides =
+          Array.isArray(response.guides)
+            ? response.guides
+            : typeof response.guides === "string"
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(response.guides) as unknown;
+                    return Array.isArray(parsed) ? parsed.filter((g): g is string => typeof g === "string") : [];
+                  } catch {
+                    return [];
+                  }
+                })()
+              : [];
+        if (guides.length === 0) return;
+        const next = [...messagesRef.current];
+        const lastIndex = next.length - 1;
+        if (lastIndex < 0) return;
+        next[lastIndex] = {
+          ...next[lastIndex],
+          suggestions: guides,
+        };
+        emitMessages(next, true);
+      } catch {
+        // 联想提示词失败不打断主流程
+      }
+    },
+    []
+  );
+
+  const abortSuggestions = useCallback(() => {
+    suggestionsControllerInstance.abort();
+  }, []);
+
   const submit = useCallback(
     async (
       message: string,
@@ -208,10 +271,16 @@ export function useLangGraphStream(
       setError(null);
       messagesRef.current = [];
       setMessages([]);
+      setFiles({});
       setTodos([]);
       setIsStreaming(true);
       isStreamingRef.current = true;
+      streamCompletedRef.current = false;
       sensitiveWordHandledRef.current = false;
+      currentWriteOrEditorFilePathRef.current = "";
+      currentEditInfoListRef.current = [];
+      currentSessionIdRef.current = sessionId;
+      currentWorkIdRef.current = workId;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -279,7 +348,6 @@ export function useLangGraphStream(
                   : (payload as { message?: string })?.message || "发生错误，请稍后重试";
               let needSendErrorMsg = false;
               const errorCode = String((payload as { error?: string })?.error ?? "");
-              const lowerErrorCode = errorCode.toLowerCase();
               const isSensitiveWord = isSensitiveWordError(errMsg, errorCode);
               if (isSensitiveWord) {
                 if (!sensitiveWordHandledRef.current) {
@@ -374,6 +442,23 @@ export function useLangGraphStream(
                   if (key === "SummarizationMiddleware.before_model") continue;
                   const val = d[key];
                   if (!val || typeof val !== "object") continue;
+                  // 与 Vue 对齐：内容安全中间件命中时回滚最后一条 AI 消息
+                  if (key === "ContentSafetyMiddleware.after_model") {
+                    const middlewareMessages = (val as { messages?: Array<{ type?: string }> }).messages;
+                    if (Array.isArray(middlewareMessages) && middlewareMessages.length > 0) {
+                      const firstMessage = middlewareMessages[0];
+                      if (firstMessage?.type === "remove") {
+                        const currentMessages = [...messagesRef.current];
+                        for (let i = currentMessages.length - 1; i >= 0; i--) {
+                          if (currentMessages[i].type === "ai") {
+                            currentMessages.splice(i, 1);
+                            emitMessages(currentMessages, false);
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  }
                   if (Array.isArray((val as { messages?: unknown[] }).messages)) {
                     for (const msg of (val as { messages: unknown[] }).messages) {
                       if (!msg || typeof msg !== "object") continue;
@@ -501,10 +586,16 @@ export function useLangGraphStream(
             optionsRef.current.onError?.(err, !isSensitiveWord);
           },
           () => {
+            streamCompletedRef.current = true;
             setIsStreaming(false);
             isStreamingRef.current = false;
             abortControllerRef.current = null;
             optionsRef.current.onComplete?.();
+            const currentSessionId = currentSessionIdRef.current;
+            const currentWorkId = currentWorkIdRef.current;
+            if (currentSessionId && currentWorkId != null && !hasPendingHilt(messagesRef.current)) {
+              void fetchSuggestions(currentSessionId, currentWorkId);
+            }
           },
           { signal: controller.signal }
         );
@@ -520,9 +611,12 @@ export function useLangGraphStream(
         }
         setError(err);
         optionsRef.current.onError?.(err, !isSensitiveWord);
+        if (!controller.signal.aborted && !streamCompletedRef.current) {
+          optionsRef.current.onAbnormalTermination?.();
+        }
       }
     },
-    []
+    [fetchSuggestions]
   );
 
   const stop = useCallback(() => {
@@ -530,13 +624,10 @@ export function useLangGraphStream(
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    abortSuggestions();
     setIsStreaming(false);
     isStreamingRef.current = false;
-  }, []);
-
-  const fetchSuggestions = useCallback(async () => {}, []);
-
-  const abortSuggestions = useCallback(() => {}, []);
+  }, [abortSuggestions]);
 
   return {
     messages,
@@ -544,7 +635,7 @@ export function useLangGraphStream(
     todos,
     isStreaming,
     error,
-    suggestionsIsFetching: false,
+    suggestionsIsFetching: suggestionsState.isFetching,
     abortSuggestions,
     submit,
     stop,
