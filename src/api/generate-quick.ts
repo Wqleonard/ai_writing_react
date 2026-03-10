@@ -1,15 +1,45 @@
 import apiClient, { type PostStreamData, type RequestConfig } from "./index";
 import type { CreateWorkType } from "./generate-dialog";
-import type {
-  PostDocTemplateStreamContentRequestData,
-  PostDocTemplateStreamDetailedOutlineRequestData,
-  PostDocTemplateStreamOutlineRequestData,
-} from "@/api/writing-templates.ts";
+import type { PostDocTemplateStreamOutlineRequestData } from "@/api/writing-templates.ts";
 
 export interface CharacterCardData {
   title?: string;
   intro?: string;
   [key: string]: unknown;
+}
+
+export interface ScriptStorySynopsisResult {
+  title?: string;
+  synopsis?: string;
+  background?: string;
+  highlight?: string;
+  informationGap?: string;
+}
+
+export interface ScriptSplitOutlineDict {
+  episode: string;
+  episode_title: string;
+  episode_note: string;
+}
+
+export interface ScriptGenerateOutlineData {
+  outline_dict: ScriptSplitOutlineDict[];
+}
+
+export interface PostScriptTemplateStreamSplitOutlineRequestData {
+  novelPlot: string;
+  description: string;
+  brainStorm: ScriptStorySynopsisResult;
+  roleCards: Array<{
+    name?: string;
+    definition?: string;
+    age?: string;
+    personality?: string;
+    biography?: string;
+  }>;
+  episodeNum: number;
+  episodeNumAndPart: string;
+  existingEpisodes: string[];
 }
 
 const getQuickCharacterSettings = (
@@ -60,37 +90,73 @@ const postDocTemplateStreamOutline = (
   return apiClient.postStream("/api/works/doc/outline", data, onData, onError, onComplete, config);
 };
 
-const postDocTemplateStreamDetailedOutline = (
-  data: PostDocTemplateStreamDetailedOutlineRequestData,
-  onData: (data: PostStreamData) => void,
-  onError: (error: any) => void,
-  onComplete: () => void,
-  config?: { signal?: AbortSignal }
+const getScriptCharacterSettings = (
+  novelPlot: string,
+  description?: string,
+  brainStorm?: ScriptStorySynopsisResult,
+  config?: RequestConfig
 ) => {
-  return apiClient.postStream(
-    "/api/works/doc/detailed-outline",
-    data,
-    onData,
-    onError,
-    onComplete,
+  return apiClient.post(
+    "/api/works/script/role-setting",
+    {
+      novelPlot,
+      description,
+      brainStorm,
+    },
     config
   );
 };
 
-const postDocTemplateStreamContent = (
-  data: PostDocTemplateStreamContentRequestData,
+const getScriptStorySynopsisReq = (
+  novelPlot: string,
+  description: string,
+  config?: RequestConfig
+) => {
+  return apiClient.post(
+    "/api/works/script/brain-storm",
+    {
+      novelPlot,
+      description,
+    },
+    config
+  );
+};
+
+const getScriptSplitOutline = (
+  novelPlot: string,
+  description: string,
+  brainStorm: ScriptStorySynopsisResult,
+  episodeNum: number,
+  config?: RequestConfig
+) => {
+  return apiClient.post(
+    "/api/works/script/split-outline",
+    {
+      novelPlot,
+      description,
+      brainStorm,
+      episodeNum,
+    },
+    config
+  );
+};
+
+const postScriptTemplateStreamOutline = (
+  data: PostScriptTemplateStreamSplitOutlineRequestData,
   onData: (data: PostStreamData) => void,
   onError: (error: any) => void,
   onComplete: () => void,
   config?: { signal?: AbortSignal }
 ) => {
-  return apiClient.postStream("/api/works/chat/doc/writing", data, onData, onError, onComplete, config);
+  return apiClient.postStream("/api/works/script/outline", data, onData, onError, onComplete, config);
 };
 
 export {
   getQuickCharacterSettings,
   getQuickStoriesReq,
   postDocTemplateStreamOutline,
-  postDocTemplateStreamDetailedOutline,
-  postDocTemplateStreamContent,
+  getScriptCharacterSettings,
+  getScriptStorySynopsisReq,
+  getScriptSplitOutline,
+  postScriptTemplateStreamOutline,
 };
