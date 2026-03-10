@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
-import { openDialog } from '@/lib/openDialog'
 import clsx from 'clsx'
 import { toast } from 'sonner'
 import { useOptionsStore } from '@/stores/optionsStore'
@@ -355,7 +354,7 @@ export const AddNewPromptsDialog = ({
 
           {currentStep === 1 && (
             <div className="space-y-3">
-              <label className="block text-sm font-medium">系统提示词</label>
+              <label className="block text-xl font-medium">系统提示词<span className="ml-1">*</span></label>
               <Textarea
                 value={formData.systemPrompt}
                 onChange={(e) =>
@@ -364,8 +363,8 @@ export const AddNewPromptsDialog = ({
                 placeholder="控制生成内容质量"
                 rows={10}
               />
-              <label className="block pt-2 text-sm font-medium">
-                输出格式（选填）
+              <label className="block pt-2 text-xl font-medium">
+                输出格式<span className="text-sm text-gray-400">（定义生成结果的格式,不填入则生成格式不固定,非必填）</span>
               </label>
               <Textarea
                 value={formData.outputFormat}
@@ -389,8 +388,7 @@ export const AddNewPromptsDialog = ({
                     value={mockUserDemo}
                     onChange={(e) => setMockUserDemo(e.target.value)}
                     placeholder="请填写用户示例..."
-                    className="flex-1"
-                    areaClassName="h-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="flex-1 ring-0! border-none!"
                     maxLength={500}
                     showWordLimit
                   />
@@ -431,7 +429,7 @@ export const AddNewPromptsDialog = ({
                   <Textarea
                     value={formData.generateOutput}
                     readOnly
-                    className="min-h-[80px] resize-none border-0 bg-transparent focus-visible:ring-0"
+                    className="min-h-[80px] resize-none border-0 ring-0!"
                     placeholder="生成结果将显示在这里..."
                     areaClassName="border-0 bg-transparent focus-visible:ring-0"
                     rows={12}
@@ -443,7 +441,7 @@ export const AddNewPromptsDialog = ({
 
           {currentStep === 3 && (
             <div className="space-y-4">
-              <div className="text-base font-medium text-black">提示词工具信息</div>
+              <div className="text-base font-medium text-xl">提示词工具信息</div>
               <div className="min-h-[calc(24px+24px*5)] rounded-lg border border-[#d9d9d9] bg-[#f7f7f7] p-3 text-base leading-6">
                 <div>名称: {formData.name}</div>
                 <div>描述：{formData.description}</div>
@@ -455,7 +453,7 @@ export const AddNewPromptsDialog = ({
                 </div>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium">可见性设置</label>
+                <label className="mb-2 block text-xl font-medium">可见性设置</label>
                 <Select
                   value={formData.isPublic ? 'public' : 'private'}
                   onValueChange={(v) =>
@@ -505,5 +503,3 @@ export const AddNewPromptsDialog = ({
     </Dialog>
   )
 }
-
-export const openAddNewPromptsDialog = (onSubmit?: () => void) => openDialog(AddNewPromptsDialog, { onSubmit })
