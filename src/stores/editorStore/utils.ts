@@ -23,21 +23,46 @@ function normalizeNodeIdForCompare(id: string): string {
 export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
   const nodeMap = new Map<string, FileTreeNode>();
   const rootChildren: FileTreeNode[] = [];
+  const orderedNodePaths: string[] = [];
   const keys = Object.keys(serverData);
-  const attachedNodePaths = new Set<string>();
+  const createDirectoryNode = (parts: string[]): FileTreeNode => ({
+    id: parts.join("/"),
+    key: parts.join("-"),
+    label: parts[parts.length - 1] ?? "",
+    content: "",
+    isDirectory: true,
+    path: parts,
+    fileType: "directory",
+    children: [],
+  });
+
+  const ensureDirectoryPath = (parts: string[]) => {
+    for (let i = 1; i <= parts.length; i++) {
+      const segmentParts = parts.slice(0, i);
+      const segmentPath = segmentParts.join("/");
+      if (!segmentPath || nodeMap.has(segmentPath)) continue;
+      nodeMap.set(segmentPath, createDirectoryNode(segmentParts));
+      orderedNodePaths.push(segmentPath);
+    }
+  };
 
   for (const key of keys) {
     if (!key.endsWith("/") && !HAS_EXT.test(key)) continue;
     const pathParts = key.split("/").filter((p) => p !== "");
+    if (pathParts.length === 0) continue;
     const isDir = key.endsWith("/");
     const nodePath = pathParts.join("/");
-    if (!nodePath || nodeMap.has(nodePath)) continue;
+
+    // 文件路径下，先确保祖先目录都存在；目录路径则确保目录链存在。
+    ensureDirectoryPath(pathParts.slice(0, isDir ? pathParts.length : pathParts.length - 1));
+
+    if (nodeMap.has(nodePath)) continue;
     const label = isDir
       ? pathParts[pathParts.length - 1]
       : pathParts[pathParts.length - 1].replace(/\.[^.]+$/, "") || pathParts[pathParts.length - 1];
     const fileType = isDir ? "directory" : getFileExtension(pathParts[pathParts.length - 1] ?? "");
 
-    const node: FileTreeNode = {
+    nodeMap.set(nodePath, {
       id: nodePath,
       key: pathParts.join("-"),
       label,
@@ -46,59 +71,27 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
       path: pathParts,
       fileType: fileType as "directory" | "md" | string,
       children: [],
-    };
-    nodeMap.set(nodePath, node);
+    });
+    orderedNodePaths.push(nodePath);
   }
 
-  for (const key of keys) {
-    if (!key.endsWith("/") && !HAS_EXT.test(key)) continue;
-    const pathParts = key.split("/").filter((p) => p !== "");
-    const nodePath = pathParts.join("/");
-    if (!nodePath || attachedNodePaths.has(nodePath)) continue;
+  const attachedNodePaths = new Set<string>();
+  for (const nodePath of orderedNodePaths) {
+    if (attachedNodePaths.has(nodePath)) continue;
     const node = nodeMap.get(nodePath);
     if (!node) continue;
     attachedNodePaths.add(nodePath);
-
-    const parentPath = pathParts.slice(0, -1).join("/");
-    if (parentPath === "") {
-      if (!rootChildren.some((c) => c.id === node.id)) {
-        rootChildren.push(node);
-      }
-    } else {
-      let parent = nodeMap.get(parentPath);
-      if (!parent) {
-        const parts = parentPath.split("/").filter((p) => p !== "");
-        parent = {
-          id: parentPath,
-          key: parts.join("-"),
-          label: parts[parts.length - 1] ?? parentPath,
-          content: "",
-          isDirectory: true,
-          path: parts,
-          fileType: "directory",
-          children: [],
-        };
-        nodeMap.set(parentPath, parent);
-        const grandParentPath = parts.slice(0, -1).join("/");
-        if (grandParentPath === "") {
-          if (!rootChildren.some((c) => c.id === parent!.id)) {
-            rootChildren.push(parent);
-          }
-        } else {
-          const grandParent = nodeMap.get(grandParentPath);
-          if (grandParent) {
-            if (!grandParent.children.some((c) => c.id === parent!.id)) {
-              grandParent.children.push(parent);
-            }
-          } else if (!rootChildren.some((c) => c.id === parent!.id)) {
-            rootChildren.push(parent);
-          }
-        }
-      }
-      if (!parent.children.some((c) => c.id === node.id)) {
-        parent.children.push(node);
-      }
+    const parentPath = node.path.slice(0, -1).join("/");
+    if (!parentPath) {
+      if (!rootChildren.some((c) => c.id === node.id)) rootChildren.push(node);
+      continue;
     }
+    const parent = nodeMap.get(parentPath);
+    if (!parent) {
+      if (!rootChildren.some((c) => c.id === node.id)) rootChildren.push(node);
+      continue;
+    }
+    if (!parent.children.some((c) => c.id === node.id)) parent.children.push(node);
   }
 
   return rootChildren;
