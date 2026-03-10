@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { toast } from "sonner";
-import { serverDataToTree } from "@/stores/editorStore/utils";
+import { serverDataToTree, findFirstMdNode } from "@/stores/editorStore/utils";
 import {
   getWorksByIdReq,
   updateWorkVersionReq,
@@ -51,6 +51,7 @@ interface EditorActions {
   setServerData: (data: ServerData) => void;
   /** 更新单个文件内容（对应 Vue updateNodeContentById 的简化） */
   setServerDataFile: (path: string, content: string) => void;
+  setTreeData: (treeData: FileTreeNode[]) => void;
   setCurrentContent: (content: string) => void;
   setNewNodeIds: (ids: string[]) => void;
   markNewNodeId: (id: string) => void;
@@ -110,6 +111,42 @@ const normalizeServerData = (data: ServerData): ServerData => {
   return next;
 };
 
+const updateTreeNodeContent = (
+  nodes: FileTreeNode[],
+  nodeId: string,
+  content: string
+): FileTreeNode[] => {
+  let changed = false;
+  const next = nodes.map((node) => {
+    if (node.id === nodeId) {
+      changed = true;
+      return { ...node, content };
+    }
+    if (!node.children?.length) return node;
+    const children = updateTreeNodeContent(node.children, nodeId, content);
+    if (children === node.children) return node;
+    changed = true;
+    return { ...node, children };
+  });
+  return changed ? next : nodes;
+};
+
+const treeDataToServerData = (nodes: FileTreeNode[]): ServerData => {
+  const next: ServerData = {};
+  const walk = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      if (node.isDirectory) {
+        next[`${node.id}/`] = "";
+      } else {
+        next[node.id] = typeof node.content === "string" ? node.content : "";
+      }
+      if (node.children?.length) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return next;
+};
+
 export const useEditorStore = create<EditorState & EditorActions>()(
   devtools((set, get) => ({
     ...initialState,
@@ -139,10 +176,12 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       const nextServerData = { ...state.serverData, [path]: normalizedContent };
       return {
         serverData: nextServerData,
-        treeData: serverDataToTree(nextServerData),
+        treeData: updateTreeNodeContent(state.treeData, path, normalizedContent),
         currentContent: path === state.currentEditingId ? normalizedContent : state.currentContent,
       };
     }),
+
+  setTreeData: (treeData) => set({ treeData }),
 
   setCurrentContent: (content) =>
     set((state) => {
@@ -157,7 +196,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         return {
           currentContent: normalizedContent,
           serverData: { ...state.serverData, [fileKey]: normalizedContent },
-          treeData: serverDataToTree({ ...state.serverData, [fileKey]: normalizedContent }),
+          treeData: updateTreeNodeContent(state.treeData, fileKey, normalizedContent),
         };
       }
     }),
@@ -303,13 +342,26 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         }
       }
       const normalizedServerData = normalizeServerData(serverData);
-      const fileKey = get().currentEditingId || DEFAULT_EDITING_FILE_KEY;
+      const treeData = serverDataToTree(normalizedServerData);
       set({
         serverData: normalizedServerData,
-        treeData: serverDataToTree(normalizedServerData),
-        currentContent: normalizedServerData[fileKey] ?? "",
+        treeData,
       });
       set({ newNodeIdMap: {} });
+      // 在初始化状态落库后，再基于初始化后的 treeData/currentEditingId 计算目标文件
+      const initializedState = get();
+      const firstMdNode = findFirstMdNode(
+        initializedState.treeData,
+        initializedState.currentEditingId
+      );
+      const fileKey =
+        firstMdNode?.id ??
+        initializedState.currentEditingId ??
+        DEFAULT_EDITING_FILE_KEY;
+      set({
+        currentEditingId: fileKey,
+        currentContent: initializedState.serverData[fileKey] ?? "",
+      });
 
       const sessions = req?.sessions;
       if (Array.isArray(sessions)) {
@@ -323,7 +375,8 @@ export const useEditorStore = create<EditorState & EditorActions>()(
   },
 
   saveEditorData: async (saveStatus = "0", _needLocalCache = true) => {
-    const { workId, workInfo, serverData } = get();
+    const { workId, workInfo, treeData } = get();
+    const serverData = treeDataToServerData(treeData);
     console.log('saveEditorData', workId, workInfo, serverData)
     if (!workId) {
       toast.error("无作品 ID，无法保存");
@@ -333,6 +386,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       const content = JSON.stringify(serverData);
       await updateWorkVersionReq(workId, content, saveStatus);
       set({
+        serverData,
         workInfo: {
           ...workInfo,
           updatedTime: new Date().toISOString(),

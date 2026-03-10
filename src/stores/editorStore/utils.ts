@@ -70,7 +70,7 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
         const parts = parentPath.split("/").filter((p) => p !== "");
         parent = {
           id: parentPath,
-          key: buildNodeKey(parentPath, true),
+          key: parts.join("-"),
           label: parts[parts.length - 1] ?? parentPath,
           content: "",
           isDirectory: true,
@@ -102,6 +102,26 @@ export function serverDataToTree(serverData: ServerData): FileTreeNode[] {
   }
 
   return rootChildren;
+}
+
+/** Init时使用，找到第一个为md的节点 作为 currentEditingId */
+export function findFirstMdNode(nodes: FileTreeNode[], id?: string): FileTreeNode | null {
+  const flat: FileTreeNode[] = [];
+  const flatten = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      flat.push(node);
+      if (node.children?.length) flatten(node.children);
+    }
+  };
+  flatten(nodes);
+
+  if (id !== undefined) {
+    const targetId = normalizeNodeIdForCompare(id);
+    const found = flat.find((n) => normalizeNodeIdForCompare(n.id) === targetId);
+    if (found) return found;
+  }
+
+  return flat.find((n) => n.fileType === "md") ?? null;
 }
 
 /** 文件树根（id='root'）转为 ServerData，用于保存 */

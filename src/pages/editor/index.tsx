@@ -923,18 +923,18 @@ const MarkdownEditorPage = () => {
   ]);
 
   // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
-  useEffect(() => {
-    if (resetEditorStoreTimerRef.current != null) {
-      window.clearTimeout(resetEditorStoreTimerRef.current);
-      resetEditorStoreTimerRef.current = null;
-    }
-    return () => {
-      resetEditorStoreTimerRef.current = window.setTimeout(() => {
-        initEditorStore();
-        resetEditorStoreTimerRef.current = null;
-      }, 0);
-    };
-  }, [initEditorStore]);
+  // useEffect(() => {
+  //   if (resetEditorStoreTimerRef.current != null) {
+  //     window.clearTimeout(resetEditorStoreTimerRef.current);
+  //     resetEditorStoreTimerRef.current = null;
+  //   }
+  //   return () => {
+  //     resetEditorStoreTimerRef.current = window.setTimeout(() => {
+  //       initEditorStore();
+  //       resetEditorStoreTimerRef.current = null;
+  //     }, 0);
+  //   };
+  // }, [initEditorStore]);
 
   useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
@@ -1032,29 +1032,29 @@ const MarkdownEditorPage = () => {
     }
   }, [pendingStepTemplate, serverData, currentEditingId]);
 
-  // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
-  useEffect(() => {
-    // serverData 还未加载完成
-    if (!serverData || Object.keys(serverData).length === 0) return;
-    // 用户已经有当前编辑文件且存在于 serverData，则不干预
-    if (currentEditingId && serverData[currentEditingId] !== undefined) return;
+  // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
+  // useEffect(() => {
+  //   // serverData 还未加载完成
+  //   if (!serverData || Object.keys(serverData).length === 0) return;
+  //   // 用户已经有当前编辑文件且存在于 serverData，则不干预
+  //   if (currentEditingId && serverData[currentEditingId] !== undefined) return;
 
-    const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
-    if (allMdKeys.length === 0) return;
+  //   const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
+  //   if (allMdKeys.length === 0) return;
 
-    // 优先正文目录下的章节，例如 "正文/第一章.md"
-    const chapterCandidates = allMdKeys
-      .filter((k) => k.startsWith("正文/"))
-      .sort();
+  //   // 优先正文目录下的章节，例如 "正文/第一章.md"
+  //   const chapterCandidates = allMdKeys
+  //     .filter((k) => k.startsWith("正文/"))
+  //     .sort();
 
-    const targetKey =
-      chapterCandidates[0] ??
-      allMdKeys.sort()[0] ??
-      DEFAULT_EDITING_FILE_KEY;
+  //   const targetKey =
+  //     chapterCandidates[0] ??
+  //     allMdKeys.sort()[0] ??
+  //     DEFAULT_EDITING_FILE_KEY;
 
-    const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
-    setCurrentEditingId(targetKey);
-  }, [serverData, currentEditingId]);
+  //   const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
+  //   setCurrentEditingId(targetKey);
+  // }, [serverData, currentEditingId]);
 
   const handleBackClick = useCallback(() => {
     // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
@@ -1220,10 +1220,11 @@ const MarkdownEditorPage = () => {
       }
       const parsed = JSON.parse(req.content) as Record<string, string>;
       setServerData(parsed);
-      const allMdKeys = Object.keys(parsed).filter((k) => k.endsWith(".md")).sort();
-      if (allMdKeys.length > 0) {
-        useEditorStore.getState().setCurrentEditingId(allMdKeys[0]);
-      }
+      /**  TODO 修改tree的实现后进行重新设置 setCurrentEditingId*/
+      // const allMdKeys = Object.keys(parsed).filter((k) => k.endsWith(".md")).sort();
+      // if (allMdKeys.length > 0) {
+      //   useEditorStore.getState().setCurrentEditingId(allMdKeys[0]);
+      // }
       toast.success("版本恢复成功");
       setShowTimeMachineDialog(false);
     } catch {

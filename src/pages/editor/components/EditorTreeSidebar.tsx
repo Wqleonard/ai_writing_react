@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import IconFont from "@/components/IconFont/Iconfont"
 import { ChevronRight, TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
 import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
-import type { FileTreeNode, ServerData } from "@/stores/editorStore/types"
+import type { FileTreeNode } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
 import {
@@ -108,45 +109,51 @@ function reorderInSameLevel(
   return next
 }
 
-function buildServerDataByTreeOrder(
-  nodes: FileTreeNode[],
-  prevServerData: ServerData
-): ServerData {
-  const ordered: ServerData = {}
-  const usedKeys = new Set<string>()
+const removeNodeById = (nodes: FileTreeNode[], targetId: string): FileTreeNode[] =>
+  nodes
+    .filter((node) => node.id !== targetId)
+    .map((node) =>
+      node.children?.length
+        ? { ...node, children: removeNodeById(node.children, targetId) }
+        : node
+    )
 
-  const walk = (list: FileTreeNode[]) => {
-    for (const node of list) {
-      if (node.isDirectory) {
-        const dirKey = `${node.id}/`
-        if (Object.prototype.hasOwnProperty.call(prevServerData, dirKey)) {
-          ordered[dirKey] = prevServerData[dirKey] ?? ""
-          usedKeys.add(dirKey)
-        }
-        if (!node.children?.length) {
-          ordered[dirKey] = prevServerData[dirKey] ?? ""
-          usedKeys.add(dirKey)
-        }
-        walk(node.children ?? [])
-      } else {
-        const fileKey = node.id
-        ordered[fileKey] = prevServerData[fileKey] ?? node.content ?? ""
-        usedKeys.add(fileKey)
+const rewriteSubtreePath = (
+  node: FileTreeNode,
+  oldBaseLen: number,
+  newBasePath: string[]
+): FileTreeNode => {
+  const suffix = node.path.slice(oldBaseLen)
+  const nextPath = [...newBasePath, ...suffix]
+  const nextId = nextPath.join("/")
+  const nextKey = nextPath.join("-")
+  return {
+    ...node,
+    id: nextId,
+    key: nextKey,
+    path: nextPath,
+    children: (node.children ?? []).map((child) =>
+      rewriteSubtreePath(child, oldBaseLen, newBasePath)
+    ),
+  }
+}
+
+const renameNodeById = (
+  nodes: FileTreeNode[],
+  targetId: string,
+  newBasePath: string[],
+  newLabel: string
+): FileTreeNode[] =>
+  nodes.map((node) => {
+    if (node.id === targetId) {
+      return {
+        ...rewriteSubtreePath(node, node.path.length, newBasePath),
+        label: newLabel,
       }
     }
-  }
-
-  walk(nodes)
-
-  // 兜底保留未出现在树中的键，避免意外数据丢失
-  Object.keys(prevServerData).forEach((k) => {
-    if (!usedKeys.has(k)) {
-      ordered[k] = prevServerData[k]
-    }
+    if (!node.children?.length) return node
+    return { ...node, children: renameNodeById(node.children, targetId, newBasePath, newLabel) }
   })
-
-  return ordered
-}
 
 interface TreeNodeRowProps {
   node: FileTreeNode
@@ -298,8 +305,9 @@ const TreeNodeRow = ({
           </div>
         )}
       </div>
-      {isDir && expanded && (
-        <div className="w-full">
+      {isDir && (
+        <Collapsible open={expanded} className="w-full">
+          <CollapsibleContent className="w-full">
           {node.children.map((child) => (
             <TreeNodeRow
               key={child.id}
@@ -321,7 +329,8 @@ const TreeNodeRow = ({
               onDragEnd={onDragEnd}
             />
           ))}
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   )
@@ -329,17 +338,13 @@ const TreeNodeRow = ({
 
 export interface EditorTreeSidebarProps {
   className?: string
-  /** 保存后回调（如刷新作品阶段） */
-  onAfterSaveEditorData?: () => void
 }
 
 export const EditorTreeSidebar = ({
   className,
-  onAfterSaveEditorData,
 }: EditorTreeSidebarProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
-  const serverData = useEditorStore((s) => s.serverData)
   const treeData = useEditorStore((s) => s.treeData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
   const newNodeIdMap = useEditorStore((s) => s.newNodeIdMap)
@@ -347,10 +352,7 @@ export const EditorTreeSidebar = ({
   const clearNewNodeId = useEditorStore((s) => s.clearNewNodeId)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
-  const setServerData = useEditorStore((s) => s.setServerData)
-  const addServerDataPath = useEditorStore((s) => s.addServerDataPath)
-  const deleteServerDataPath = useEditorStore((s) => s.deleteServerDataPath)
-  const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath)
+  const setTreeData = useEditorStore((s) => s.setTreeData)
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitleValue, setEditingTitleValue] = useState(workInfo.title)
@@ -527,33 +529,93 @@ export const EditorTreeSidebar = ({
 
   const handleAddFileUnder = useCallback(
     (parent: FileTreeNode) => {
-      const siblings = parent.children ?? []
-      const base = "新文件"
-      const unique = generateUniqueName(siblings, base, false)
-      const path =
-        parent.path.length > 0
-          ? [...parent.path, `${unique}.md`].join("/")
-          : `${unique}.md`
-      addServerDataPath(path, "")
-      markNewNodeId(path)
-      setCurrentEditingId(path)
+      const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+      const findNodeById = (nodes: FileTreeNode[], id: string): FileTreeNode | null => {
+        for (const node of nodes) {
+          if (node.id === id) return node
+          if (node.children?.length) {
+            const found = findNodeById(node.children, id)
+            if (found) return found
+          }
+        }
+        return null
+      }
+
+      const targetNode = findNodeById(nextTreeData, parent.id)
+      if (!targetNode) return
+
+      if (!targetNode.children) {
+        targetNode.children = []
+      }
+      const siblings = targetNode.children
+      const unique = generateUniqueName(siblings, "新文件", false)
+      const newPath = [...(targetNode.path ?? []), `${unique}.md`]
+      const newNodeId = newPath.join("/")
+      const newNodeKey = newPath.join("-")
+
+      const nextNode: FileTreeNode = {
+        id: newNodeId,
+        key: newNodeKey,
+        label: unique,
+        content: "",
+        isDirectory: false,
+        path: newPath,
+        fileType: "md",
+        children: [],
+      }
+
+      targetNode.children.push(nextNode)
+      setTreeData([...nextTreeData])
+      markNewNodeId(newNodeId)
+      setCurrentEditingId(newNodeId)
     },
-    [addServerDataPath, markNewNodeId, setCurrentEditingId]
+    [markNewNodeId, setCurrentEditingId, setTreeData, treeData]
   )
 
   const handleAddFolderUnder = useCallback(
     (parent: FileTreeNode) => {
-      const siblings = parent.children ?? []
-      const unique = generateUniqueName(siblings, "新文件夹", true)
-      const path =
-        parent.path.length > 0
-          ? [...parent.path, unique].join("/") + "/"
-          : unique + "/"
-      addServerDataPath(path, "")
-      markNewNodeId(path.slice(0, -1))
+      const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+      const findNodeById = (nodes: FileTreeNode[], id: string): FileTreeNode | null => {
+        for (const node of nodes) {
+          if (node.id === id) return node
+          if (node.children?.length) {
+            const found = findNodeById(node.children, id)
+            if (found) return found
+          }
+        }
+        return null
+      }
+
+      const targetNode = findNodeById(nextTreeData, parent.id)
+      if (!targetNode) return
+
+      if (!targetNode.children) {
+        targetNode.children = []
+      }
+      const siblings = targetNode.children
+      const unique = generateUniqueName(siblings, "新建文件夹", true)
+      const newPath = [...(targetNode.path ?? []), unique]
+
+      const newNodeId = newPath.join("/")
+      const newNodeKey = newPath.join("-")
+
+      const nextNode: FileTreeNode = {
+        id: newNodeId,
+        key: newNodeKey,
+        label: unique,
+        content: "",
+        isDirectory: true,
+        path: newPath,
+        fileType: "directory",
+        children: [],
+      }
+
+      targetNode.children.push(nextNode)
+      setTreeData([...nextTreeData])
+      markNewNodeId(newNodeId)
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [addServerDataPath, markNewNodeId]
+    [markNewNodeId, setTreeData, treeData]
   )
 
   const handleRename = useCallback(() => {
@@ -588,19 +650,44 @@ export const EditorTreeSidebar = ({
     const newPath = renameTarget.isDirectory
       ? [...renameTarget.path.slice(0, -1), newName].join("/") + "/"
       : [...renameTarget.path.slice(0, -1), newName + ext].join("/")
-    renameServerDataPath(oldPath, newPath)
+    const nextPathId = newPath.replace(/\/$/, "")
+    const renamedTree = renameNodeById(treeData, oldPath, nextPathId.split("/").filter(Boolean), newName)
+    setTreeData(renamedTree)
+    if (renameTarget.isDirectory) {
+      setExpandedIds((prev) => {
+        const next = new Set<string>()
+        prev.forEach((id) => {
+          if (id === oldPath) {
+            next.add(nextPathId)
+            return
+          }
+          if (id.startsWith(`${oldPath}/`)) {
+            next.add(`${nextPathId}/${id.slice(oldPath.length + 1)}`)
+            return
+          }
+          next.add(id)
+        })
+        return next
+      })
+    }
+    if (currentEditingId === oldPath) {
+      setCurrentEditingId(nextPathId)
+    } else if (renameTarget.isDirectory && currentEditingId.startsWith(`${oldPath}/`)) {
+      const suffix = currentEditingId.slice(oldPath.length + 1)
+      setCurrentEditingId(`${nextPathId}/${suffix}`)
+    }
     toast.success(`已重命名为: ${newName}`)
     setRenameOpen(false)
     setRenameTarget(null)
     setRenameValue("")
-  }, [renameTarget, renameValue, getSiblings, renameServerDataPath])
+  }, [renameTarget, renameValue, getSiblings, setTreeData, treeData, currentEditingId, setCurrentEditingId])
 
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) {
       setDeleteOpen(false)
       return
     }
-    deleteServerDataPath(deleteTarget.id)
+    setTreeData(removeNodeById(treeData, deleteTarget.id))
     const prefix = deleteTarget.id + (deleteTarget.isDirectory ? "/" : "")
     if (
       currentEditingId === deleteTarget.id ||
@@ -611,7 +698,7 @@ export const EditorTreeSidebar = ({
     setDeleteOpen(false)
     setDeleteTarget(null)
     toast.success("已删除")
-  }, [deleteTarget, currentEditingId, deleteServerDataPath, setCurrentEditingId])
+  }, [deleteTarget, currentEditingId, setCurrentEditingId, setTreeData, treeData])
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -623,20 +710,50 @@ export const EditorTreeSidebar = ({
   }, [])
 
   const addFileAtRoot = useCallback(() => {
-    const unique = generateUniqueName(treeData, "新文件", false)
-    const path = `${unique}.md`
-    addServerDataPath(path, "")
-    markNewNodeId(path)
-    setCurrentEditingId(path)
-  }, [treeData, addServerDataPath, markNewNodeId, setCurrentEditingId])
+    const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+    const unique = generateUniqueName(nextTreeData, "新文件", false)
+    const newPath = [`${unique}.md`]
+    const newNodeId = newPath.join("/")
+    const newNodeKey = newPath.join("-")
+    const nextNode: FileTreeNode = {
+      id: newNodeId,
+      key: newNodeKey,
+      label: unique,
+      content: "",
+      isDirectory: false,
+      path: newPath,
+      fileType: "md",
+      children: [],
+    }
+
+    nextTreeData.push(nextNode)
+    setTreeData([...nextTreeData])
+    markNewNodeId(newNodeId)
+    setCurrentEditingId(newNodeId)
+  }, [treeData, markNewNodeId, setCurrentEditingId, setTreeData])
 
   const addFolderAtRoot = useCallback(() => {
-    const unique = generateUniqueName(treeData, "新文件夹", true)
-    const path = unique + "/"
-    addServerDataPath(path, "")
-    markNewNodeId(unique)
+    const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+    const unique = generateUniqueName(nextTreeData, "新建文件夹", true)
+    const newPath = [unique]
+    const newNodeId = newPath.join("/")
+    const newNodeKey = newPath.join("-")
+    const nextNode: FileTreeNode = {
+      id: newNodeId,
+      key: newNodeKey,
+      label: unique,
+      content: "",
+      isDirectory: true,
+      path: newPath,
+      fileType: "directory",
+      children: [],
+    }
+
+    nextTreeData.push(nextNode)
+    setTreeData([...nextTreeData])
+    markNewNodeId(newNodeId)
     setExpandedIds((prev) => new Set(prev))
-  }, [treeData, addServerDataPath, markNewNodeId])
+  }, [treeData, markNewNodeId, setTreeData])
 
   const resetDragState = useCallback(() => {
     setDragState({
@@ -733,8 +850,7 @@ export const EditorTreeSidebar = ({
         node.id,
         dragState.dropPosition
       )
-      const nextServerData = buildServerDataByTreeOrder(reordered, serverData)
-      setServerData(nextServerData)
+      setTreeData(reordered)
       resetDragState()
     },
     [
@@ -742,8 +858,7 @@ export const EditorTreeSidebar = ({
       dragState.draggedId,
       dragState.dropPosition,
       resetDragState,
-      serverData,
-      setServerData,
+      setTreeData,
       treeData,
     ]
   )
