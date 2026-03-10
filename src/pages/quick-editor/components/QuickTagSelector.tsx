@@ -341,7 +341,7 @@ export const QuickTagSelector = ({
   const chapterPercent = useMemo(() => ((chapterNum - 1) / 19) * 100, [chapterNum]);
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden pr-[120px] pb-[50px] pl-0">
+    <div className="relative flex h-full flex-col overflow-hidden pr-[120px] pb-[50px] py-5 px-4">
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.1)_transparent] [&::-webkit-scrollbar]:w-[2px] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,0.1)]">
         {categories.map((category, index) => (
           <div key={`${category.category}-${category.categoryId}`} className={`${index > 0 ? "pt-[clamp(8px,1.2vh,12px)]" : ""}`}>

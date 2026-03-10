@@ -1,6 +1,9 @@
 import { memo, useMemo } from "react";
 import { toast } from "sonner";
 import { addNote } from "@/api/notes";
+import IconFont from "@/components/IconFont/Iconfont";
+import { Iconfont } from "@/components/IconFont";
+import { LinkButton } from "@/components/ui/LinkButton";
 
 export interface QuickStoryCardData {
   title: string;
@@ -88,7 +91,7 @@ const QuickStoryCard = ({
 
   return (
     <div
-      className="flex h-full min-h-[400px] w-full cursor-pointer flex-col overflow-hidden rounded-[10px] bg-[#fff8e5] p-[clamp(15px,1.5vw,23px)] shadow-[0_0_20px_0_rgba(58,37,0,0.15)]"
+      className="flex h-110 w-full cursor-pointer flex-col overflow-hidden rounded-[10px] bg-[#fff8e5] p-[clamp(15px,1.5vw,23px)] shadow-[0_0_20px_0_rgba(58,37,0,0.15)]"
       onClick={handleCardClick}
     >
       {loading || !data?.title ? (
@@ -96,23 +99,24 @@ const QuickStoryCard = ({
       ) : (
         <div className="flex h-full min-h-0 flex-col">
           <div className="mb-0.5 flex h-[21px] shrink-0 items-start justify-end gap-3">
-            <button
-              className="text-base leading-[1.32em] tracking-[0.04em] text-[#999] hover:text-(--bg-editor-save)"
+            <LinkButton
+              className="flex items-center gap-1 text-base text-[#999]"
               onClick={handleAddNote}
             >
-              添加笔记
-            </button>
+              <IconFont unicode="&#xe64c;" />
+              <span>添加笔记</span>
+            </LinkButton>
             {showEdit && (
-              <button
-                className="flex items-center gap-1 text-base leading-[1.32em] tracking-[0.04em] text-[#999] hover:text-(--bg-editor-save)"
+              <LinkButton
+                className="flex items-center gap-1 text-base text-[#999]"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit?.(e);
                 }}
               >
-                <span className="inline-block h-[20px] w-[20px] rounded border border-[#bbb] text-center text-[12px] leading-[18px]">✎</span>
+                <Iconfont unicode="&#xea48;" />
                 <span>编辑</span>
-              </button>
+              </LinkButton>
             )}
           </div>
 

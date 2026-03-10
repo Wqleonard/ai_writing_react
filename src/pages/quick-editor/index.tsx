@@ -706,7 +706,7 @@ const QuickEditorPage = () => {
 
       <div className="relative flex h-[calc(100vh-56px)] min-h-0 flex-1 overflow-hidden bg-(--bg-editor)">
         <aside
-          className={`relative flex h-full flex-col bg-(--bg-editor) transition-all duration-300 ${isSidebarExpanded ? "w-[352px]" : "w-[184px]"}`}
+          className={`relative flex h-full flex-col bg-(--bg-editor) transition-all duration-300 ${isSidebarExpanded ? "w-84" : "w-[184px]"}`}
         >
           {isSidebarExpanded ? (
             <div className="mt-[87px] ml-[49px] flex max-h-[calc(100vh-183px)] w-[258px] flex-col overflow-hidden rounded-[45px] bg-[#f3f3f3] pt-6 pb-[22px]">
@@ -902,7 +902,6 @@ const QuickEditorPage = () => {
                         locked={lockedDirectories.has("故事梗概.md")}
                         hasNextContent={hasNextDirectoryContent("故事梗概.md")}
                         triggerGenerate={storyGenerateTrigger}
-                        workTags={(workInfo?.workTags ?? []).map((tag) => ({ name: tag.name }))}
                         onConfirm={(storyData) => void handleStoryConfirmWithData(storyData)}
                         onRevert={() => void handleStoryRevert()}
                         onRevertToCurrent={() => void handleRevertToCurrentStep("故事梗概.md")}

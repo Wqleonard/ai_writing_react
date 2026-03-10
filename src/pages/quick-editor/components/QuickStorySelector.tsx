@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getQuickStoriesReq } from "@/api/generate-quick";
 import QuickStoryCard, { type QuickStoryCardData } from "./QuickStoryCard";
+import { useEditorStore } from "@/stores/editorStore";
+import { LinkButton } from "@/components/ui/LinkButton";
 
 export interface StoryData extends QuickStoryCardData {
   isCustom?: boolean;
@@ -13,7 +15,6 @@ type Props = {
   locked?: boolean;
   hasNextContent?: boolean;
   triggerGenerate?: number;
-  workTags?: Array<{ name: string }>;
   onConfirm: (storyData: string, title: string) => void;
   onRevert: () => void;
   onRevertToCurrent: () => void;
@@ -35,7 +36,6 @@ const QuickStorySelector = ({
   locked = false,
   hasNextContent = false,
   triggerGenerate = 0,
-  workTags = [],
   onConfirm,
   onRevert,
   onRevertToCurrent,
@@ -64,6 +64,8 @@ const QuickStorySelector = ({
     locked,
   });
 
+  const workInfo = useEditorStore((s) => s.workInfo);
+
   useEffect(() => {
     latestTriggerParamsRef.current = { selectedTagIds, locked };
   }, [selectedTagIds, locked]);
@@ -86,8 +88,8 @@ const QuickStorySelector = ({
     setSelectedStoryIndex(null);
     try {
       const tagIds = selectedTagIds.split(",").filter((id) => id.trim());
-      const description = workTags.map((tag) => tag.name).join(",");
-      const tagNames = workTags.map((tag) => `#${tag.name}`);
+      const description = workInfo?.workTags?.map((tag: any) => tag.name).join(",") || "";
+      const tagNames = workInfo?.workTags?.map((tag: any) => `#${tag.name}`) || [];
       const res: any = await getQuickStoriesReq({} as any, description, tagIds, "doc");
       const theme = res?.theme || "";
       const stormList = Array.isArray(res?.brainStorms) ? res.brainStorms : [];
@@ -110,7 +112,7 @@ const QuickStorySelector = ({
     } finally {
       setLoading(false);
     }
-  }, [loading, onErrorAndRevert, selectedTagIds, workTags]);
+  }, [loading, onErrorAndRevert, selectedTagIds, workInfo]);
 
   const animateFromCard = useCallback(async (cardElement: HTMLElement) => {
     if (!storyGridRef.current) return;
@@ -189,7 +191,7 @@ const QuickStorySelector = ({
       toast.warning("请填写完整的书名和梗概");
       return;
     }
-    const tagNames = workTags.map((tag) => `#${tag.name}`);
+    const tagNames = (workInfo?.workTags ?? []).map((tag) => `#${tag.name}`);
     setStories((prev) => {
       const next = [...prev];
       if (editingStoryIndex !== null) {
@@ -212,7 +214,7 @@ const QuickStorySelector = ({
       return next;
     });
     closeEditPanel();
-  }, [closeEditPanel, customStory, editingStoryIndex, workTags]);
+  }, [closeEditPanel, customStory, editingStoryIndex, workInfo]);
 
   const handleConfirm = useCallback(() => {
     if (selectedStoryIndex === null || !stories[selectedStoryIndex]?.title) {
@@ -278,22 +280,22 @@ const QuickStorySelector = ({
   }, [generateStories, triggerGenerate]);
 
   return (
-    <div className={`flex h-full max-h-full flex-col overflow-hidden pr-[120px] pt-[40px] pb-[20px] ${showEditPanel ? "edit-mode" : ""}`}>
+    <div className={`flex h-full max-h-full flex-col overflow-hidden pr-[120px] pt-8 pb-5 ${showEditPanel ? "edit-mode" : ""}`}>
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="mb-10 shrink-0 text-2xl leading-[1.32em] font-normal text-black">请选择满意的故事梗概</div>
+        <div className="shrink-0 text-2xl px-4 font-normal text-black">请选择满意的故事梗概</div>
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div
             ref={storyGridRef}
-            className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-[2px] [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.1)_transparent] [&::-webkit-scrollbar]:w-[2px] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,0.1)]"
+            className="mt-5 relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-[2px] [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.1)_transparent] [&::-webkit-scrollbar]:w-[2px] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,0.1)]"
           >
-            <div className={`story-grid relative mt-[-30px] ml-[-30px] mb-8 flex shrink-0 flex-row flex-wrap ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
+            <div className={`relative mb-8 flex shrink-0 flex-row flex-nowrap gap-7 p-4 justify-between ${showEditPanel ? "pointer-events-none opacity-30" : ""}`}>
               {displayStories.map((story, index) => {
                 const key = story ? `${story.title}-${index}` : `custom-${index}`;
                 const selected = !!story && !!story.title && selectedStoryIndex === index;
                 return (
                   <div
                     key={key}
-                    className={`story-card-wrapper mt-[30px] ml-[30px] flex h-auto min-h-[400px] max-h-[calc((100vh-350px)*0.9)] basis-[calc(25%-30px)] flex-row ${
+                    className={`flex rounded-[10px] h-auto min-h-[400px] max-h-[calc((100vh-350px)*0.9)] basis-[calc(25%-30px)] flex-row ${
                       story ? "max-w-[calc(25%-30px)]" : "custom-wrapper max-w-[calc(25%-30px)]"
                     } ${selected ? "outline-2 outline-(--theme-color)" : ""}`}
                   >
@@ -320,15 +322,15 @@ const QuickStorySelector = ({
 
             {!locked && !showEditPanel && (
               <div className="flex h-8 shrink-0 items-center justify-center">
-                <button
+                <LinkButton
                   type="button"
                   disabled={loading}
-                  className="flex items-center gap-3 bg-transparent text-2xl leading-[1.32em] font-normal text-[#999] disabled:cursor-not-allowed disabled:opacity-50 hover:text-(--bg-editor-save)"
+                  className="flex items-center gap-3  text-2xl text-[#999]"
                   onClick={() => void generateStories()}
                 >
                   <span className="mr-[10px] inline-block text-[30px]">↻</span>
                   <span>换一批</span>
-                </button>
+                </LinkButton>
               </div>
             )}
           </div>
