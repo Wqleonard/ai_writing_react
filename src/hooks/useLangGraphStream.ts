@@ -90,8 +90,6 @@ export function useLangGraphStream(
   const currentWriteOrEditorFilePathRef = useRef<string>("");
   const currentEditInfoListRef = useRef<EditFileArgsType[]>([]);
   const messagesRef = useRef<AgentCustomMessage[]>([]);
-  const currentSessionIdRef = useRef<string | null>(null);
-  const currentWorkIdRef = useRef<number | string | null>(null);
   const streamCompletedRef = useRef(false);
   const suggestionsState = useSuggestionsController();
   const optionsRef = useRef(options);
@@ -199,20 +197,6 @@ export function useLangGraphStream(
     optionsRef.current.onUpdateTodos?.(next);
   };
 
-  // 判断是否有待处理的人在回路任务
-  const hasPendingHilt = (list: AgentCustomMessage[]): boolean => {
-    if (list.length === 0) return false;
-    const last = list[list.length - 1];
-    const hiltStatus = last.hiltStatus;
-    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
-    if (Array.isArray(last.hiltTodos) && last.hiltTodos.length > 0) {
-      return hiltStatus === "in_progress";
-    }
-    return (last.tool_calls ?? []).some(
-      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-    );
-  };
-
   // 获取联想提示词
   const fetchSuggestions = useCallback(
     async (_sessionId: string, _workId: number | string) => {
@@ -279,8 +263,6 @@ export function useLangGraphStream(
       sensitiveWordHandledRef.current = false;
       currentWriteOrEditorFilePathRef.current = "";
       currentEditInfoListRef.current = [];
-      currentSessionIdRef.current = sessionId;
-      currentWorkIdRef.current = workId;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -591,11 +573,6 @@ export function useLangGraphStream(
             isStreamingRef.current = false;
             abortControllerRef.current = null;
             optionsRef.current.onComplete?.();
-            const currentSessionId = currentSessionIdRef.current;
-            const currentWorkId = currentWorkIdRef.current;
-            if (currentSessionId && currentWorkId != null && !hasPendingHilt(messagesRef.current)) {
-              void fetchSuggestions(currentSessionId, currentWorkId);
-            }
           },
           { signal: controller.signal }
         );
@@ -616,7 +593,7 @@ export function useLangGraphStream(
         }
       }
     },
-    [fetchSuggestions]
+    []
   );
 
   const stop = useCallback(() => {
