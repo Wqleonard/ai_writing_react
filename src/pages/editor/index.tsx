@@ -2148,15 +2148,15 @@ const MarkdownEditorPage = () => {
             <div className="flex flex-1 min-h-0 min-w-0 relative">
               <div className="relative flex flex-1 min-h-0 min-w-0 flex-col"
                    style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem`, }}>
-                <div
+                <ScrollArea
                   ref={editorMainScrollRef}
                   className={clsx(
-                    "editor-main-scroll-area h-full min-h-0 relative overflow-x-hidden overflow-y-auto",
+                    "h-full relative overflow-x-hidden overflow-y-auto",
                     !isEditorEditable && "cursor-not-allowed-all",
                     isStreamingOverlayVisible && "cursor-not-allowed"
                   )}
                 >
-                  <div className="min-h-full flex flex-col relative overflow-x-hidden">
+                  <div className="min-h-[calc(100vh-108px)] h-full flex flex-col relative overflow-x-hidden">
                     <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
                       <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
                         <div className="flex flex-col flex-1 min-h-0">
@@ -2222,21 +2222,14 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow
-                          ref={stepWorkflowRef}
-                          totalMdContentLength={wordCount}
-                          isEditorEmpty={isEditorActuallyEmpty}
-                          hasTemplateContent={!!pendingStepTemplate}
-                          disableRecommendAutoOpen={disableRecommendAutoOpen}
-                          currentEditingId={currentEditingId}
-                        />
+                        <StepWorkflow ref={stepWorkflowRef}/>
                       </div>
                     </div>
                     {!isEditorEditable && (
                       <div className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
                     )}
                   </div>
-                </div>
+                </ScrollArea>
                 {shouldShowRemarkOverlay && (
                   <div className="pointer-events-none absolute bottom-3 left-2 z-40">
                     <div

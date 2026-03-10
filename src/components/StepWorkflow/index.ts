@@ -1,5 +1,5 @@
 export { StepWorkflow } from "./StepWorkflow"
-export type { StepWorkflowProps, StepWorkflowRef } from "./StepWorkflow"
+export type { StepWorkflowRef } from "./StepWorkflow"
 export type { Mode, Template, CharacterCardData, StoryStorm, StepSaveData, Tag } from "./types"
 export { CreateRecommendDialog } from "./components/CreateRecommendDialog"
 export { StepCreateDialog, type StepCreateDialogRef, type StepCreateDialogProps } from "./components/StepCreateDialog"

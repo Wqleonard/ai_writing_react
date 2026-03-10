@@ -10,9 +10,7 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from '@tiptap/markdown'
 import Placeholder from '@tiptap/extension-placeholder'
-import EmptyParagraph from '@/extensions/EmptyParagraph'
 import Mermaid from '@/extensions/Mermaid'
-import { StreamIndicator } from '@/components/StreamIndicator'
 import SelectionToolbarComponent, { type SelectionToolbarAction } from '@/components/editor/SelectionToolbarComponent'
 import './index.css'
 
@@ -22,9 +20,6 @@ export interface MarkdownEditorProps {
   fontClassName?: string
   readonly?: boolean
   placeholder?: string
-  loading?: boolean
-  /** 可选，最大字符数限制 */
-  maxlength?: number
   /** 受控：当前 markdown 内容 */
   value?: string
   /** 受控：内容变化回调 */
@@ -38,13 +33,12 @@ export interface MarkdownEditorProps {
   /** 是否展示选中文本工具栏 */
   needSelectionToolbar?: boolean
   /** 对齐 Vue 版 btns */
-  btns?: Array<'edit' | 'expand' | 'add' | 'note'>
+  btns?: Array<SelectionToolbarAction>
   /** 选中文本工具栏按钮 */
-  selectionToolbarBtns?: Array<'edit' | 'expand' | 'add' | 'note'>
+  selectionToolbarBtns?: Array<SelectionToolbarAction>
   /** 选区工具栏统一动作回调 */
   onSelectionAction?: (payload: {
-    action: 'edit' | 'expand' | 'add' | 'note'
-    selectedText: string
+    action: SelectionToolbarAction
     from: number
     to: number
   }) => void
@@ -83,8 +77,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       fontClassName = '',
       readonly = false,
       placeholder = '请输入内容...',
-      loading = false,
-      maxlength,
       value = '',
       onChange,
       onBlur,
@@ -128,7 +120,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       () => [
         Markdown,
         Mermaid,
-        EmptyParagraph,
         Placeholder.configure({ placeholder }),
         StarterKit.configure({
           codeBlock: false,
@@ -192,15 +183,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         },
         onUpdate: ({ editor: currentEditor }) => {
           if (readonlyRef.current) return
-          let nextMarkdown =
-            (currentEditor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
-          if (maxlength != null && nextMarkdown.length > maxlength) {
-            nextMarkdown = nextMarkdown.slice(0, maxlength)
-            isInternalUpdate.current = true
-            currentEditor.commands.setContent(nextMarkdown, {
-              contentType: 'markdown',
-            })
-          }
+          const nextMarkdown = currentEditor.getMarkdown?.() || ''
           onChangeRef.current?.(nextMarkdown)
           queueMicrotask(() => {
             isInternalUpdate.current = false
@@ -216,10 +199,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       if (!editor || isInternalUpdate.current) return
       try {
         const currentMarkdown = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
-        let valueToSet = value ?? ''
-        if (maxlength != null && valueToSet.length > maxlength) {
-          valueToSet = valueToSet.slice(0, maxlength)
-        }
+        const valueToSet = value ?? ''
         if (isEmptyContent(valueToSet)) {
           if (!editor.isEmpty) {
             isInternalUpdate.current = true
@@ -240,27 +220,13 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       } catch (err) {
         console.error('Error setting editor content:', err)
       }
-    }, [editor, value, maxlength])
+    }, [editor, value])
 
     // 只读状态变化：setEditable；进入可编辑时兜底设置 DOM contenteditable 并 focus
     useEffect(() => {
       if (!editor) return
       const editable = !readonly
       editor.setEditable(editable)
-      if (editable) {
-        const id = setTimeout(() => {
-          try {
-            const view = (editor as any).view as { dom?: HTMLElement } | undefined
-            if (view?.dom && typeof view.dom.setAttribute === 'function') {
-              view.dom.setAttribute('contenteditable', 'true')
-            }
-            editor.commands.focus('end')
-          } catch {
-            editor.commands.focus('end')
-          }
-        }, 50)
-        return () => clearTimeout(id)
-      }
     }, [editor, readonly])
 
     // 失焦回调
@@ -378,12 +344,11 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
               onAction={(action, selectedText) => {
                 if (action === 'edit') onSelectionEdit?.(selectedText)
                 if (action === 'expand') onSelectionExpand?.(selectedText)
-                // if (action === 'image') onSelectionImage?.(selectedText)
+                if (action === 'image') onSelectionImage?.(selectedText)
                 const { from, to } = editor.state.selection
                 if (from < to) {
                   onSelectionAction?.({
-                    action: action as SelectionToolbarAction,
-                    selectedText,
+                    action: action,
                     from,
                     to,
                   })
@@ -392,7 +357,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             />
           </BubbleMenu>
         )}
-        {loading && <StreamIndicator />}
       </div>
     )
   }

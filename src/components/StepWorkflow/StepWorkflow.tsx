@@ -1,15 +1,15 @@
 "use client"
 
-import React, { useCallback, useImperativeHandle, useRef, useState, useEffect } from "react"
+import React, { useCallback, useImperativeHandle, useRef, useState, useEffect, useMemo } from "react"
 import { StepCreateDialog, type StepCreateDialogRef } from "./components/StepCreateDialog"
 import { CreateRecommendDialog } from "./components/CreateRecommendDialog"
 import type { StepSaveData, Mode, CharacterCardData, Template } from "./types"
+import type { FileTreeNode } from "@/stores/editorStore/types"
 import customCoverImg from "@/assets/images/step_create/custom-cover.png"
 import templateCoverImg from "@/assets/images/step_create/template-cover.png"
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
 import { useEditorStore } from "@/stores/editorStore"
 import { createWorkReq, updateWorkInfoReq, updateWorkVersionReq } from "@/api/works"
-import { createNewMobileWork } from "@/api/m-workspace-chat"
 import { toast } from "sonner";
 
 const CUSTOM_COVER = customCoverImg as string
@@ -17,9 +17,9 @@ const TEMPLATE_COVER = templateCoverImg as string
 const TAG_COVER = tagCoverImg as string
 
 const MODES = [
-  { mode: "custom", title: "自定义短篇创作", desc: "详细制定你的内容方向…", cover: CUSTOM_COVER },
-  { mode: "template", title: "使用模板创作", desc: "选择热门模板创作…", cover: TEMPLATE_COVER },
-  { mode: "tag", title: "使用标签创作", desc: "选择标签自由获取灵感…", cover: TAG_COVER },
+  { mode: "custom", title: "自定义短篇创作", desc: "详细制定你的内容方向，并进行导语→故事→角色→章节的完整创作链", cover: CUSTOM_COVER },
+  { mode: "template", title: "使用模板创作", desc: "选择热门模板创作，套用核心梗，助力创作爆款小说", cover: TEMPLATE_COVER },
+  { mode: "tag", title: "使用标签创作", desc: "选择标签自由获取灵感脑洞，让创作的思维肆意挥洒", cover: TAG_COVER },
 ]
 
 const generateRoleSetting = (character: CharacterCardData | null) => {
@@ -36,6 +36,21 @@ const generateRoleSetting = (character: CharacterCardData | null) => {
   if (character.abilities) md += `${character.abilities}\n\n`
   if (character.identity) md += `${character.identity}\n\n`
   return md
+}
+
+const calculateTotalMdContentLength = (nodes: FileTreeNode[]): number => {
+  let totalLength = 0
+  const traverse = (node: FileTreeNode) => {
+    if (node.fileType === "md" && node.content) {
+      const textContent = node.content.replace(/<[^>]*>/g, "").trim()
+      totalLength += textContent.length
+    }
+    if (node.children?.length) {
+      node.children.forEach(traverse)
+    }
+  }
+  nodes.forEach(traverse)
+  return totalLength
 }
 
 export interface StepWorkflowRef {
@@ -56,16 +71,42 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   const [recommendDialogShow, setRecommendDialogShow] = useState(false)
   const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
-  const autoOpenedOnceRef = useRef(false)
-  const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
-  const [isQuickStartActive, setIsQuickStartActive] = useState(false)
-  const hideTimerRef = useRef<number | null>(null)
+  const [showQuickStart, setShowQuickStart] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const showDelayTimerRef = useRef<number | null>(null)
+  const isAnimatingRef = useRef(false)
+  const hasInitializedQuickStartRef = useRef(false)
+  const initialQuickStartTimerRef = useRef<number | null>(null)
+  const throttleTimerRef = useRef<number | null>(null)
+  const pendingTotalLengthRef = useRef<number | null>(null)
 
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
+  const treeData = useEditorStore((s) => s.treeData)
+  const totalMdContentLength = useMemo(() => calculateTotalMdContentLength(treeData), [treeData])
+  const applyQuickStartStatus = useCallback((totalLength: number) => {
+    if (isAnimatingRef.current) return
+    if (showDelayTimerRef.current) {
+      window.clearTimeout(showDelayTimerRef.current)
+      showDelayTimerRef.current = null
+    }
+    if (totalLength === 0) {
+      setShowQuickStart(false)
+      isAnimatingRef.current = true
+      setIsAnimating(true)
+      showDelayTimerRef.current = window.setTimeout(() => {
+        setShowQuickStart(true)
+        showDelayTimerRef.current = null
+      }, 200)
+      return
+    }
+    setShowQuickStart(false)
+    isAnimatingRef.current = false
+    setIsAnimating(false)
+  }, [])
 
   const openStepCreateDialogSafely = useCallback(() => {
     setStepCreateDialogShow(true)
@@ -126,39 +167,58 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
     stepCreateDialogRef.current?.startMode(mode as Mode)
   }, [openStepCreateDialogSafely])
 
-  // 推荐显示
   useEffect(() => {
-    // if (hideTimerRef.current) {
-    //   window.clearTimeout(hideTimerRef.current)
-    //   hideTimerRef.current = null
-    // }
-    //
-    // if (showQuickStart) {
-    //   setIsQuickStartMounted(true)
-    //   // 双 rAF：确保先应用 enter-from，再平滑过渡到 enter-to
-    //   let raf2 = 0
-    //   const raf1 = requestAnimationFrame(() => {
-    //     raf2 = requestAnimationFrame(() => setIsQuickStartActive(true))
-    //   })
-    //   return () => {
-    //     cancelAnimationFrame(raf1)
-    //     if (raf2) cancelAnimationFrame(raf2)
-    //   }
-    // }
-    //
-    // // 先做离场动画，再真正隐藏，避免突兀闪断
-    // setIsQuickStartActive(false)
-    // hideTimerRef.current = window.setTimeout(() => {
-    //   setIsQuickStartMounted(false)
-    //   hideTimerRef.current = null
-    // }, 280)
-    //
-    // return () => {
-    //   if (hideTimerRef.current) {
-    //     window.clearTimeout(hideTimerRef.current)
-    //     hideTimerRef.current = null
-    //   }
-    // }
+    isAnimatingRef.current = isAnimating
+  }, [isAnimating])
+
+  useEffect(() => {
+    initialQuickStartTimerRef.current = window.setTimeout(() => {
+      hasInitializedQuickStartRef.current = true
+      applyQuickStartStatus(calculateTotalMdContentLength(useEditorStore.getState().treeData))
+      initialQuickStartTimerRef.current = null
+    }, 200)
+    return () => {
+      if (initialQuickStartTimerRef.current) {
+        window.clearTimeout(initialQuickStartTimerRef.current)
+        initialQuickStartTimerRef.current = null
+      }
+    }
+  }, [applyQuickStartStatus])
+
+  useEffect(() => {
+    if (!hasInitializedQuickStartRef.current) return
+    if (throttleTimerRef.current === null) {
+      applyQuickStartStatus(totalMdContentLength)
+      throttleTimerRef.current = window.setTimeout(() => {
+        throttleTimerRef.current = null
+        if (pendingTotalLengthRef.current === null) return
+        const nextTotalLength = pendingTotalLengthRef.current
+        pendingTotalLengthRef.current = null
+        applyQuickStartStatus(nextTotalLength)
+      }, 400)
+      return
+    }
+    pendingTotalLengthRef.current = totalMdContentLength
+  }, [currentEditingId, totalMdContentLength, applyQuickStartStatus])
+
+  useEffect(() => {
+    return () => {
+      if (initialQuickStartTimerRef.current) {
+        window.clearTimeout(initialQuickStartTimerRef.current)
+        initialQuickStartTimerRef.current = null
+      }
+      if (throttleTimerRef.current) {
+        window.clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
+      }
+      pendingTotalLengthRef.current = null
+      if (showDelayTimerRef.current) {
+        window.clearTimeout(showDelayTimerRef.current)
+        showDelayTimerRef.current = null
+      }
+      isAnimatingRef.current = false
+      setIsAnimating(false)
+    }
   }, [])
 
   const handleStepConfirm = useCallback(async (data: StepSaveData, editingId = "大纲.md") => {
@@ -229,53 +289,56 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
         onConfirm={handleStepConfirm}
       />
 
-      {/* 始终挂载，用 visibility + opacity/transform 控制显隐与过渡，避免条件渲染导致过渡无法触发 */}
-      <div
-        className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
-        style={{
-          contain: "layout style paint",
-          willChange: "transform, opacity",
-          visibility: isQuickStartMounted ? "visible" : "hidden",
-        }}
-        aria-hidden={!isQuickStartMounted}
-      >
+      {showQuickStart ? (
         <div
-          className={`
-            pointer-events-none flex h-full flex-col-reverse items-center pb-5 pt-2
-            transform-gpu
-          `}
-          style={{
-            transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out",
-            transform: isQuickStartActive ? "translate3d(0, 0, 0)" : "translate3d(0, 28px, 0)",
-            opacity: isQuickStartActive ? 1 : 0,
-          }}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[230px] overflow-hidden"
+          aria-hidden
         >
-          <div className="flex items-center justify-center gap-4">
-            {MODES.map((m) => (
-              <div
-                key={m.mode}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleStartItemClick(m.mode)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    handleStartItemClick(m.mode)
-                  }
-                }}
-                className="pointer-events-auto flex h-[136px] w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-(--theme-color)"
-              >
-                <div className="h-[50px] w-full bg-white">
-                  <img src={m.cover} alt="" className="h-full w-full object-cover"/>
+          <div
+            className="flex h-full flex-col-reverse items-center pb-5 pt-2"
+          style={{
+            contain: "layout style paint",
+            willChange: "transform, opacity",
+            animation: "quick-start-enter 200ms ease-out forwards",
+          }}
+          onAnimationEnd={() => {
+            isAnimatingRef.current = false
+            setIsAnimating(false)
+          }}
+          >
+            <div className="pointer-events-none flex items-center justify-center gap-4">
+              {MODES.map((m) => (
+                <div
+                  key={m.mode}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleStartItemClick(m.mode)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      handleStartItemClick(m.mode)
+                    }
+                  }}
+                  className="pointer-events-auto flex w-40 cursor-pointer flex-col items-center justify-center rounded-[10px] border border-[#e6e6e5] bg-white p-4 transition-colors duration-200 hover:border-(--theme-color)"
+                >
+                  <div className="w-full bg-white">
+                    <img src={m.cover} alt="" className="h-12 w-full object-cover" />
+                  </div>
+                  <div className="mt-2 h-[18px] text-base font-medium">{m.title}</div>
+                  <div className="mt-2 text-[8px] text-[#9a9a9a] line-clamp-2">{m.desc}</div>
                 </div>
-                <div className="mt-2.5 h-[18px] text-base font-medium">{m.title}</div>
-                <div className="mt-2.5 text-[8px] text-[#9a9a9a]">{m.desc}</div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="mb-2 w-full text-center text-sm">不知道怎么开始？试试以下快捷创作流程：</div>
+            <style>{`
+              @keyframes quick-start-enter {
+                from { opacity: 0; transform: translateY(50px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
           </div>
-          <div className="w-full text-center text-sm">不知道怎么开始？试试以下快捷创作流程：</div>
         </div>
-      </div>
+      ) : null}
     </>
   )
 })

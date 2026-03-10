@@ -6,8 +6,7 @@ import IconFont from "@/components/IconFont/Iconfont";
 import { StreamIndicator } from "@/components/StreamIndicator";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-// "image" |
-export type SelectionToolbarAction = "edit" | "expand" |  "add" | "note";
+export type SelectionToolbarAction = "edit" | "expand" |  "add" | "note" | "image";
 
 type ChatItem = {
   role: "ai" | "human";
@@ -31,19 +30,19 @@ interface SelectionToolbarComponentProps {
   onPinnedChange?: (pinned: boolean) => void;
 }
 
-const actionLabelMap: Record<SelectionToolbarAction, string> = {
+const actionLabelMap: Partial<Record<SelectionToolbarAction, string>> = {
   edit: "修改",
   expand: "扩写",
-  // image: "生图",
+  image: "生图",
   add: "添加到对话",
   note: "添加到笔记",
 };
 
-const actionIconMap: Record<SelectionToolbarAction, string> = {
+const actionIconMap: Partial<Record<SelectionToolbarAction, string>> = {
   edit: "&#xea48;",
   expand: "&#xe616;",
   add: "&#xe62c;",
-  // image: "&#xea2d;",
+  image: "&#xea2d;",
   note: "&#xe64c;",
 };
 
@@ -336,7 +335,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
               onClick={() => handleBtnClick(btn)}
               className="flex h-7 cursor-pointer items-center rounded-[6px] px-2 text-[#61615f] hover:bg-[#e8e8e8]"
             >
-              <IconFont unicode={actionIconMap[btn]} className="h-5 w-5 text-center leading-5" />
+              <IconFont unicode={actionIconMap[btn] || ""} className="h-5 w-5 text-center leading-5" />
               <span className="ml-1 text-base">{actionLabelMap[btn]}</span>
             </button>
           ))}
