@@ -30,6 +30,7 @@ import type { PostStreamData } from '@/api'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import { AddConnectedFile } from '@/components/Community/AddConnectedFile'
 import { Iconfont } from '../IconFont'
+import { cn } from "@/lib/utils.ts";
 
 export interface AddNewPromptsDialogProps {
   open: boolean
@@ -253,13 +254,13 @@ export const AddNewPromptsDialog = ({
           {STEPS.map((step, i) => (
             <div
               key={step}
-              className={clsx(
+              className={cn(
                 'relative flex h-11 cursor-default items-center justify-center gap-1 rounded-lg border px-3 py-1 text-lg text-black transition-all duration-300',
                 'border-(--bg-editor-panel,#f5f7fa) bg-(--bg-editor-panel,#f5f7fa)',
                 i < STEPS.length - 1 &&
                   "after:absolute after:top-1/2 after:right-[-25px] after:block after:h-px after:w-6 after:-translate-y-1/2 after:bg-[#e4e7ed] after:content-[''] after:z-0",
                 currentStep === i &&
-                  'border-(--theme-color,#409eff) bg-(--dialog-bg,#fff)',
+                  'border-(--theme-color)! bg-(--dialog-bg,#fff)',
                 i < currentStep &&
                   'border-(--el-color-primary-light-5,var(--primary-light-5,#f4d080)) bg-(--el-color-primary-light-5,var(--primary-light-5,#f4d080))'
               )}
@@ -273,7 +274,7 @@ export const AddNewPromptsDialog = ({
         <div className="min-h-[480px] mt-5">
           {currentStep === 0 && (
             <div className="space-y-3">
-              <label className="block text-sm font-medium">提示词工具名称</label>
+              <label className="block text-xl font-medium">提示词工具名称<span className="ml-1">*</span></label>
               <Input
                 value={formData.name}
                 onChange={(e) =>
@@ -283,8 +284,9 @@ export const AddNewPromptsDialog = ({
                 maxLength={50}
                 showWordLimit
               />
-              <label className="block pt-2 text-sm font-medium">
+              <label className="block pt-2 text-xl font-medium">
                 提示词工具介绍
+                <span className="ml-1">*</span>
               </label>
               <Textarea
                 value={formData.description}
@@ -299,8 +301,9 @@ export const AddNewPromptsDialog = ({
                 maxLength={500}
                 showWordLimit
               />
-              <label className="block pt-2 text-sm font-medium">
+              <label className="block pt-2 text-xl font-medium">
                 提示词工具分类
+                <span className="ml-1">*</span>
               </label>
               <Select
                 value={formData.category ?? ''}
@@ -319,7 +322,10 @@ export const AddNewPromptsDialog = ({
                   ))}
                 </SelectContent>
               </Select>
-              <label className="block pt-2 text-sm font-medium">提示词工具图标</label>
+              <label className="block pt-2 text-xl font-medium">
+                提示词工具图标
+                <span className="ml-1">*</span>
+              </label>
               <div className="flex flex-wrap gap-2">
                 {promptIconOptions.map((opt, index) => (
                   <div
