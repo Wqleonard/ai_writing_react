@@ -12,6 +12,7 @@ import { FaqSection } from './components/FaqSection'
 import { CtaSection } from './components/CtaSection'
 import arrowUp from '@/assets/images/arrow_up.svg'
 import { useLoginStore } from '@/stores/loginStore'
+import { openLoginDialog } from '@/components/LoginDialog'
 import './landing.css'
 import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
@@ -32,9 +33,13 @@ export default function LandingPage() {
     fullpageApiRef.current?.moveTo(anchor)
   }, [])
 
-  const handleShowLogin = () => {
-    window.location.href = '/workspace/my-place'
-  }
+  const handleShowLogin = useCallback(async () => {
+    try {
+      await openLoginDialog()
+    } catch {
+      // 用户关闭登录弹窗时静默忽略
+    }
+  }, [])
 
   const addWork = useCallback(async () => {
     if (isCreatingWork) return

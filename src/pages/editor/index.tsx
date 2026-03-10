@@ -68,6 +68,7 @@ import {
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CircleAlert } from "lucide-react";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
@@ -418,7 +419,21 @@ const MarkdownEditorPage = () => {
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
-
+  const [disableRecommendAutoOpen, setDisableRecommendAutoOpen] = useState(() => {
+    try {
+      const stateParams = (location.state as { skipRecommendDialog?: boolean } | null) ?? null;
+      if (stateParams?.skipRecommendDialog) return true;
+      const paramsStr =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY)
+          : null;
+      if (!paramsStr) return false;
+      const parsed = JSON.parse(paramsStr) as { skipRecommendDialog?: boolean } | null;
+      return !!parsed?.skipRecommendDialog;
+    } catch {
+      return false;
+    }
+  });
   // chatheader 相关
   const [
     activeTab,
@@ -657,9 +672,15 @@ const MarkdownEditorPage = () => {
     [addMessageToDualTab]
   );
 
-  const handleStopStreaming = useCallback(() => {
+  const handleStopStreaming = useCallback((needAIMessage = true) => {
     stoppedByUserRef.current = true;
-    finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
+    if (needAIMessage) {
+      finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
+    } else {
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+    }
     langGraphStream.stop();
   }, [finalizeStreamingMessageWithSuffix, langGraphStream]);
 
@@ -705,6 +726,7 @@ const MarkdownEditorPage = () => {
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const lastInitialAutoSendKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
@@ -963,6 +985,10 @@ const MarkdownEditorPage = () => {
         : mergedParams.selectedTexts,
       message: rankingMessage || mergedParams.message,
     };
+    setDisableRecommendAutoOpen(
+      !!initialParams.skipRecommendDialog ||
+      !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
+    );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
       setPendingStepTemplate(initialTemplate);
@@ -1002,7 +1028,87 @@ const MarkdownEditorPage = () => {
     }
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
-  const handleBackClick = useCallback(() => {
+  useEffect(() => {
+    // if (!pendingStepTemplate) return;
+    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
+    // if (opened) {
+    //   setPendingStepTemplate(null);
+    // }
+  }, [pendingStepTemplate, serverData, currentEditingId]);
+
+  // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
+  // useEffect(() => {
+  //   // serverData 还未加载完成
+  //   if (!serverData || Object.keys(serverData).length === 0) return;
+  //   // 用户已经有当前编辑文件且存在于 serverData，则不干预
+  //   if (currentEditingId && serverData[currentEditingId] !== undefined) return;
+
+  //   const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
+  //   if (allMdKeys.length === 0) return;
+
+  //   // 优先正文目录下的章节，例如 "正文/第一章.md"
+  //   const chapterCandidates = allMdKeys
+  //     .filter((k) => k.startsWith("正文/"))
+  //     .sort();
+
+  //   const targetKey =
+  //     chapterCandidates[0] ??
+  //     allMdKeys.sort()[0] ??
+  //     DEFAULT_EDITING_FILE_KEY;
+
+  //   const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
+  //   setCurrentEditingId(targetKey);
+  // }, [serverData, currentEditingId]);
+
+  const handleBackClick = useCallback(async () => {
+    const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
+      Array.isArray(list) && list.some((item) => item.status === "pending")
+    );
+    const lastChat = chatMessages[chatMessages.length - 1];
+    const hasPendingHilt = (() => {
+      if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
+        return false;
+      }
+      const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
+      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+      if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+      const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+      if (Array.isArray(hiltTodos) && hiltTodos.length > 0) return hiltStatus === "in_progress";
+      const toolCalls =
+        (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
+          ?.tool_calls ?? [];
+      return toolCalls.some(
+        (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+      );
+    })();
+
+    if (langGraphStream.isStreaming) {
+      const ok = await confirm({
+        title: "提示",
+        message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+      langGraphStream.stop();
+    } else if (hasPendingFileChanges) {
+      const ok = await confirm({
+        title: "提示",
+        message: "当前内容仍有未确认变更，是否接受？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+    } else if (hasPendingHilt) {
+      const ok = await confirm({
+        title: "提示",
+        message: "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+    }
+
     // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
     clearAssociationTags();
     clearSelectedNotes();
@@ -1017,6 +1123,10 @@ const MarkdownEditorPage = () => {
     setIsAnswerOnly(true);
     navigate("/workspace/my-place", { replace: true });
   }, [
+    fileChangesMap,
+    chatMessages,
+    langGraphStream,
+    confirm,
     clearAssociationTags,
     clearSelectedNotes,
     clearSelectedFiles,
@@ -1284,6 +1394,94 @@ const MarkdownEditorPage = () => {
     active.classList.remove("remark-highlight-paragraph");
     activeRemarkHighlightRef.current = null;
   }, []);
+
+  const hasAnyPendingFileChanges = useMemo(
+    () =>
+      Object.values(fileChangesMap).some((list) =>
+        Array.isArray(list) && list.some((item) => item.status === "pending")
+      ),
+    [fileChangesMap]
+  );
+
+  const hasPendingHiltInChat = useMemo(() => {
+    const lastChat = chatMessages[chatMessages.length - 1];
+    if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
+      return false;
+    }
+    const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
+    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+    if (Array.isArray(hiltTodos) && hiltTodos.length > 0) {
+      return hiltStatus === "in_progress";
+    }
+    const toolCalls =
+      (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
+        ?.tool_calls ?? [];
+    return toolCalls.some(
+      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+    );
+  }, [chatMessages]);
+
+  type StreamingTaskStatus = "idle" | "streaming" | "pending" | "edit_pending" | "hilt_pending";
+  const streamingTaskStatus = useMemo<StreamingTaskStatus>(() => {
+    if (langGraphStream.isStreaming) return "streaming";
+    if (hasAnyPendingFileChanges) return "edit_pending";
+    if (hasPendingHiltInChat) return "hilt_pending";
+    return "idle";
+  }, [langGraphStream.isStreaming, hasAnyPendingFileChanges, hasPendingHiltInChat]);
+
+  // 与 Vue 版 checkStreamingStatusAndConfirm 对齐：
+  // streaming -> 二次确认后中断；pending/edit_pending/hilt_pending -> 弹确认并返回是否继续
+  const checkStreamingStatusAndConfirm = useCallback(
+    async (needReset = false, needCheckHilt = true, needAIMessage = true): Promise<boolean> => {
+      if (streamingTaskStatus === "streaming") {
+        const ok = await confirm({
+          title: "提示",
+          message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+        if (!ok) return false;
+        handleStopStreaming(needAIMessage);
+        return true;
+      }
+      if (streamingTaskStatus === "pending") {
+        return confirm({
+          title: "提示",
+          message: "当前内容仍有未确认变更，是否接受？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+      }
+      if (streamingTaskStatus === "edit_pending") {
+        const ok = await confirm({
+          title: "提示",
+          message: "当前内容仍有未确认变更，是否接受？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+        if (!ok) return false;
+        if (needReset) {
+          setFileChangesMap({});
+          setActiveChangeIndex(null);
+          setIsChangesPanelVisible(false);
+          clearRemarkHighlight();
+        }
+        return true;
+      }
+      if (streamingTaskStatus === "hilt_pending" && needCheckHilt) {
+        return confirm({
+          title: "提示",
+          message: "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+      }
+      return true;
+    },
+    [streamingTaskStatus, handleStopStreaming, clearRemarkHighlight, confirm]
+  );
 
   const highlightChangeInEditor = useCallback(
     (oldText: string, newText?: string) => {
@@ -2024,7 +2222,14 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow ref={stepWorkflowRef}/>
+                        <StepWorkflow
+                          ref={stepWorkflowRef}
+                          totalMdContentLength={wordCount}
+                          isEditorEmpty={isEditorActuallyEmpty}
+                          hasTemplateContent={!!pendingStepTemplate}
+                          disableRecommendAutoOpen={disableRecommendAutoOpen}
+                          currentEditingId={currentEditingId}
+                        />
                       </div>
                     </div>
                     {!isEditorEditable && (
@@ -2111,7 +2316,7 @@ const MarkdownEditorPage = () => {
             onNewChat={() => createNewSession(activeTab)}
             onSwitchSession={(id) => loadSession(activeTab, id)}
             onSaveCurrentSession={() => saveCurrentSession(activeTab)}
-            checkStreamingStatusAndConfirm={async () => true}
+            checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
             canvasActionsSlot={
               activeTab === "canvas" ? (
                 <CanvasToolbar
@@ -2160,7 +2365,7 @@ const MarkdownEditorPage = () => {
                     sendChatText(msg.content ?? "", { addUserMessage: true });
                   }}
                   onSaveCurrentSession={() => saveCurrentSession("chat")}
-                  checkStreamingStatusAndConfirm={async () => true}
+                  checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
                   isHomePage={false}
                   hideAssociationFeature={false}
                   onOpenAssociationSelector={() => setShowAssociationSelector(true)}
@@ -2442,6 +2647,7 @@ const MarkdownEditorPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 };

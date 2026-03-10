@@ -5,6 +5,10 @@ import {
   type MemeWord,
 } from "@/services/chatInputService"
 
+// 模块级缓存：同一页面生命周期内复用，避免多组件重复请求 keywords-rank
+let memeWordsCache: MemeWord[] | null = null
+let memeWordsPendingPromise: Promise<MemeWord[]> | null = null
+
 interface UseMemeWordsOptions {
   disabled?: boolean
   collapsedPreviewCount?: number
@@ -20,15 +24,29 @@ export const useMemeWords = (options?: UseMemeWordsOptions) => {
   useEffect(() => {
     if (disabled) return
     let cancelled = false
+    // 命中缓存：直接使用，不再重复请求
+    if (memeWordsCache) {
+      setMemeWords(memeWordsCache)
+      setIsLoadingMemeWords(false)
+      return
+    }
+
     setIsLoadingMemeWords(true)
-    fetchMemeWords()
+    if (!memeWordsPendingPromise) {
+      memeWordsPendingPromise = fetchMemeWords()
+    }
+
+    memeWordsPendingPromise
       .then((words) => {
+        memeWordsCache = words
         if (!cancelled) setMemeWords(words)
       })
       .catch(() => {
+        memeWordsCache = []
         if (!cancelled) setMemeWords([])
       })
       .finally(() => {
+        memeWordsPendingPromise = null
         if (!cancelled) setIsLoadingMemeWords(false)
       })
 
