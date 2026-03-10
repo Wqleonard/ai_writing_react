@@ -171,7 +171,7 @@ const postScriptTemplateStreamPlot = (
   config?: { signal?: AbortSignal }
 ) => {
   return apiClient.postStream(
-    "api/works/script/plot",
+    "/api/works/script/plot",
     data,
     onData,
     onError,

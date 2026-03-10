@@ -47,7 +47,7 @@ export default function LandingPage() {
       setIsCreatingWork(true)
       const req = await createWorkReq('editor')
       if (req?.id) {
-        navigate(`/quick-editor/${req.id}`, { state: { isNew: true } })
+        navigate(`/script-editor/${req.id}`, { state: { isNew: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')

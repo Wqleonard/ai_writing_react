@@ -56,6 +56,10 @@ const getScriptSelectedTagsReq = (novelPlot: string) => {
   return apiClient.post("/api/works/script/tag", { novelPlot });
 };
 
+const getScriptTagsReq = () => {
+  return apiClient.get("/api/works/tags/script");
+};
+
 const getScriptStorySynopsisReq = (novelPlot: string, description: string) => {
   return apiClient.post("/api/works/script/brain-storm", {
     novelPlot,
@@ -213,6 +217,7 @@ export {
   deleteSessionReq,
   generateGuideReq,
   getWorkTagsReq,
+  getScriptTagsReq,
   getScriptSelectedTagsReq,
   getScriptStorySynopsisReq,
   updateWorkInfoReq,

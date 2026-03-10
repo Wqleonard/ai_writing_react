@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <style>
+      .stroke { fill: none; stroke: #e04444; stroke-width: 10; }
+      .fill { fill: rgba(255, 240, 240, 0.92); }
+      .text { fill: #e04444; font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif; font-weight: 800; }
+    </style>
+  </defs>
+  <g transform="rotate(-12 120 120)">
+    <circle class="fill" cx="120" cy="120" r="90"/>
+    <circle class="stroke" cx="120" cy="120" r="90"/>
+    <text class="text" x="120" y="132" font-size="54" text-anchor="middle">òš?</text>
+  </g>
+</svg>
