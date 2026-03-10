@@ -68,6 +68,7 @@ import {
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CircleAlert } from "lucide-react";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
@@ -671,9 +672,15 @@ const MarkdownEditorPage = () => {
     [addMessageToDualTab]
   );
 
-  const handleStopStreaming = useCallback(() => {
+  const handleStopStreaming = useCallback((needAIMessage = true) => {
     stoppedByUserRef.current = true;
-    finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
+    if (needAIMessage) {
+      finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
+    } else {
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+    }
     langGraphStream.stop();
   }, [finalizeStreamingMessageWithSuffix, langGraphStream]);
 
@@ -719,6 +726,7 @@ const MarkdownEditorPage = () => {
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const lastInitialAutoSendKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
@@ -1057,7 +1065,55 @@ const MarkdownEditorPage = () => {
   //   setCurrentEditingId(targetKey);
   // }, [serverData, currentEditingId]);
 
-  const handleBackClick = useCallback(() => {
+  const handleBackClick = useCallback(async () => {
+    const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
+      Array.isArray(list) && list.some((item) => item.status === "pending")
+    );
+    const lastChat = chatMessages[chatMessages.length - 1];
+    const hasPendingHilt = (() => {
+      if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
+        return false;
+      }
+      const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
+      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+      if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+      const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+      if (Array.isArray(hiltTodos) && hiltTodos.length > 0) return hiltStatus === "in_progress";
+      const toolCalls =
+        (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
+          ?.tool_calls ?? [];
+      return toolCalls.some(
+        (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+      );
+    })();
+
+    if (langGraphStream.isStreaming) {
+      const ok = await confirm({
+        title: "提示",
+        message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+      langGraphStream.stop();
+    } else if (hasPendingFileChanges) {
+      const ok = await confirm({
+        title: "提示",
+        message: "当前内容仍有未确认变更，是否接受？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+    } else if (hasPendingHilt) {
+      const ok = await confirm({
+        title: "提示",
+        message: "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？",
+        cancelText: "取消",
+        confirmText: "确认",
+      });
+      if (!ok) return;
+    }
+
     // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
     clearAssociationTags();
     clearSelectedNotes();
@@ -1072,6 +1128,10 @@ const MarkdownEditorPage = () => {
     setIsAnswerOnly(true);
     navigate("/workspace/my-place", { replace: true });
   }, [
+    fileChangesMap,
+    chatMessages,
+    langGraphStream,
+    confirm,
     clearAssociationTags,
     clearSelectedNotes,
     clearSelectedFiles,
@@ -1339,6 +1399,94 @@ const MarkdownEditorPage = () => {
     active.classList.remove("remark-highlight-paragraph");
     activeRemarkHighlightRef.current = null;
   }, []);
+
+  const hasAnyPendingFileChanges = useMemo(
+    () =>
+      Object.values(fileChangesMap).some((list) =>
+        Array.isArray(list) && list.some((item) => item.status === "pending")
+      ),
+    [fileChangesMap]
+  );
+
+  const hasPendingHiltInChat = useMemo(() => {
+    const lastChat = chatMessages[chatMessages.length - 1];
+    if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
+      return false;
+    }
+    const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
+    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+    if (Array.isArray(hiltTodos) && hiltTodos.length > 0) {
+      return hiltStatus === "in_progress";
+    }
+    const toolCalls =
+      (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
+        ?.tool_calls ?? [];
+    return toolCalls.some(
+      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+    );
+  }, [chatMessages]);
+
+  type StreamingTaskStatus = "idle" | "streaming" | "pending" | "edit_pending" | "hilt_pending";
+  const streamingTaskStatus = useMemo<StreamingTaskStatus>(() => {
+    if (langGraphStream.isStreaming) return "streaming";
+    if (hasAnyPendingFileChanges) return "edit_pending";
+    if (hasPendingHiltInChat) return "hilt_pending";
+    return "idle";
+  }, [langGraphStream.isStreaming, hasAnyPendingFileChanges, hasPendingHiltInChat]);
+
+  // 与 Vue 版 checkStreamingStatusAndConfirm 对齐：
+  // streaming -> 二次确认后中断；pending/edit_pending/hilt_pending -> 弹确认并返回是否继续
+  const checkStreamingStatusAndConfirm = useCallback(
+    async (needReset = false, needCheckHilt = true, needAIMessage = true): Promise<boolean> => {
+      if (streamingTaskStatus === "streaming") {
+        const ok = await confirm({
+          title: "提示",
+          message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+        if (!ok) return false;
+        handleStopStreaming(needAIMessage);
+        return true;
+      }
+      if (streamingTaskStatus === "pending") {
+        return confirm({
+          title: "提示",
+          message: "当前内容仍有未确认变更，是否接受？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+      }
+      if (streamingTaskStatus === "edit_pending") {
+        const ok = await confirm({
+          title: "提示",
+          message: "当前内容仍有未确认变更，是否接受？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+        if (!ok) return false;
+        if (needReset) {
+          setFileChangesMap({});
+          setActiveChangeIndex(null);
+          setIsChangesPanelVisible(false);
+          clearRemarkHighlight();
+        }
+        return true;
+      }
+      if (streamingTaskStatus === "hilt_pending" && needCheckHilt) {
+        return confirm({
+          title: "提示",
+          message: "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？",
+          cancelText: "取消",
+          confirmText: "确认",
+        });
+      }
+      return true;
+    },
+    [streamingTaskStatus, handleStopStreaming, clearRemarkHighlight, confirm]
+  );
 
   const highlightChangeInEditor = useCallback(
     (oldText: string, newText?: string) => {
@@ -2173,7 +2321,7 @@ const MarkdownEditorPage = () => {
             onNewChat={() => createNewSession(activeTab)}
             onSwitchSession={(id) => loadSession(activeTab, id)}
             onSaveCurrentSession={() => saveCurrentSession(activeTab)}
-            checkStreamingStatusAndConfirm={async () => true}
+            checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
             canvasActionsSlot={
               activeTab === "canvas" ? (
                 <CanvasToolbar
@@ -2222,7 +2370,7 @@ const MarkdownEditorPage = () => {
                     sendChatText(msg.content ?? "", { addUserMessage: true });
                   }}
                   onSaveCurrentSession={() => saveCurrentSession("chat")}
-                  checkStreamingStatusAndConfirm={async () => true}
+                  checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
                   isHomePage={false}
                   hideAssociationFeature={false}
                   onOpenAssociationSelector={() => setShowAssociationSelector(true)}
@@ -2504,6 +2652,7 @@ const MarkdownEditorPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 };
