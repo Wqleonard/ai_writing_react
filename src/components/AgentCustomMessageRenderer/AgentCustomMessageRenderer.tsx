@@ -746,6 +746,7 @@ const AgentCustomMessageRenderer = ({
                       effectiveTodos &&
                       effectiveTodos.length > 0 &&
                       isLastMessage &&
+                      streamingStatus !== "streaming" &&
                       effectiveStatus === "in_progress" &&
                       !isDismissedForCurrentTodos;
                     if (!showOuterCard) return null;

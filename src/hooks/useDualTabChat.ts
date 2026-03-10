@@ -534,16 +534,13 @@ export function useDualTabChat() {
     async (tabType: ChatTabType): Promise<ChatSession[]> => {
       if (!state.currentWorkId) return [];
       try {
-        if (state.needRefreshSessions) {
+        if (state.needRefreshSessions || state.cachedSessions.length === 0) {
           await refreshSessionsFromAPI();
           setStoreState({ needRefreshSessions: false });
         }
-        if (state.cachedSessions.length > 0) {
-          return state.cachedSessions.filter(
-            (session) => session.type === tabType
-          );
-        }
-        return [];
+        return state.cachedSessions.filter(
+          (session) => session.type === tabType
+        );
       } catch (error) {
         console.error(
           `[useDualTabChat] ❌ Failed to get sessions for ${tabType}:`,

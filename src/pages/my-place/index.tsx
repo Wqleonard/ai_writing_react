@@ -224,7 +224,6 @@ export default function MyPlacePage() {
 
   const onSubmitCreation = useRef(
     debounce((text: string) => {
-      console.log('onSubmitCreation', text)
       onSubmitCreationCallbackRef.current(text)
     }, 2000, { leading: true, trailing: false })
   ).current

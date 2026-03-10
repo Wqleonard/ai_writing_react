@@ -25,7 +25,6 @@ import {
   getQuickChannelInputCount,
 } from '@/services/quickChatComposerService'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
-import { emitCreationInputSubmit } from '@/services/chatSubmitBridge'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 const NOOP = () => {}
@@ -210,7 +209,6 @@ export const CreationInput = (props: CreationInputProps) => {
   } = useChatInputStore()
 
   const [writingStyleTipOpen, setWritingStyleTipOpen] = useState(false)
-
   const lastWritingStylePopoverRequestRef = useRef<number>(0)
 
   // 外部（如：创建文风后跳转 my-place）请求打开“文风选择弹窗”
@@ -222,6 +220,7 @@ export const CreationInput = (props: CreationInputProps) => {
     // 与 Vue 行为一致：展示“保存的文风在这”提示，并关闭仅回答（否则触发器 disabled）
     if (isAnswerOnly) onAnswerOnlyChange(false)
 
+    // 选中创建的文风
     if (requestedWritingStyleId) {
       setSelectedWritingStyle(String(requestedWritingStyleId))
     }
@@ -252,9 +251,6 @@ export const CreationInput = (props: CreationInputProps) => {
     })()
     setWritingStyleTipOpen(true)
 
-    return () => {
-      setWritingStyleTipOpen(false)
-    }
   }, [
     writingStylePopoverRequest,
     requestedWritingStyleId,
@@ -300,7 +296,6 @@ export const CreationInput = (props: CreationInputProps) => {
     }
     const text = value.trim()
     if (!text) return
-    emitCreationInputSubmit(text)
     await completeNewbieMissionByCode('SEND_CREATIVE_IDEA')
     onSubmit()
   }, [status, onRetry, value, completeNewbieMissionByCode, onSubmit])

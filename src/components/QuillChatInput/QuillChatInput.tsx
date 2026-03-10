@@ -32,7 +32,6 @@ import { useChatInputActions } from "@/hooks/useChatInputActions"
 import { uploadFileReq } from "@/api/files"
 import { openLoginDialog } from "@/components/LoginDialog"
 import { toast } from "sonner"
-import { subscribeChatSubmitBridge } from "@/services/chatSubmitBridge"
 
 export type QuillChatInputStatus = "ready" | "error" | "submitted" | "streaming"
 
@@ -141,13 +140,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const [isDropUploading, setIsDropUploading] = useState(false)
 
   const [hovered, setHovered] = useState(false)
-  const valueRef = useRef(value)
-  const pendingBridgeSubmitTextRef = useRef<string | null>(null)
   const lastWritingStylePopoverRequestRef = useRef<number>(0)
-
-  useEffect(() => {
-    valueRef.current = value
-  }, [value])
 
   // 外部（如：创建文风后跳转 my-place）请求打开“文风选择弹窗”
   useEffect(() => {
@@ -271,38 +264,22 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   }, [writingStyleTipOpen])
 
   const handleSubmitClick = useCallback(() => {
-    if (disabled) return
+    if (disabled || status === "streaming") return
     const text = value.trim()
     if (!text) return
     clearSelectedNotes()
     clearSelectedFiles()
     onSubmit()
-    if (clearOnSubmit) onChange("")
-  }, [disabled, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange])
-
-  useEffect(() => {
-    const unsubscribe = subscribeChatSubmitBridge((payload) => {
-      if (payload.source !== "creation-input") return
-      const nextText = payload.text.trim()
-      if (!nextText) return
-      pendingBridgeSubmitTextRef.current = nextText
-      if (valueRef.current.trim() === nextText) return
-      onChange(nextText)
-    })
-    return unsubscribe
-  }, [onChange])
-
-  useEffect(() => {
-    const pendingText = pendingBridgeSubmitTextRef.current
-    if (!pendingText) return
-    if (value.trim() !== pendingText) return
-    if (disabled || status === "submitted" || status === "streaming") return
-    pendingBridgeSubmitTextRef.current = null
-    handleSubmitClick()
-  }, [value, disabled, status, handleSubmitClick])
+    if (clearOnSubmit) {
+      onChange("")
+      clearRichTextDom()
+    }
+  }, [disabled, status, value, clearSelectedNotes, clearSelectedFiles, onSubmit, clearOnSubmit, onChange, clearRichTextDom])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME 组合输入（如中文选字）时，Enter 仅用于确认候选，不触发发送
+      if (e.nativeEvent.isComposing) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         handleSubmitClick()
@@ -356,6 +333,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const handleRichTextKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // IME 组合输入（如中文选字）时，Enter 仅用于确认候选，不触发发送
+      if (e.nativeEvent.isComposing) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         updateRichTextContent()
@@ -931,7 +910,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
         )}
 
         {/* 工具标签（快捷入口） */}
-        {!hideAssistUI && (
+        {!hideAssistUI && !hasMessages && (
           <div className="tool-tags-container-top">
             {quickChatInputChannels.map((channel) => (
               <div

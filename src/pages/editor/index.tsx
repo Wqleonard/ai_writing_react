@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
+import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
@@ -14,7 +15,6 @@ import {
   type EditorChangeItem,
 } from "./components";
 import { ProChatContainer, ProChatPanel } from "@/components/ProChatContainer";
-import { emitCreationInputSubmit } from "@/services/chatSubmitBridge";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { FileMessageDisplay } from "@/components/FileMessageDisplay";
 import { SelectedTextDisplay } from "@/components/SelectedTextDisplay";
@@ -34,6 +34,7 @@ import type {
 import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
 import type { ChatTabType } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
+import type { ChatInputStore } from "@/stores/chatInputStore";
 import {
   getWorksByIdReq,
   getWorksByIdAndVersionReq,
@@ -445,6 +446,7 @@ const MarkdownEditorPage = () => {
     setWorkId,
     createNewSession,
     loadSession,
+    loadLatestSession,
     saveCurrentSession,
     addMessage: addMessageToDualTab,
     updateLastChatMessage,
@@ -461,6 +463,7 @@ const MarkdownEditorPage = () => {
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
   const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
+  const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [todosExpanded, setTodosExpanded] = useState(true);
@@ -545,6 +548,11 @@ const MarkdownEditorPage = () => {
 
       // 流式结束后调用 guide 接口，将联想提示词展示在最后一条消息下方（与 Vue 一致）
       // 若最后一条消息存在 write_todos 且人在回路未确认（需先展示外层卡片），则不请求 guide，等用户点击拒绝后再请求
+      if (skipGuideForCurrentStreamRef.current) {
+        skipGuideForCurrentStreamRef.current = false;
+        guideRequestRef.current = null;
+        return;
+      }
       const pending = guideRequestRef.current;
       guideRequestRef.current = null;
       const customMsg = finalized?.customMessage;
@@ -600,11 +608,37 @@ const MarkdownEditorPage = () => {
         }
       }
     },
+    onSensitiveWord: () => {
+      // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
+      skipGuideForCurrentStreamRef.current = true;
+      guideRequestRef.current = null;
+      setStreamingMessage(null);
+      streamingMessageRef.current = null;
+      streamingMessageIdRef.current = "";
+
+      updateLastChatMessage((prev) => ({
+        ...prev,
+        hasSensitiveWord: true,
+      }));
+
+      const simulatedAssistant: DualTabChatMessage = {
+        id: `assistant_sensitive_${Date.now()}`,
+        role: "assistant",
+        content: "我无法回答你的这个问题，可以尝试下其他话题哦",
+        createdAt: new Date(),
+        messageType: "normal",
+        mode: "chat",
+      };
+      addMessageToDualTab("chat", simulatedAssistant);
+      toast.warning("内容包含敏感词，请尝试其他话题");
+    },
     onError: (err, needSendErrorMsg) => {
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
       }
+      skipGuideForCurrentStreamRef.current = true;
+      guideRequestRef.current = null;
       if (needSendErrorMsg) toast.error(err.message);
       setStreamingMessage(null);
       streamingMessageRef.current = null;
@@ -649,24 +683,43 @@ const MarkdownEditorPage = () => {
     return "ready";
   }, [langGraphStream.error, langGraphStream.isStreaming]);
   const isStreamingOverlayVisible = chatInputStatus === "streaming";
-  const associationTags = useChatInputStore((s) => s.associationTags);
-  const selectedNotes = useChatInputStore((s) => s.selectedNotes);
-  const selectedFiles = useChatInputStore((s) => s.selectedFiles);
-  const selectedTexts = useChatInputStore((s) => s.selectedTexts);
-  const selectedTools = useChatInputStore((s) => s.selectedTools);
-  const addSelectedText = useChatInputStore((s) => s.addSelectedText);
-  const clearAssociationTags = useChatInputStore((s) => s.clearAssociationTags);
-  const clearSelectedNotes = useChatInputStore((s) => s.clearSelectedNotes);
-  const clearSelectedFiles = useChatInputStore((s) => s.clearSelectedFiles);
-  const clearSelectedTexts = useChatInputStore((s) => s.clearSelectedTexts);
-  const resetSelectedTools = useChatInputStore((s) => s.resetSelectedTools);
-  const setShowAnswerTip = useChatInputStore((s) => s.setShowAnswerTip);
-  const setShowWritingStyleTip = useChatInputStore((s) => s.setShowWritingStyleTip);
-  const initializeChatInputFromParams = useChatInputStore((s) => s.initializeFromParams);
-  const setAssociationTags = useChatInputStore((s) => s.setAssociationTags);
+  const {
+    associationTags,
+    selectedNotes,
+    selectedFiles,
+    selectedTexts,
+    selectedTools,
+    addSelectedText,
+    clearAssociationTags,
+    clearSelectedNotes,
+    clearSelectedFiles,
+    clearSelectedTexts,
+    resetSelectedTools,
+    setShowAnswerTip,
+    setShowWritingStyleTip,
+    initializeChatInputFromParams,
+    setAssociationTags,
+  } = useChatInputStore(useShallow((s: ChatInputStore) => ({
+      associationTags: s.associationTags,
+      selectedNotes: s.selectedNotes,
+      selectedFiles: s.selectedFiles,
+      selectedTexts: s.selectedTexts,
+      selectedTools: s.selectedTools,
+      addSelectedText: s.addSelectedText,
+      clearAssociationTags: s.clearAssociationTags,
+      clearSelectedNotes: s.clearSelectedNotes,
+      clearSelectedFiles: s.clearSelectedFiles,
+      clearSelectedTexts: s.clearSelectedTexts,
+      resetSelectedTools: s.resetSelectedTools,
+      setShowAnswerTip: s.setShowAnswerTip,
+      setShowWritingStyleTip: s.setShowWritingStyleTip,
+      initializeChatInputFromParams: s.initializeFromParams,
+      setAssociationTags: s.setAssociationTags,
+    })));
   const [pendingInitialMessage, setPendingInitialMessage] = useState("");
   const [shouldAutoSubmitInitialMessage, setShouldAutoSubmitInitialMessage] = useState(false);
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
+  const lastInitialAutoSendKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
     const fileUrl = file.displayUrl || file.putFilePath;
@@ -710,6 +763,7 @@ const MarkdownEditorPage = () => {
       }
 
       if (workId && sessionId) {
+        skipGuideForCurrentStreamRef.current = false;
         guideRequestRef.current = { sessionId, workId };
         const placeholderId = `assistant_${Date.now()}`;
         streamingMessageIdRef.current = placeholderId;
@@ -830,7 +884,7 @@ const MarkdownEditorPage = () => {
 
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
-  const resetEditorStoreTimerRef = useRef<number | null>(null);
+  const lastAutoLoadSessionKeyRef = useRef<string>("");
 
   // 标题（当前文件名）编辑：与 Vue startEditingLabel / saveLabelEdit / cancelLabelEdit 对齐
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -844,6 +898,29 @@ const MarkdownEditorPage = () => {
     lastInitWorkIdRef.current = workId;
     void initEditorData(workId);
   }, [workId, initEditorData]);
+
+  useEffect(() => {
+    setWorkId(workId ?? null);
+  }, [workId, setWorkId]);
+
+  useEffect(() => {
+    if (!workId || currentWorkId !== workId) return;
+    if (activeTab === "canvas") return;
+    const hasCurrentSession =
+      activeTab === "chat" ? !!chatCurrentSession : !!faqCurrentSession;
+    if (hasCurrentSession) return;
+    const loadKey = `${workId}_${activeTab}`;
+    if (lastAutoLoadSessionKeyRef.current === loadKey) return;
+    lastAutoLoadSessionKeyRef.current = loadKey;
+    void loadLatestSession(activeTab);
+  }, [
+    workId,
+    currentWorkId,
+    activeTab,
+    chatCurrentSession,
+    faqCurrentSession,
+    loadLatestSession,
+  ]);
 
   // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
   useEffect(() => {
@@ -930,15 +1007,22 @@ const MarkdownEditorPage = () => {
       const msg = initialParams.message.trim();
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
-        // 交由 ProChatContainer 自动提交，避免桥接事件时序导致漏提
-        setShouldAutoSubmitInitialMessage(true);
+        const submitKey = `${workId ?? ""}:${msg}`;
+        if (lastInitialAutoSendKeyRef.current !== submitKey) {
+          lastInitialAutoSendKeyRef.current = submitKey;
+          setTimeout(() => {
+            sendChatText(msg, { addUserMessage: true });
+            setPendingInitialMessage("");
+          }, 0);
+        }
+        setShouldAutoSubmitInitialMessage(false);
       } else {
         setShouldAutoSubmitInitialMessage(false);
       }
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams]);
+  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   useEffect(() => {
     if (!pendingStepTemplate) return;
@@ -1625,7 +1709,7 @@ const MarkdownEditorPage = () => {
         // 后端保存失败时不打断本地继续创作
       }
 
-      setActiveTab("chat");
+      handleChatHeaderTabChange("chat");
       const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
       setPendingInitialMessage(prompt);
       setShouldAutoSubmitInitialMessage(false);
@@ -1635,6 +1719,7 @@ const MarkdownEditorPage = () => {
       setServerData,
       setWorkInfo,
       saveEditorData,
+      handleChatHeaderTabChange,
     ]
   );
 

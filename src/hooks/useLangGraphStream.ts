@@ -82,6 +82,7 @@ export function useLangGraphStream(
   const [error, setError] = useState<Error | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
+  const sensitiveWordHandledRef = useRef(false);
   const currentWriteOrEditorFilePathRef = useRef<string>("");
   const currentEditInfoListRef = useRef<EditFileArgsType[]>([]);
   const messagesRef = useRef<AgentCustomMessage[]>([]);
@@ -90,6 +91,17 @@ export function useLangGraphStream(
 
   const isMainAgentEvent = (event: string): boolean => {
     return event === "updates" || !event.includes("|tools:");
+  };
+
+  const isSensitiveWordError = (errMsg: string, errorCode?: string): boolean => {
+    const normalizedMsg = String(errMsg ?? "").toLowerCase();
+    const normalizedCode = String(errorCode ?? "").toLowerCase();
+    return (
+      normalizedMsg.includes("敏感词") ||
+      normalizedMsg.includes("sensitive") ||
+      normalizedMsg.includes("content_safety") ||
+      normalizedCode.includes("sensitive")
+    );
   };
 
   function extractContent(data: unknown): string {
@@ -199,6 +211,7 @@ export function useLangGraphStream(
       setTodos([]);
       setIsStreaming(true);
       isStreamingRef.current = true;
+      sensitiveWordHandledRef.current = false;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -239,7 +252,8 @@ export function useLangGraphStream(
         stream_mode: ["messages", "updates"],
         stream_subgraphs: true,
         model: model ?? "",
-        tools: tools ?? [],
+        // tools暂时传空，后续真正扩展了再传
+        tools: [],
         quotedFiles,
         quotedContents,
         notes,
@@ -257,6 +271,35 @@ export function useLangGraphStream(
           url,
           body,
           (eventType, eventData) => {
+            if (eventType === "error") {
+              const payload = Array.isArray(eventData) ? eventData[0] : eventData;
+              let errMsg =
+                typeof payload === "string"
+                  ? payload
+                  : (payload as { message?: string })?.message || "发生错误，请稍后重试";
+              let needSendErrorMsg = false;
+              const errorCode = String((payload as { error?: string })?.error ?? "");
+              const lowerErrorCode = errorCode.toLowerCase();
+              const isSensitiveWord = isSensitiveWordError(errMsg, errorCode);
+              if (isSensitiveWord) {
+                if (!sensitiveWordHandledRef.current) {
+                  sensitiveWordHandledRef.current = true;
+                  optionsRef.current.onSensitiveWord?.();
+                }
+              } else if (errorCode === "content_safety_check_failed") {
+                errMsg = "AI生成的内容未通过内容安全审核";
+                needSendErrorMsg = true;
+              } else if (errorCode) {
+                errMsg = "发生了问题，请稍后重试";
+                needSendErrorMsg = true;
+              }
+
+              const errObj = new Error(errMsg);
+              setError(errObj);
+              optionsRef.current.onError?.(errObj, needSendErrorMsg);
+              return;
+            }
+
             if ((eventType === "messages" || eventType?.startsWith("messages/")) && eventData != null) {
               const isCompleteEvent =
                 eventType === "messages/complete" ||
@@ -448,8 +491,14 @@ export function useLangGraphStream(
             }
           },
           (err) => {
+            const errMsg = err instanceof Error ? err.message : String(err ?? "");
+            const isSensitiveWord = isSensitiveWordError(errMsg);
+            if (isSensitiveWord && !sensitiveWordHandledRef.current) {
+              sensitiveWordHandledRef.current = true;
+              optionsRef.current.onSensitiveWord?.();
+            }
             setError(err);
-            optionsRef.current.onError?.(err, true);
+            optionsRef.current.onError?.(err, !isSensitiveWord);
           },
           () => {
             setIsStreaming(false);
@@ -464,8 +513,13 @@ export function useLangGraphStream(
         isStreamingRef.current = false;
         abortControllerRef.current = null;
         const err = e instanceof Error ? e : new Error(String(e));
+        const isSensitiveWord = isSensitiveWordError(err.message);
+        if (isSensitiveWord && !sensitiveWordHandledRef.current) {
+          sensitiveWordHandledRef.current = true;
+          optionsRef.current.onSensitiveWord?.();
+        }
         setError(err);
-        optionsRef.current.onError?.(err, true);
+        optionsRef.current.onError?.(err, !isSensitiveWord);
       }
     },
     []

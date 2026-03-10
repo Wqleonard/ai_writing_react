@@ -38,6 +38,8 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "data";
   content: string;
+  /** 命中敏感词时标记用户消息（与 Vue 对齐） */
+  hasSensitiveWord?: boolean;
   createdAt?: Date;
   customMessage?: AgentCustomMessageItem[];
   messageType?: "outline" | "detailed_outline" | "chapter" | "edit" | "normal";
