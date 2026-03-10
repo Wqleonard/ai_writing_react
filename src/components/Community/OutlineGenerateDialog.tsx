@@ -520,7 +520,7 @@ export const OutlineGenerateDialog = ({
             <div className="mt-2 px-5 flex flex-col gap-1 h-full">
               <AutoScrollArea
                 className={clsx(
-                  'flex-1 min-h-0 rounded-lg bg-[#f6f6f6] p-3',
+                  'flex-1 min-h-0 rounded-lg bg-[#f6f6f6]',
                   markdownEditing && 'outline-2 outline-(--theme-color)'
                 )}
                 autoScroll

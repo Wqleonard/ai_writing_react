@@ -4,11 +4,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Iconfont } from '@/components/IconFont'
 import { cn } from '@/lib/utils'
-import { getWorksByIdReq, getWorksListReq } from '../../api/works'
-import { serverData2FileTreeData } from '../../utils/aiTreeNodeConverter'
-import type { FileTreeNode } from '../../utils/aiTreeNodeConverter'
+import { getWorksByIdReq, getWorksListReq } from '@/api/works.ts'
+import { serverData2FileTreeData } from '@/utils/aiTreeNodeConverter.ts'
 import type { ConnectedFile, WorkItem } from './types'
 import { FileTree, getCheckedNodesFromIds } from './FileTree'
+import type { FileTreeNode } from "@/stores/editorStore";
 
 const PAGE_SIZE = 20
 
