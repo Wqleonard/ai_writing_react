@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import IconFont from "@/components/IconFont/Iconfont"
 import { ChevronRight, TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
+import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible"
 import {
   Dialog,
   DialogContent,
