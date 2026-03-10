@@ -120,7 +120,10 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
       () => [
         Markdown,
         Mermaid,
-        Placeholder.configure({ placeholder }),
+        Placeholder.configure({
+          placeholder,
+          showOnlyCurrent: false,
+        }),
         StarterKit.configure({
           codeBlock: false,
           heading: { levels: [1, 2, 3, 4, 5, 6] },
@@ -201,22 +204,14 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         const currentMarkdown = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
         const valueToSet = value ?? ''
         if (isEmptyContent(valueToSet)) {
-          if (!editor.isEmpty) {
-            isInternalUpdate.current = true
-            editor.commands.clearContent()
-            editor.commands.setTextSelection(0)
-            queueMicrotask(() => {
-              isInternalUpdate.current = false
-            })
-          }
+          editor.commands.setContent('', { contentType: 'markdown' })
         } else if (valueToSet !== currentMarkdown) {
           isInternalUpdate.current = true
           editor.commands.setContent(valueToSet, { contentType: 'markdown' })
-          editor.commands.setTextSelection(editor.state.doc.content.size)
-          queueMicrotask(() => {
-            isInternalUpdate.current = false
-          })
         }
+        queueMicrotask(() => {  
+          isInternalUpdate.current = false
+        })
       } catch (err) {
         console.error('Error setting editor content:', err)
       }

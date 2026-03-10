@@ -1,7 +1,8 @@
 import apiClient, { type RequestConfig } from "./index";
 import type { CreateWorkType } from "./generate-dialog";
+import type { WorkInfo } from "@/stores/editorStore/types";
 
-export type WorkInfoStage = string;
+export type WorkInfoStage = "blank" | "outline" | "main_content" | "final";
 
 const getWorksListReq = (page: number, pageSize: number = 20) => {
   return apiClient.get("/api/works", { page, size: pageSize });
@@ -64,17 +65,7 @@ const getScriptStorySynopsisReq = (novelPlot: string, description: string) => {
 
 const updateWorkInfoReq = async (
   workId: string,
-  data: {
-    title?: string;
-    introduction?: string;
-    stage?: WorkInfoStage;
-    background?: string;
-    tagIds?: number[];
-    description?: string;
-    userId?: string;
-    chapterNum?: number;
-    wordNum?: number;
-  }
+  data: Partial<WorkInfo>
 ) => {
   return apiClient.put(`/api/works/${workId}`, data);
 };

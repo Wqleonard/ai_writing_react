@@ -1924,15 +1924,6 @@ const MarkdownEditorPage = () => {
 
       if (workId && workInfo.stage === "blank") {
         setWorkInfo({ stage: "final" });
-        setTimeout(() => {
-          void (async () => {
-            try {
-              await updateWorkInfoReq(workId, { stage: "final" });
-            } catch {
-              // 同 Vue：后端失败时不打断本地状态流转
-            }
-          })();
-        }, 1000);
       }
 
       toast.success("已发送到知识库");

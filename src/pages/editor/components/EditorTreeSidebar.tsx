@@ -161,7 +161,6 @@ interface TreeNodeRowProps {
   level: number
   currentKey: string
   onMarkNodeAsRead: (id: string) => void
-  onSelect: (node: FileTreeNode) => void
   onAddFile: (node: FileTreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
   expandedIds: Set<string>
@@ -184,7 +183,6 @@ const TreeNodeRow = React.memo(({
   level,
   currentKey,
   onMarkNodeAsRead,
-  onSelect,
   onAddFile,
   onContextMenu,
   expandedIds,
@@ -204,13 +202,19 @@ const TreeNodeRow = React.memo(({
   const isDragged = dragState.draggedId === node.id
   const showDropLine = dragState.dropTargetId === node.id
 
+  const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
+
   const handleClick = useCallback(() => {
     if (showNewBadge) {
       onMarkNodeAsRead(node.id)
     }
-    if (isMd) onSelect(node)
-    else if (isDir) onToggleExpand(node.id)
-  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
+    if (isMd) {
+      setCurrentEditingId(node.id)
+
+    } else if (isDir) {
+      onToggleExpand(node.id)
+    }
+  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead,setCurrentEditingId, onToggleExpand])
 
   return (
     <div className="w-full">
@@ -235,7 +239,10 @@ const TreeNodeRow = React.memo(({
             "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-(--theme-color) after:content-['']"
         )}
         style={{ paddingLeft: 8 + level * 16 }}
-        onClick={handleClick}
+        onClick={(e) => {
+          if (e.button !== 0) return
+          handleClick()
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
@@ -288,6 +295,9 @@ const TreeNodeRow = React.memo(({
               e.stopPropagation()
               onAddFile(node)
             }}
+            onMouseUp={(e) => {
+              e.stopPropagation()
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault()
@@ -310,7 +320,6 @@ const TreeNodeRow = React.memo(({
               level={level + 1}
               currentKey={currentKey}
               onMarkNodeAsRead={onMarkNodeAsRead}
-              onSelect={onSelect}
               onAddFile={onAddFile}
               onContextMenu={onContextMenu}
               expandedIds={expandedIds}
@@ -490,7 +499,12 @@ export const EditorTreeSidebar = ({
       const selectedTagIds = selectedTags
         .map((tag) => Number(tag.id))
         .filter((id) => Number.isFinite(id))
-      await updateWorkInfoReq(workId, { tagIds: selectedTagIds })
+      setWorkInfo({ workTags: selectedTags.map((tag) => ({
+        id: Number(tag.id),
+        name: tag.name,
+        userId: String(tag.userId ?? ""),
+        categoryId: tag.categoryId,
+      })) })
       setWorkInfo({
         workTags: selectedTags
           .map((tag) => ({
@@ -518,13 +532,10 @@ export const EditorTreeSidebar = ({
       return
     }
     if (v !== workInfo.title) {
-      setWorkInfo({ title: v })
-      updateWorkInfoReq(workId, { title: v }).catch(() =>
-        toast.error("更新标题失败")
-      )
+      setWorkInfo({ title: v, stage: "final" })
     }
     setIsEditingTitle(false)
-  }, [editingTitleValue, workInfo.title, workId, setWorkInfo])
+  }, [editingTitleValue, workInfo.title, setWorkInfo])
 
   const handleTitleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleFinishTitle()
@@ -981,7 +992,6 @@ export const EditorTreeSidebar = ({
               level={0}
               currentKey={currentEditingId}
               onMarkNodeAsRead={clearNewNodeId}
-              onSelect={(n) => setCurrentEditingId(n.id, n)}
               onAddFile={handleAddFileUnder}
               onContextMenu={(e, node) => {
                 e.preventDefault()

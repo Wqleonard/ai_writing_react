@@ -237,15 +237,11 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
       const titleLine = data.story?.title || "未命名作品"
       const currentWorkId = useEditorStore.getState().workId
       if (currentWorkId) {
-        await updateWorkInfoReq(currentWorkId, {
+        setWorkInfo({
           title: titleLine,
           stage: "final",
         })
       }
-      setWorkInfo({
-        title: titleLine,
-        stage: "final",
-      })
       await saveEditorData("1")
     } else if (data.saveTarget == 'new') {
       try {
@@ -255,7 +251,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
           return
         }
         const titleLine = data.story?.title || "未命名作品"
-        const updateReq = await updateWorkInfoReq(newWorkIdReq.id, {
+        setWorkInfo({
           title: titleLine,
           stage: "final",
         })

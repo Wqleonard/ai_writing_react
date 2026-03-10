@@ -12,6 +12,7 @@ import {
   getWorksByIdReq,
   updateWorkVersionReq,
   updateWorkInfoReq,
+  type WorkInfoStage,
 } from "@/api/works";
 import type {
   WorkInfo,
@@ -209,13 +210,26 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setWorkId: (workId) => set({ workId }),
 
-        setWorkInfo: (info) =>
-          set((state) => ({
-            workInfo:
+        setWorkInfo: (info) => {
+          let prevWorkInfo: WorkInfo | null = null;
+          let nextWorkInfo: WorkInfo | null = null;
+
+          set((state) => {
+            prevWorkInfo = state.workInfo;
+            nextWorkInfo =
               typeof info === "function"
                 ? info(state.workInfo)
-                : { ...state.workInfo, ...info },
-          })),
+                : { ...state.workInfo, ...info };
+            return { workInfo: nextWorkInfo };
+          });
+
+          const { workId, workInfo } = get();
+          if (!workId || !prevWorkInfo || !nextWorkInfo) return;
+
+          updateWorkInfoReq(workId, workInfo).catch((error) => {
+            console.error("[editorStore] setWorkInfo sync failed:", error);
+          });
+        },
 
         setServerData: (data) =>
           set((state) => {
@@ -260,19 +274,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
                 ? state.currentEditingNode
                 : findNodeById(state.treeData, fileKey);
             const shouldSyncFileNode = !!editingNode && !editingNode.isDirectory;
-            const hasServerFile = Object.prototype.hasOwnProperty.call(
-              state.serverData,
-              fileKey,
-            );
 
             return {
               currentContent: normalizedContent,
-              serverData: hasServerFile
-                ? {
-                    ...state.serverData,
-                    [fileKey]: normalizedContent,
-                  }
-                : state.serverData,
               currentEditingNode: shouldSyncFileNode
                 ? {
                     ...editingNode,
@@ -394,12 +398,16 @@ export const useEditorStore = create<EditorState & EditorActions>()(
             };
           }),
 
-        setCurrentEditingId: (id, node) =>
-          set((state) => ({
-            currentEditingId: id,
-            currentEditingNode: node ?? findNodeById(state.treeData, id),
-            currentContent: state.serverData[id] ?? "",
-          })),
+        setCurrentEditingId: (id, node) => {
+          set((state) => {
+            const nextCurrentEditingNode = node ?? findNodeById(state.treeData, id);
+            return {
+              currentEditingId: id,
+              currentEditingNode: nextCurrentEditingNode,
+              currentContent: nextCurrentEditingNode?.content ?? "",
+            };
+          });
+        },
 
         initEditorData: async (workId) => {
           set({ workId });
@@ -480,6 +488,10 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         },
         saveEditorData: (saveStatus = "0", _needLocalCache = true) => {
           void _needLocalCache;
+          const { workInfo, setWorkInfo } = get();
+          if (workInfo.stage !== "final") {
+            setWorkInfo({ stage: "final" });
+          }
           latestSaveStatus = saveStatus;
           return new Promise<void>((resolve) => {
             pendingSaveResolves.push(resolve);
