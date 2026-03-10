@@ -213,8 +213,8 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
         style={containerStyle}
         {...rest}
       >
-        <ScrollArea className="h-full w-full">
-          <div ref={contentRef} className="min-h-full">
+        <ScrollArea className="h-full w-full" viewportClassName="overflow-x-hidden">
+          <div ref={contentRef} className="min-h-full min-w-0 w-full max-w-full">
             {children}
           </div>
         </ScrollArea>
