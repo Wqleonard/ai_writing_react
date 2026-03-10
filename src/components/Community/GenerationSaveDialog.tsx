@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getWorksByIdReq, getWorksListReq } from '../../api/works'
-import { serverData2FileTreeData } from '../../utils/aiTreeNodeConverter'
-import type { FileTreeNode } from '../../utils/aiTreeNodeConverter'
+import { getWorksByIdReq, getWorksListReq } from '@/api/works.ts'
+import { serverData2FileTreeData } from '@/utils/aiTreeNodeConverter.ts'
+import type { FileTreeNode } from '@/stores/editorStore/types.ts'
 import type { WorkItem } from './types'
 import {
   Dialog,
