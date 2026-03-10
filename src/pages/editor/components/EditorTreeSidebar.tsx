@@ -1,12 +1,11 @@
 "use client"
 
-import React, { useCallback, useMemo, useState, useEffect, useRef } from "react"
+import React, { useCallback, useState, useEffect, useRef } from "react"
 import clsx from "clsx"
 import { toast } from "sonner"
 import IconFont from "@/components/IconFont/Iconfont"
-import { ChevronRight, TriangleAlert } from "lucide-react"
+import { TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
-import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible"
 import {
   Dialog,
   DialogContent,
@@ -14,6 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/Dialog"
+import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
@@ -255,15 +255,11 @@ const TreeNodeRow = React.memo(({
             "mr-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-all duration-200",
             isDir ? "w-5 opacity-100 text-(--text-secondary) hover:text-(--theme-color)" : "opacity-0"
           )}
-          onClick={(e) => {
-            if (isDir) {
-              e.stopPropagation()
-              onToggleExpand(node.id)
-            }
-          }}
         >
           {isDir ? (
-            <ChevronRight className="size-3.5 select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90" />
+            <div className="flex size-3.5 items-center justify-center">
+              <IconFont unicode="&#xeaa5;" className="select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90" />
+            </div>
           ) : (
             <span className="w-2" />
           )}
@@ -985,7 +981,7 @@ export const EditorTreeSidebar = ({
               level={0}
               currentKey={currentEditingId}
               onMarkNodeAsRead={clearNewNodeId}
-              onSelect={(n) => setCurrentEditingId(n.id)}
+              onSelect={(n) => setCurrentEditingId(n.id, n)}
               onAddFile={handleAddFileUnder}
               onContextMenu={(e, node) => {
                 e.preventDefault()

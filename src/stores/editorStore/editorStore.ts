@@ -64,7 +64,7 @@ interface EditorActions {
   deleteServerDataPath: (path: string) => void;
   /** 重命名路径（更新所有以 oldPath 为前缀的 key） */
   renameServerDataPath: (oldPath: string, newPath: string) => void;
-  setCurrentEditingId: (id: string) => void;
+  setCurrentEditingId: (id: string, node?: FileTreeNode | null) => void;
   /** 初始化编辑器数据：拉取作品详情并写入 workInfo、serverData（对应 Vue initEditorData） */
   initEditorData: (workId: string) => Promise<void>;
   /** 保存编辑器数据到服务端（对应 Vue saveEditorData） */
@@ -304,10 +304,10 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       };
     }),
 
-  setCurrentEditingId: (id) =>
+  setCurrentEditingId: (id, node) =>
     set((state) => ({
       currentEditingId: id,
-      currentEditingNode: findNodeById(state.treeData, id),
+      currentEditingNode: node ?? findNodeById(state.treeData, id),
       currentContent: state.serverData[id] ?? "",
     })),
 
