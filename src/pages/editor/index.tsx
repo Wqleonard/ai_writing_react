@@ -931,19 +931,14 @@ const MarkdownEditorPage = () => {
     loadLatestSession,
   ]);
 
-  // 页面卸载时再重置 editor store，避免点击返回瞬间 currentLabel 闪空
-  // useEffect(() => {
-  //   if (resetEditorStoreTimerRef.current != null) {
-  //     window.clearTimeout(resetEditorStoreTimerRef.current);
-  //     resetEditorStoreTimerRef.current = null;
-  //   }
-  //   return () => {
-  //     resetEditorStoreTimerRef.current = window.setTimeout(() => {
-  //       initEditorStore();
-  //       resetEditorStoreTimerRef.current = null;
-  //     }, 0);
-  //   };
-  // }, [initEditorStore]);
+  // 页面卸载时再重置 editor store
+  useEffect(() => {
+    return () => {
+      initEditorStore();
+      lastInitWorkIdRef.current = null;
+      lastAutoLoadSessionKeyRef.current = "";
+    };
+  }, [initEditorStore]);
 
   useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
@@ -1034,11 +1029,11 @@ const MarkdownEditorPage = () => {
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   useEffect(() => {
-    if (!pendingStepTemplate) return;
-    const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
-    if (opened) {
-      setPendingStepTemplate(null);
-    }
+    // if (!pendingStepTemplate) return;
+    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
+    // if (opened) {
+    //   setPendingStepTemplate(null);
+    // }
   }, [pendingStepTemplate, serverData, currentEditingId]);
 
   // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
@@ -1169,13 +1164,13 @@ const MarkdownEditorPage = () => {
         padding-right: ${settings.margin}px;
       }
 
-      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror {
+      .page-editor-panel .main-editor .main-editor-content .ProseMirror {
         --tiptap-prosemirror-font-size: ${remFontSize}rem !important;
         --tiptap-prosemirror-line-height: ${settings.lineHeight} !important;
         font-weight: ${settings.fontWeight} !important;
       }
 
-      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror p:not(.mermaid-container):not(.mermaid-container *) {
+      .page-editor-panel .main-editor .main-editor-content .ProseMirror p:not(.mermaid-container):not(.mermaid-container *) {
         text-indent: ${settings.textIndentEnabled ? "2em" : "0"};
       }
     `;
@@ -2227,14 +2222,14 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        {/* <StepWorkflow
+                        <StepWorkflow
                           ref={stepWorkflowRef}
                           totalMdContentLength={wordCount}
                           isEditorEmpty={isEditorActuallyEmpty}
                           hasTemplateContent={!!pendingStepTemplate}
                           disableRecommendAutoOpen={disableRecommendAutoOpen}
                           currentEditingId={currentEditingId}
-                        /> */}
+                        />
                       </div>
                     </div>
                     {!isEditorEditable && (

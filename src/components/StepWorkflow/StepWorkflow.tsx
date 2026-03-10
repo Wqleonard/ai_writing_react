@@ -76,7 +76,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   ref
 ) {
   const [recommendDialogShow, setRecommendDialogShow] = useState(false)
-  const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
+  const [stepCreateDialogShow, setStepCreateDialogShow] = useState(true)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
   const autoOpenedOnceRef = useRef(false)
   const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
@@ -163,42 +163,44 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
   }, [openStepCreateDialogSafely])
 
   useEffect(() => {
-    if (!canOpenStepCreateDialog && stepCreateDialogShow) {
-      setStepCreateDialogShow(false)
-    }
-    if (!canOpenStepCreateDialog && recommendDialogShow) {
-      setRecommendDialogShow(false)
-    }
-    if (!canOpenStepCreateDialog) {
-      autoOpenedOnceRef.current = false
-    }
+    // if (!canOpenStepCreateDialog && stepCreateDialogShow) {
+    //   setStepCreateDialogShow(false)
+    // }
+    // if (!canOpenStepCreateDialog && recommendDialogShow) {
+    //   setRecommendDialogShow(false)
+    // }
+    // if (!canOpenStepCreateDialog) {
+    //   autoOpenedOnceRef.current = false
+    // }
   }, [canOpenStepCreateDialog, recommendDialogShow, stepCreateDialogShow])
 
   useEffect(() => {
-    if (!disableRecommendAutoOpen) return
-    if (recommendDialogShow) setRecommendDialogShow(false)
+    // if (!disableRecommendAutoOpen) return
+    // if (recommendDialogShow) setRecommendDialogShow(false)
   }, [disableRecommendAutoOpen, recommendDialogShow])
 
   // 自动弹窗（仅一次）：有模板内容 -> StepCreateDialog；否则 -> CreateRecommendDialog
   useEffect(() => {
-    if (!canOpenStepCreateDialog) return
-    if (autoOpenedOnceRef.current) return
+    // if (!canOpenStepCreateDialog) return
+    // if (autoOpenedOnceRef.current) return
 
-    if (hasTemplateContent) {
-      setRecommendDialogShow(false)
-      setStepCreateDialogShow(true)
-      autoOpenedOnceRef.current = true
-      return
-    }
+    // if (hasTemplateContent) {
+    //   setRecommendDialogShow(false)
+    //   setStepCreateDialogShow(true)
+    //   autoOpenedOnceRef.current = true
+    //   return
+    // }
 
-    if (!disableRecommendAutoOpen) {
-      setStepCreateDialogShow(false)
-      setRecommendDialogShow(true)
-      autoOpenedOnceRef.current = true
-    }
+    // if (!disableRecommendAutoOpen) {
+    //   setStepCreateDialogShow(false)
+    //   setRecommendDialogShow(true)
+    //   autoOpenedOnceRef.current = true
+    // }
   }, [canOpenStepCreateDialog, hasTemplateContent, disableRecommendAutoOpen])
 
   useEffect(() => {
+
+    return
     if (hideTimerRef.current) {
       window.clearTimeout(hideTimerRef.current)
       hideTimerRef.current = null
@@ -295,7 +297,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
       />
       <StepCreateDialog
         ref={stepCreateDialogRef}
-        open={stepCreateDialogShow && canOpenStepCreateDialog}
+        open={stepCreateDialogShow}
         onOpenChange={(next) => setStepCreateDialogShow(next && canOpenStepCreateDialog)}
         onConfirm={handleStepConfirm}
       />

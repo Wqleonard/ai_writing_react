@@ -27,14 +27,10 @@
 }
 
 .markdown-editor .markdown-editor-content .ProseMirror.tiptap {
-  --tiptap-prosemirror-font-size: 16px;
-  --tiptap-prosemirror-line-height: 1.8;
   min-height: 24px !important;
   /* padding: 12px !important; */
   outline: none;
   color: #303133;
-  line-height: var(--tiptap-prosemirror-line-height);
-  font-size: var(--tiptap-prosemirror-font-size);
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;

@@ -4,8 +4,9 @@ import type { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlock from '@tiptap/extension-code-block'
 import { Markdown } from '@tiptap/markdown'
+import Placeholder from '@tiptap/extension-placeholder'
 import { StreamIndicator } from '@/components/StreamIndicator'
-import './MarkdownEditor.css'
+import './index.css'
 
 export interface MarkdownEditorProps {
   value?: string
@@ -14,6 +15,7 @@ export interface MarkdownEditorProps {
   readonly?: boolean
   loading?: boolean
   maxlength?: number
+  placeholder?: string
 }
 
 const isEmptyContent = (content: string | undefined | null): boolean => {
@@ -26,6 +28,7 @@ export const MarkdownEditor = ({
   className = '',
   readonly = false,
   loading = false,
+  placeholder = '请输入内容...',
   maxlength,
 }: MarkdownEditorProps) => {
   const isInternalUpdateRef = useRef(false)
@@ -33,12 +36,13 @@ export const MarkdownEditor = ({
   const extensions = useMemo(
     () => [
       Markdown,
+      Placeholder.configure({ placeholder }),
       StarterKit.configure({
         codeBlock: false,
       }),
       CodeBlock,
     ],
-    []
+    [placeholder]
   )
 
   const editor = useEditor({
