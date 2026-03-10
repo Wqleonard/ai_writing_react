@@ -613,14 +613,14 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
 
     return (
       <div className="flex flex-col pt-[87px] pr-[120px] pb-5">
-        <div className={`flex flex-col ${needFixedHeight ? "h-[calc(100vh-56px)] overflow-hidden" : ""}`}>
+        <div className={`flex flex-col p-4 ${needFixedHeight ? "h-[calc(100vh-56px)] overflow-hidden" : ""}`}>
           <div className="mb-5 text-[32px] leading-[1.32em] font-bold text-[#464646]">
             {chapterData?.chapter} {chapterData?.chapter_title}
           </div>
 
           <div className="mb-3 flex items-center gap-[60px]">
             <div
-              className={`relative flex min-h-[45px] flex-1 items-center gap-3 overflow-hidden rounded-[5px] border px-3 transition-all ${
+              className={`relative flex min-h-[45px] flex-1 items-center gap-3 overflow-hidden rounded-[5px] px-3 transition-all ${
                 hasDetailedOutline || isGeneratingDetailedOutline || isGeneratingContent
                   ? "h-auto min-h-[26px] cursor-default border-transparent px-0"
                   : "h-[45px] cursor-pointer border-[#d6d6d6]"
@@ -630,7 +630,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                 setIsEditingNote(true);
               }}
             >
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <div className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden">
                 <span
                   className={`shrink-0 leading-[1.32em] ${
                     hasDetailedOutline || isGeneratingDetailedOutline || isGeneratingContent
@@ -690,7 +690,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                 <button
                   type="button"
                   disabled={isGeneratingDetailedOutline || isGeneratingContent}
-                  className="h-10 w-[165px] rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-10 w-40 rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => void onRevertToNote()}
                 >
                   回退至此步骤
@@ -732,7 +732,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                     <div className="w-[200px]" />
                   </div>
                 ) : isOutlineLocked ? (
-                  <div className="flex min-h-0 flex-1 items-center gap-[60px] overflow-hidden">
+                  <div className="flex min-h-0 flex-1 gap-[60px] overflow-hidden">
                     {!isOutlineExpanded ? (
                       <div
                         className="flex min-h-[26px] flex-1 cursor-pointer items-center px-3"
@@ -740,7 +740,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                       >
                         <div className="min-w-0">
                           <span className="text-[20px] text-[#999]">章节细纲：</span>
-                          <span className="text-[20px] text-[#999]">{detailedOutline}</span>
+                          <span className="text-[20px] text-[#999] line-clamp-1">{detailedOutline}</span>
                         </div>
                       </div>
                     ) : (
@@ -765,7 +765,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                           <button
                             type="button"
                             disabled={isGeneratingContent}
-                            className="h-10 w-[165px] rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="h-10 w-40 rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => void onRevertToOutline()}
                           >
                             回退至此步骤
@@ -778,7 +778,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                         <button
                           type="button"
                           disabled={isGeneratingContent}
-                          className="h-10 w-[165px] rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-10 w-40 rounded-[10px] border-2 border-[#999] text-[20px] text-[#999] disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => void onRevertToOutline()}
                         >
                           回退至此步骤
@@ -790,7 +790,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                   <div className="flex">
                     <div
                       ref={outlineWrapperRef}
-                      className={`relative flex-1 rounded-[10px] bg-[#f7f7f8] ${
+                      className={`relative flex-1 rounded-[10px] bg-[#f7f7f8] overflow-hidden ${
                         isEditingDetailedOutline ? "ring-1 ring-[#ffb200]" : ""
                       }`}
                       onClick={(e) => {
@@ -813,11 +813,10 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                           <span>编辑</span>
                         </button>
                       )}
-                      <div ref={outlineScrollRef} className="h-full max-h-[420px] overflow-y-auto p-4">
+                      <div ref={outlineScrollRef} className="h-full max-h-[420px] bg-white overflow-y-auto p-4">
                         <MainEditor
                           ref={outlineEditorRef}
-                          className="editor-outer-scroll-mode [&_.ProseMirror]:min-h-[280px] [&_.ProseMirror]:text-[24px] [&_.ProseMirror]:leading-[1.8em] [&_.ProseMirror]:text-[#333]"
-                          fontClassName="font-KaiTi"
+                          className="editor-outer-scroll-mode [&_.ProseMirror]:min-h-[280px] [&_.ProseMirror.tiptap]:[--tiptap-prosemirror-font-size:24px!important] [&_.ProseMirror]:text-[24px] [&_.ProseMirror]:leading-[1.8em] [&_.ProseMirror]:text-[#333]"
                           value={detailedOutline}
                           readonly={isGeneratingDetailedOutline || !isEditingDetailedOutline}
                           onChange={setDetailedOutline}
@@ -868,7 +867,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
         {(hasContent || contentStreamingText) &&
           !(isGeneratingContent && !contentText && !contentStreamingText) && (
             <div className="mt-2">
-              <div className="flex">
+              <div className="flex px-4">
                 <div
                   ref={contentWrapperRef}
                   className={`flex-1 rounded-[10px] bg-[#f7f7f8] p-4 ${
@@ -910,8 +909,8 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                   )}
                 </div>
 
-                <div className="ml-6 w-[200px]">
-                  <div className="sticky top-[120px] flex flex-col gap-3">
+                <div className="ml-6 w-40">
+                  <div className="sticky top-[320px] flex flex-col gap-3">
                     {hasContent && !isGeneratingContent && !locked && (
                       <button
                         type="button"
@@ -933,7 +932,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                     {locked && !isGeneratingContent && (
                       <button
                         type="button"
-                        className="h-10 w-full rounded-[10px] border-2 border-[#999] text-[20px] text-[#999]"
+                        className="h-13 w-40 rounded-[10px] border-2 border-[#999] text-[20px] text-[#999]"
                         onClick={() => void onRevertToCurrent()}
                       >
                         回退至第{numberToChinese(chapterIndex + 1)}章
@@ -942,7 +941,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                     {!locked && hasNextContent && (
                       <button
                         type="button"
-                        className="h-10 w-full rounded-[10px] border-2 border-[#999] text-[20px] text-[#999]"
+                        className="h-13 w-40 rounded-[10px] border-2 border-[#999] text-[20px] text-[#999]"
                         onClick={() => void onRevertToCurrent()}
                       >
                         回退至此步骤
@@ -951,7 +950,7 @@ const QuickChapterEditor = forwardRef<QuickChapterEditorHandle, Props>(
                     {!locked && (
                       <button
                         type="button"
-                        className="h-10 w-full rounded-[10px] border border-[#d0d0d0] text-[16px] text-[#777]"
+                        className="h-13 w-40 rounded-[10px] border border-[#d0d0d0] text-[16px] text-[#777]"
                         onClick={() => void onRevert()}
                       >
                         {previousChapterIndex !== undefined && previousChapterIndex >= 0

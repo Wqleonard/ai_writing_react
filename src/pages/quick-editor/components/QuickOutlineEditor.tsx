@@ -3,6 +3,9 @@ import { toast } from "sonner";
 import { addNote } from "@/api/notes";
 import { postDocTemplateStreamOutline } from "@/api/generate-quick";
 import type { PostStreamData } from "@/api";
+import MarkdownEditor from "@/components/MainEditor";
+import { LinkButton } from "@/components/ui/LinkButton";
+import { Iconfont } from "@/components/IconFont";
 
 type StoryData = {
   title: string;
@@ -86,7 +89,22 @@ const QuickOutlineEditor = ({
   const [loading, setLoading] = useState(false);
   const [selectedVersion] = useState("v1");
   const abortRef = useRef<AbortController | null>(null);
-  const prevTriggerRef = useRef(triggerGenerate);
+  const prevTriggerRef = useRef(0);
+  const latestTriggerParamsRef = useRef({
+    storyContent,
+    characterContent,
+    selectedTagIds,
+    locked,
+  });
+
+  useEffect(() => {
+    latestTriggerParamsRef.current = {
+      storyContent,
+      characterContent,
+      selectedTagIds,
+      locked,
+    };
+  }, [storyContent, characterContent, selectedTagIds, locked]);
 
   const hasOutlineContent = useMemo(() => outlineContentJson !== null, [outlineContentJson]);
 
@@ -268,12 +286,16 @@ const QuickOutlineEditor = ({
 
   useEffect(() => {
     if (triggerGenerate > prevTriggerRef.current && triggerGenerate > 0) {
-      if (
-        storyContent.trim() &&
-        characterContent.trim() &&
-        selectedTagIds &&
-        !locked
-      ) {
+      setTimeout(() => {
+        const latest = latestTriggerParamsRef.current;
+        if (
+          !latest.storyContent.trim() ||
+          !latest.characterContent.trim() ||
+          !latest.selectedTagIds ||
+          latest.locked
+        ) {
+          return;
+        }
         if (isStreaming || loading) {
           if (abortRef.current) {
             abortRef.current.abort();
@@ -284,20 +306,14 @@ const QuickOutlineEditor = ({
         }
         setOutlineContentMd("");
         setOutlineContentJson(null);
-        setTimeout(() => {
-          void generateOutline();
-        }, 100);
-      }
+        void generateOutline();
+      }, 100);
     }
     prevTriggerRef.current = triggerGenerate;
   }, [
-    characterContent,
     generateOutline,
     isStreaming,
     loading,
-    locked,
-    selectedTagIds,
-    storyContent,
     triggerGenerate,
   ]);
 
@@ -315,22 +331,22 @@ const QuickOutlineEditor = ({
       <div className="mb-[50px] flex w-full shrink-0 items-center justify-between">
         <div className="text-2xl leading-[1.32em] text-black">请确认大纲内容</div>
         <div className="flex items-center gap-8">
-          <button
-            type="button"
-            className="text-xl text-[#464646] hover:opacity-80"
+          <LinkButton
+            className="text-xl text-[#464646]"
             onClick={() => void handleAddNote()}
           >
-            添加笔记
-          </button>
+            <Iconfont unicode="&#xe64c;" className="mr-2"/>
+            <span>添加笔记</span>
+          </LinkButton>
           {!locked && (
-            <button
-              type="button"
+            <LinkButton
               disabled={loading}
-              className="flex items-center text-xl text-[#464646] disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-80"
+              className="flex items-center text-xl text-[#464646]"
               onClick={() => void generateOutline()}
             >
-              <span className="mr-[10px] text-2xl">↻</span>重新生成
-            </button>
+              <Iconfont unicode="&#xe66f;" className="mr-2"/>
+              <span>重新生成</span>
+            </LinkButton>
           )}
         </div>
       </div>
@@ -345,9 +361,16 @@ const QuickOutlineEditor = ({
 
         {isStreaming ? (
           <div className="min-h-[260px] w-full rounded-[10px] bg-[#f7f7f8] p-4 text-[#333]">
-            <pre className="whitespace-pre-wrap wrap-break-word text-base leading-[1.8em]">
-              {outlineContentMd || "正在生成大纲..."}
-            </pre>
+            <MarkdownEditor
+              value={outlineContentMd || "正在生成大纲..."}
+              readonly
+              minHeight={260}
+              placeholder="正在生成大纲..."
+              className="text-[24px] leading-[1.8em] text-[#333]"
+            />
+            {/* <pre className="whitespace-pre-wrap wrap-break-word text-base leading-[1.8em]"> */}
+              {/* {outlineContentMd || "正在生成大纲..."} */}
+            {/* </pre> */}
           </div>
         ) : (
           <div className={`w-full text-[#333] ${isEditing || locked || outlineContentJson ? "is-editing" : ""}`}>
@@ -414,11 +437,6 @@ const QuickOutlineEditor = ({
         </div>
       )}
 
-      {false && (
-        <button type="button" onClick={onRevert}>
-          回退
-        </button>
-      )}
     </div>
   );
 };

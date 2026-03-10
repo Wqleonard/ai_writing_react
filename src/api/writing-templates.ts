@@ -117,7 +117,7 @@ const postDocTemplateStreamDetailedOutline = (
   config?: { signal?: AbortSignal }
 ) => {
   return apiClient.postStream(
-    "api/works/doc/detailed-outline",
+    "/api/works/doc/detailed-outline",
     data,
     onData,
     onError,
@@ -148,7 +148,7 @@ const postDocTemplateStreamContent = (
   config?: { signal?: AbortSignal }
 ) => {
   return apiClient.postStream(
-    "api/works/chat/doc/writing",
+    "/api/works/chat/doc/writing",
     data,
     onData,
     onError,
