@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import IconFont from "@/components/IconFont/Iconfont"
 import { ChevronRight, TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
-import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -178,7 +178,7 @@ interface TreeNodeRowProps {
   onDragEnd: () => void
 }
 
-const TreeNodeRow = ({
+const TreeNodeRow = React.memo(({
   node,
   newNodeIdMap,
   level,
@@ -205,10 +205,12 @@ const TreeNodeRow = ({
   const showDropLine = dragState.dropTargetId === node.id
 
   const handleClick = useCallback(() => {
-    onMarkNodeAsRead(node.id)
+    if (showNewBadge) {
+      onMarkNodeAsRead(node.id)
+    }
     if (isMd) onSelect(node)
     else if (isDir) onToggleExpand(node.id)
-  }, [isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
+  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead, onSelect, onToggleExpand])
 
   return (
     <div className="w-full">
@@ -216,6 +218,7 @@ const TreeNodeRow = ({
         role="button"
         tabIndex={0}
         draggable
+        data-state={expanded ? "open" : "closed"}
         className={clsx(
           "group/node",
           "relative flex cursor-pointer items-center rounded px-2 py-1.5 text-sm transition-all duration-200",
@@ -260,12 +263,7 @@ const TreeNodeRow = ({
           }}
         >
           {isDir ? (
-            <ChevronRight
-              className={clsx(
-                "size-3.5 select-none transition-transform duration-200",
-                expanded && "rotate-90"
-              )}
-            />
+            <ChevronRight className="size-3.5 select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90" />
           ) : (
             <span className="w-2" />
           )}
@@ -334,7 +332,37 @@ const TreeNodeRow = ({
       )}
     </div>
   )
-}
+}, (prev, next) => {
+  // 目录节点需要感知后代的展开状态变化，保守起见始终重渲染
+  if (prev.node.isDirectory || next.node.isDirectory) return false
+
+  if (prev.node !== next.node) return false
+  if (prev.level !== next.level) return false
+  if (prev.currentKey === prev.node.id || next.currentKey === next.node.id) {
+    if (prev.currentKey !== next.currentKey) return false
+  }
+
+  const prevShowNewBadge = !!prev.newNodeIdMap[prev.node.id]
+  const nextShowNewBadge = !!next.newNodeIdMap[next.node.id]
+  if (prevShowNewBadge !== nextShowNewBadge) return false
+
+  const prevExpanded = prev.expandedIds.has(prev.node.id)
+  const nextExpanded = next.expandedIds.has(next.node.id)
+  if (prevExpanded !== nextExpanded) return false
+
+  const prevIsDragged = prev.dragState.draggedId === prev.node.id
+  const nextIsDragged = next.dragState.draggedId === next.node.id
+  if (prevIsDragged !== nextIsDragged) return false
+
+  const prevIsDropTarget = prev.dragState.dropTargetId === prev.node.id
+  const nextIsDropTarget = next.dragState.dropTargetId === next.node.id
+  if (prevIsDropTarget !== nextIsDropTarget) return false
+  if (nextIsDropTarget && prev.dragState.dropPosition !== next.dragState.dropPosition) {
+    return false
+  }
+
+  return true
+})
 
 export interface EditorTreeSidebarProps {
   className?: string
@@ -568,6 +596,7 @@ export const EditorTreeSidebar = ({
       setTreeData([...nextTreeData])
       markNewNodeId(newNodeId)
       setCurrentEditingId(newNodeId)
+      setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
     [markNewNodeId, setCurrentEditingId, setTreeData, treeData]
   )
@@ -1057,7 +1086,7 @@ export const EditorTreeSidebar = ({
               >
                 添加文件夹
               </div>
-              <div
+              <div        
                 role="button"
                 tabIndex={0}
                 className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"

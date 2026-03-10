@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 
@@ -77,10 +77,7 @@ export function EditChangesPanel({
       next == null ? null : visibleChanges.find((item) => item.index === next) ?? null;
     onSelectChange?.(selectedChange);
   };
-  const visibleChanges = useMemo(
-    () => changes.filter((c) => c.status === "pending"),
-    [changes]
-  );
+  const visibleChanges = changes.filter((c) => c.status === "pending");
 
     return (
       <div

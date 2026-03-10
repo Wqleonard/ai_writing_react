@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { toast } from "sonner";
-import { serverDataToTree, findFirstMdNode } from "@/stores/editorStore/utils";
+import { serverDataToTree, findFirstMdNode, findNodeById } from "@/stores/editorStore/utils";
 import {
   getWorksByIdReq,
   updateWorkVersionReq,
@@ -43,6 +43,8 @@ interface EditorState {
   newNodeIdMap: Record<string, boolean>;
   /** 当前编辑中的文件路径 key */
   currentEditingId: string;
+  /** 当前编辑中的node  */
+  currentEditingNode: FileTreeNode | null;
 }
 
 interface EditorActions {
@@ -82,6 +84,7 @@ const initialState: EditorState = {
   currentContent: "",
   newNodeIdMap: {},
   currentEditingId: DEFAULT_EDITING_FILE_KEY,
+  currentEditingNode: null,
 };
 
 let htmlEntityDecoder: HTMLTextAreaElement | null = null;
@@ -290,10 +293,12 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         },
         {}
       );
+      const nextTreeData = serverDataToTree(next);
       return {
         serverData: next,
-        treeData: serverDataToTree(next),
+        treeData: nextTreeData,
         currentEditingId,
+        currentEditingNode: findNodeById(nextTreeData, currentEditingId),
         newNodeIdMap,
         currentContent: next[currentEditingId] ?? "",
       };
@@ -302,6 +307,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
   setCurrentEditingId: (id) =>
     set((state) => ({
       currentEditingId: id,
+      currentEditingNode: findNodeById(state.treeData, id),
       currentContent: state.serverData[id] ?? "",
     })),
 
@@ -360,6 +366,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         DEFAULT_EDITING_FILE_KEY;
       set({
         currentEditingId: fileKey,
+        currentEditingNode: findNodeById(initializedState.treeData, fileKey),
         currentContent: initializedState.serverData[fileKey] ?? "",
       });
 

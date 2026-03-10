@@ -48,7 +48,7 @@ import {
   useEditorStore,
   DEFAULT_EDITING_FILE_KEY,
 } from "@/stores/editorStore";
-import { serverDataToTree, findNodeLabelById } from "@/stores/editorStore/utils";
+import { serverDataToTree } from "@/stores/editorStore/utils";
 import {
   Dialog,
   DialogContent,
@@ -838,6 +838,7 @@ const MarkdownEditorPage = () => {
   const serverData = useEditorStore((s) => s.serverData);
   const currentContent = useEditorStore((s) => s.currentContent);
   const currentEditingId = useEditorStore((s) => s.currentEditingId);
+  const currentEditingNode = useEditorStore((s) => s.currentEditingNode);
   const initEditorData = useEditorStore((s) => s.initEditorData);
   const saveEditorData = useEditorStore((s) => s.saveEditorData);
   const setServerData = useEditorStore((s) => s.setServerData);
@@ -1569,10 +1570,7 @@ const MarkdownEditorPage = () => {
   );
   const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
 
-  const currentLabel = useMemo(
-    () => (currentEditingId ? findNodeLabelById(treeData, currentEditingId) : ""),
-    [treeData, currentEditingId]
-  );
+  const currentLabel = currentEditingNode?.label ?? "";
 
   const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
   const isCurrentEditorEmpty = useMemo(
