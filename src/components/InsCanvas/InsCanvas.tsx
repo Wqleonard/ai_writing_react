@@ -180,6 +180,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
     const nodesRef = useRef<CustomNode[]>(initialNodes);
     const edgesRef = useRef<CustomEdge[]>(initialEdges);
     const hasIdeaRef = useRef(false);
+    const layoutRequestIdRef = useRef(0);
     const [inspirationDrawId, setInspirationDrawId] = useState(initialInspirationDrawId);
     const [ideaContent, setIdeaContent] = useState("");
     const [reqIdeaContent, setReqIdeaContent] = useState("");
@@ -300,77 +301,64 @@ import { useCanvasStore } from "@/stores/canvasStore";
       if (hasIdea) setCanvasReady(true);
     }, [hasIdea]);
 
-    // dagre 完成后，按同父边顺序稳定兄弟节点上下顺序，避免出现 B->D->C 被排成 B->C->D
-    const stabilizeSiblingOrder = useCallback(
-      (layoutedNodes: CustomNode[], edgesArr: CustomEdge[]) => {
-        const nextNodes = layoutedNodes.map((n) => ({
-          ...n,
-          position: { ...n.position },
-        }));
-        const nodeMap = new Map(nextNodes.map((n) => [n.id, n] as const));
-
-        const parentChildrenMap = new Map<string, string[]>();
-        for (const e of edgesArr) {
-          if (!parentChildrenMap.has(e.source)) parentChildrenMap.set(e.source, []);
-          parentChildrenMap.get(e.source)!.push(e.target);
-        }
-
-        for (const [, childIdsInEdgeOrder] of parentChildrenMap) {
-          if (childIdsInEdgeOrder.length <= 1) continue;
-          const children = childIdsInEdgeOrder
-            .map((id) => nodeMap.get(id))
-            .filter((n): n is CustomNode => Boolean(n));
-          if (children.length <= 1) continue;
-
-          const ySlots = [...children]
-            .sort((a, b) => a.position.y - b.position.y)
-            .map((n) => n.position.y);
-
-          // 边顺序靠前的孩子使用更靠上的 y 槽位
-          children.forEach((child, index) => {
-            const y = ySlots[index];
-            if (typeof y === "number") {
-              child.position.y = y;
-            }
-          });
-        }
-
-        return nextNodes;
-      },
-      []
-    );
-
     const autoLayout = useCallback(() => {
       // 注意：autoLayout 会延迟触发，不能用闭包里的 hasIdea（可能是旧值）
       if (!hasIdeaRef.current) return;
       setTimeout(() => {
-        try {
-          const layouted = dagreLayout(
-            nodesRef.current,
-            edgesRef.current,
-            "LR"
-          );
-          const stabilized = stabilizeSiblingOrder(
-            layouted as CustomNode[],
-            edgesRef.current
-          );
-          setNodes(stabilized);
-        } catch (e) {
-          console.error("dagre layout error:", e);
-        }
+        const requestId = ++layoutRequestIdRef.current;
+        void (async () => {
+          try {
+            const layouted = await dagreLayout(
+              nodesRef.current,
+              edgesRef.current,
+              "LR"
+            );
+            if (requestId !== layoutRequestIdRef.current) return;
+            const layoutedNodes = layouted as CustomNode[];
+            setEdges(edgesRef.current);
+            setNodes(layoutedNodes);
+          } catch (e) {
+            console.error("elk layout error:", e);
+          }
+        })();
       }, 100);
-    }, [dagreLayout, setNodes, stabilizeSiblingOrder]);
+    }, [dagreLayout, setNodes, setEdges]);
 
-    // 统一图更新与布局触发：每次动作只触发一次布局，并且布局基于最新图数据
-    const applyGraphAndAutoLayout = useCallback(
-      (nextNodes: CustomNode[], nextEdges: CustomEdge[], delayMs: number = 120) => {
+    // 只重排某个 root 下的子树，避免全图抖动和“新增兄弟跑位”
+    const applyGraphAndSubtreeLayout = useCallback(
+      (
+        nextNodes: CustomNode[],
+        nextEdges: CustomEdge[],
+        rootId: string,
+        delayMs: number = 140
+      ) => {
         nodesRef.current = nextNodes;
         edgesRef.current = nextEdges;
         setNodes(nextNodes);
         setEdges(nextEdges);
-        setTimeout(autoLayout, delayMs);
+        setTimeout(() => {
+          if (!hasIdeaRef.current) return;
+          const requestId = ++layoutRequestIdRef.current;
+          void (async () => {
+            try {
+              const layouted = await dagreLayout(
+                nextNodes,
+                nextEdges,
+                "LR",
+                rootId
+              );
+              if (requestId !== layoutRequestIdRef.current) return;
+              const layoutedNodes = layouted as CustomNode[];
+              edgesRef.current = nextEdges;
+              setEdges(nextEdges);
+              setNodes(layoutedNodes);
+            } catch (e) {
+              console.error("elk subtree layout error:", e);
+            }
+          })();
+        }, delayMs);
       },
-      [setNodes, setEdges, autoLayout]
+      [setNodes, setEdges, dagreLayout]
     );
 
     const scheduleAutoLayoutForExpand = useCallback(() => {
@@ -428,6 +416,26 @@ import { useCanvasStore } from "@/stores/canvasStore";
       },
       [collectChildren, setNodes, setEdges, autoLayout]
     );
+
+    const getParentId = useCallback(
+      (targetNodeId: string, edgesArr: CustomEdge[]) => {
+        return edgesArr.find((e) => e.target === targetNodeId)?.source;
+      },
+      []
+    );
+
+    const getTopAncestorId = useCallback(
+      (startNodeId: string, edgesArr: CustomEdge[]) => {
+        let current = startNodeId;
+        let parent = getParentId(current, edgesArr);
+        while (parent) {
+          current = parent;
+          parent = getParentId(current, edgesArr);
+        }
+        return current;
+      },
+      [getParentId]
+    );
   
     const generateStorySettings = useCallback(
       (sourceNodeId: string) => {
@@ -468,9 +476,15 @@ import { useCanvasStore } from "@/stores/canvasStore";
         }
         const nextNodes = [...nodes, ...newNodes];
         const nextEdges = [...(edges as CustomEdge[]), ...newEdges];
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        const layoutRootId = getTopAncestorId(sourceNodeId, edges as CustomEdge[]);
+        // 生成子节点时提升到最高祖先重排，确保 A/B 同时生成时跨分支也能互相避让
+        applyGraphAndSubtreeLayout(
+          nextNodes,
+          nextEdges,
+          layoutRootId
+        );
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
     );
   
     const addSummaryCard = useCallback(
@@ -587,9 +601,10 @@ import { useCanvasStore } from "@/stores/canvasStore";
           nextEdges.push(newEdge);
         }
 
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        const layoutRootId = getTopAncestorId(parentId, nextEdges);
+        applyGraphAndSubtreeLayout(nextNodes, nextEdges, layoutRootId);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
     );
   
     const handleMainCardCreate = useCallback(
@@ -646,7 +661,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
           ...newEdges,
         ];
 
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        applyGraphAndSubtreeLayout(nextNodes, nextEdges, nodeId);
         setCanvasReady(true);
 
         // 后台生成 drawId，成功后回写到状态与各节点 data 中
@@ -671,7 +686,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
           }
         })();
       },
-      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, applyGraphAndAutoLayout]
+      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, applyGraphAndSubtreeLayout]
     );
   
     const addSettingCard = useCallback(
@@ -785,9 +800,10 @@ import { useCanvasStore } from "@/stores/canvasStore";
           nextEdges.push(newEdge);
         }
 
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        const layoutRootId = getTopAncestorId(parentId, nextEdges);
+        applyGraphAndSubtreeLayout(nextNodes, nextEdges, layoutRootId);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
     );
   
     const generateOutlineNodes = useCallback(
@@ -833,9 +849,15 @@ import { useCanvasStore } from "@/stores/canvasStore";
         }
         const nextNodes = [...nodes, ...newNodes];
         const nextEdges = [...(edges as CustomEdge[]), ...newEdges];
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        const layoutRootId = getTopAncestorId(sourceNodeId, edges as CustomEdge[]);
+        // 同理提升到最高祖先重排，让跨分支节点和边统一避让
+        applyGraphAndSubtreeLayout(
+          nextNodes,
+          nextEdges,
+          layoutRootId
+        );
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
     );
   
     const addOutlineCard = useCallback(
@@ -949,9 +971,10 @@ import { useCanvasStore } from "@/stores/canvasStore";
           nextEdges.push(newEdge);
         }
 
-        applyGraphAndAutoLayout(nextNodes, nextEdges);
+        const layoutRootId = getTopAncestorId(parentId, nextEdges);
+        applyGraphAndSubtreeLayout(nextNodes, nextEdges, layoutRootId);
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndAutoLayout]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
     );
   
     const buildParentChain = useCallback(

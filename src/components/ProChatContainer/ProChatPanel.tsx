@@ -163,7 +163,7 @@ export const ProChatPanel = () => {
               autoScroll={true}
               bottomThreshold={50}
             >
-              <div className="w-full p-4 flex flex-col gap-3 chat-container">
+              <div className="w-full max-w-full min-w-0 box-border p-4 flex flex-col gap-3 chat-container">
                 {slots?.beforeMessages}
                 {displayMessages.map((msg, index) =>
                   slots?.renderMessage ? (

@@ -131,7 +131,6 @@ const ProChatContainer = (props: ProChatContainerProps) => {
     }
     if (customOnSubmit) {
       await customOnSubmit(text)
-    console.log('submitText', rawText)
       setInputValue("")
       return
     }
