@@ -49,61 +49,29 @@ export interface StepWorkflowRef {
   setStepCreateDialogShow: (show?: boolean) => void
 }
 
-export interface StepWorkflowProps {
-  /** 兼容历史参数（当前展示判断已切换为基于 serverData） */
-  totalMdContentLength?: number
-  /** 兼容历史参数（当前展示判断已切换为基于 serverData） */
-  isEditorEmpty?: boolean
-  /** 是否存在模板直达内容（例如从模板卡片跳转进入编辑器） */
-  hasTemplateContent?: boolean
-  /** 跳转进入编辑器时不自动展示“创作推荐弹窗” */
-  disableRecommendAutoOpen?: boolean
-  /** 当前编辑中的文件 id，变化时重算快捷入口 */
-  currentEditingId?: string | null
-  /** 步骤创建完成：保存到当前作品后的回调（React 侧需自行更新 sidebar/editor 等） */
-  onStepConfirm?: (data: StepSaveData) => void
-}
-
-export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>(function StepWorkflow(
-  {
-    totalMdContentLength: _totalMdContentLength = 0,
-    isEditorEmpty: _isEditorEmpty,
-    hasTemplateContent = false,
-    disableRecommendAutoOpen = false,
-    currentEditingId: _currentEditingId,
-    onStepConfirm,
-  },
+export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkflow(
+  _props,
   ref
 ) {
   const [recommendDialogShow, setRecommendDialogShow] = useState(false)
-  const [stepCreateDialogShow, setStepCreateDialogShow] = useState(true)
+  const [stepCreateDialogShow, setStepCreateDialogShow] = useState(false)
   const stepCreateDialogRef = useRef<StepCreateDialogRef>(null)
   const autoOpenedOnceRef = useRef(false)
   const [isQuickStartMounted, setIsQuickStartMounted] = useState(false)
   const [isQuickStartActive, setIsQuickStartActive] = useState(false)
   const hideTimerRef = useRef<number | null>(null)
 
-  const serverData = useEditorStore((s) => s.serverData)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setServerData = useEditorStore((s) => s.setServerData)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
-  const hasContentOutsideKnowledgeBase = (key: string, value: string) => {
-    if (!value || value.trim().length === 0) return true
-  }
-  const canOpenStepCreateDialog = !Object.entries(serverData).some(([key, value]) =>
-    hasContentOutsideKnowledgeBase(key, value)
-  )
-
-  const showQuickStart = canOpenStepCreateDialog
+  const currentEditingId = useEditorStore((s) => s.currentEditingId)
 
   const openStepCreateDialogSafely = useCallback(() => {
-    if (!canOpenStepCreateDialog) return
     setStepCreateDialogShow(true)
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   const startTemplateCreateSafely = useCallback((template: Template) => {
-    if (!canOpenStepCreateDialog) return false
     setRecommendDialogShow(false)
     setStepCreateDialogShow(true)
     // 等 Dialog 挂载后再调用内部跳步方法，避免 ref 尚未可用
@@ -111,44 +79,40 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
       stepCreateDialogRef.current?.startTemplateCreate(template)
     })
     return true
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   const setStepCreateDialogShowSafely = useCallback((show = true) => {
     if (!show) {
       setStepCreateDialogShow(false)
       return
     }
-    if (!canOpenStepCreateDialog) return
     setRecommendDialogShow(false)
     setStepCreateDialogShow(true)
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   const showCreationDialog = useCallback((show = true) => {
     if (!show) {
       setRecommendDialogShow(false)
       return
     }
-    if (!canOpenStepCreateDialog) return
     setRecommendDialogShow(true)
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   const handleCreateWithTags = useCallback(() => {
     setRecommendDialogShow(false)
-    if (!canOpenStepCreateDialog) return
     setStepCreateDialogShow(true)
     requestAnimationFrame(() => {
       stepCreateDialogRef.current?.startMode("tag")
     })
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   const handleCreateTemplate = useCallback((template: Template) => {
     setRecommendDialogShow(false)
-    if (!canOpenStepCreateDialog) return
     setStepCreateDialogShow(true)
     requestAnimationFrame(() => {
       stepCreateDialogRef.current?.startTemplateCreate(template)
     })
-  }, [canOpenStepCreateDialog])
+  }, [])
 
   useImperativeHandle(ref, () => ({
     openStepCreateDialog: openStepCreateDialogSafely,
@@ -162,77 +126,40 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
     stepCreateDialogRef.current?.startMode(mode as Mode)
   }, [openStepCreateDialogSafely])
 
+  // 推荐显示
   useEffect(() => {
-    // if (!canOpenStepCreateDialog && stepCreateDialogShow) {
-    //   setStepCreateDialogShow(false)
+    // if (hideTimerRef.current) {
+    //   window.clearTimeout(hideTimerRef.current)
+    //   hideTimerRef.current = null
     // }
-    // if (!canOpenStepCreateDialog && recommendDialogShow) {
-    //   setRecommendDialogShow(false)
+    //
+    // if (showQuickStart) {
+    //   setIsQuickStartMounted(true)
+    //   // 双 rAF：确保先应用 enter-from，再平滑过渡到 enter-to
+    //   let raf2 = 0
+    //   const raf1 = requestAnimationFrame(() => {
+    //     raf2 = requestAnimationFrame(() => setIsQuickStartActive(true))
+    //   })
+    //   return () => {
+    //     cancelAnimationFrame(raf1)
+    //     if (raf2) cancelAnimationFrame(raf2)
+    //   }
     // }
-    // if (!canOpenStepCreateDialog) {
-    //   autoOpenedOnceRef.current = false
+    //
+    // // 先做离场动画，再真正隐藏，避免突兀闪断
+    // setIsQuickStartActive(false)
+    // hideTimerRef.current = window.setTimeout(() => {
+    //   setIsQuickStartMounted(false)
+    //   hideTimerRef.current = null
+    // }, 280)
+    //
+    // return () => {
+    //   if (hideTimerRef.current) {
+    //     window.clearTimeout(hideTimerRef.current)
+    //     hideTimerRef.current = null
+    //   }
     // }
-  }, [canOpenStepCreateDialog, recommendDialogShow, stepCreateDialogShow])
-
-  useEffect(() => {
-    // if (!disableRecommendAutoOpen) return
-    // if (recommendDialogShow) setRecommendDialogShow(false)
-  }, [disableRecommendAutoOpen, recommendDialogShow])
-
-  // 自动弹窗（仅一次）：有模板内容 -> StepCreateDialog；否则 -> CreateRecommendDialog
-  useEffect(() => {
-    // if (!canOpenStepCreateDialog) return
-    // if (autoOpenedOnceRef.current) return
-
-    // if (hasTemplateContent) {
-    //   setRecommendDialogShow(false)
-    //   setStepCreateDialogShow(true)
-    //   autoOpenedOnceRef.current = true
-    //   return
-    // }
-
-    // if (!disableRecommendAutoOpen) {
-    //   setStepCreateDialogShow(false)
-    //   setRecommendDialogShow(true)
-    //   autoOpenedOnceRef.current = true
-    // }
-  }, [canOpenStepCreateDialog, hasTemplateContent, disableRecommendAutoOpen])
-
-  useEffect(() => {
-
-    return
-    if (hideTimerRef.current) {
-      window.clearTimeout(hideTimerRef.current)
-      hideTimerRef.current = null
-    }
-
-    if (showQuickStart) {
-      setIsQuickStartMounted(true)
-      // 双 rAF：确保先应用 enter-from，再平滑过渡到 enter-to
-      let raf2 = 0
-      const raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => setIsQuickStartActive(true))
-      })
-      return () => {
-        cancelAnimationFrame(raf1)
-        if (raf2) cancelAnimationFrame(raf2)
-      }
-    }
-
-    // 先做离场动画，再真正隐藏，避免突兀闪断
-    setIsQuickStartActive(false)
-    hideTimerRef.current = window.setTimeout(() => {
-      setIsQuickStartMounted(false)
-      hideTimerRef.current = null
-    }, 280)
-
-    return () => {
-      if (hideTimerRef.current) {
-        window.clearTimeout(hideTimerRef.current)
-        hideTimerRef.current = null
-      }
-    }
-  }, [showQuickStart])
+  }, [])
 
   const handleStepConfirm = useCallback(async (data: StepSaveData, editingId = "大纲.md") => {
     const nextServerData = {
@@ -242,7 +169,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
       "设定/故事设定.md": data.story?.intro ?? "",
       "正文/第一章.md": "",
     }
-    if (data.saveTarget == 'current') {
+    if (data.saveTarget == 'current') {   
       setServerData(nextServerData)
       setCurrentEditingId(editingId)
       setStepCreateDialogShow(false)
@@ -298,7 +225,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef, StepWorkflowProps>
       <StepCreateDialog
         ref={stepCreateDialogRef}
         open={stepCreateDialogShow}
-        onOpenChange={(next) => setStepCreateDialogShow(next && canOpenStepCreateDialog)}
+        onOpenChange={setStepCreateDialogShow}
         onConfirm={handleStepConfirm}
       />
 

@@ -418,21 +418,7 @@ const MarkdownEditorPage = () => {
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
-  const [disableRecommendAutoOpen, setDisableRecommendAutoOpen] = useState(() => {
-    try {
-      const stateParams = (location.state as { skipRecommendDialog?: boolean } | null) ?? null;
-      if (stateParams?.skipRecommendDialog) return true;
-      const paramsStr =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY)
-          : null;
-      if (!paramsStr) return false;
-      const parsed = JSON.parse(paramsStr) as { skipRecommendDialog?: boolean } | null;
-      return !!parsed?.skipRecommendDialog;
-    } catch {
-      return false;
-    }
-  });
+
   // chatheader 相关
   const [
     activeTab,
@@ -977,10 +963,6 @@ const MarkdownEditorPage = () => {
         : mergedParams.selectedTexts,
       message: rankingMessage || mergedParams.message,
     };
-    setDisableRecommendAutoOpen(
-      !!initialParams.skipRecommendDialog ||
-      !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
-    );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
       setPendingStepTemplate(initialTemplate);
@@ -1019,14 +1001,6 @@ const MarkdownEditorPage = () => {
       setShouldAutoSubmitInitialMessage(false);
     }
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
-
-  useEffect(() => {
-    // if (!pendingStepTemplate) return;
-    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
-    // if (opened) {
-    //   setPendingStepTemplate(null);
-    // }
-  }, [pendingStepTemplate, serverData, currentEditingId]);
 
   const handleBackClick = useCallback(() => {
     // 清空 QuillChatInput 相关全局状态，避免回到工作台后残留
@@ -2050,14 +2024,7 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow
-                          ref={stepWorkflowRef}
-                          totalMdContentLength={wordCount}
-                          isEditorEmpty={isEditorActuallyEmpty}
-                          hasTemplateContent={!!pendingStepTemplate}
-                          disableRecommendAutoOpen={disableRecommendAutoOpen}
-                          currentEditingId={currentEditingId}
-                        />
+                        <StepWorkflow ref={stepWorkflowRef}/>
                       </div>
                     </div>
                     {!isEditorEditable && (

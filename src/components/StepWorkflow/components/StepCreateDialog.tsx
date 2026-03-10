@@ -1208,20 +1208,7 @@ export const StepCreateDialog = React.forwardRef<
       },
       { signal: controller.signal },
     );
-  }, [
-    selectedStory?.title,
-    selectedStory?.intro,
-    selectedStory?.theme,
-    selectedCharacter,
-    markStepUpdated,
-    workId,
-    chapterNumber,
-    selectedMode,
-    selectedTemplate,
-    selectedTags,
-    generateCustomDesc,
-    historyStepSnapshots,
-  ]);
+  }, [selectedStory?.title, selectedStory?.intro, selectedStory?.theme, selectedCharacter, markStepUpdated, workId, chapterNumber, selectedMode, selectedTemplate, selectedTags, historyStepSnapshots]);
 
   useEffect(() => {
     if (
@@ -1311,9 +1298,6 @@ export const StepCreateDialog = React.forwardRef<
           "flex max-h-[80vh] min-h-[728px] w-full max-w-[95vw] flex-col overflow-y-auto rounded-[10px] p-0 sm:w-[1020px] sm:max-w-[1020px]!",
           "left-1/2 top-[10vh] -translate-x-1/2 translate-y-0",
         )}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
       >
         <VisuallyHidden>
           <DialogTitle>创建作品</DialogTitle>
