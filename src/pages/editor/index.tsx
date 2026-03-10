@@ -1080,13 +1080,13 @@ const MarkdownEditorPage = () => {
         padding-right: ${settings.margin}px;
       }
 
-      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror {
+      .page-editor-panel .main-editor .main-editor-content .ProseMirror {
         --tiptap-prosemirror-font-size: ${remFontSize}rem !important;
         --tiptap-prosemirror-line-height: ${settings.lineHeight} !important;
         font-weight: ${settings.fontWeight} !important;
       }
 
-      .page-editor-panel .markdown-editor .markdown-editor-content .ProseMirror p:not(.mermaid-container):not(.mermaid-container *) {
+      .page-editor-panel .main-editor .main-editor-content .ProseMirror p:not(.mermaid-container):not(.mermaid-container *) {
         text-indent: ${settings.textIndentEnabled ? "2em" : "0"};
       }
     `;

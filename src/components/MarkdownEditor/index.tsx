@@ -6,7 +6,7 @@ import CodeBlock from '@tiptap/extension-code-block'
 import { Markdown } from '@tiptap/markdown'
 import Placeholder from '@tiptap/extension-placeholder'
 import { StreamIndicator } from '@/components/StreamIndicator'
-import './MarkdownEditor.css'
+import './index.css'
 
 export interface MarkdownEditorProps {
   value?: string

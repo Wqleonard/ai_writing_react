@@ -14,7 +14,7 @@ import EmptyParagraph from '@/extensions/EmptyParagraph'
 import Mermaid from '@/extensions/Mermaid'
 import { StreamIndicator } from '@/components/StreamIndicator'
 import SelectionToolbarComponent, { type SelectionToolbarAction } from '@/components/editor/SelectionToolbarComponent'
-import './MarkdownEditor.css'
+import './index.css'
 
 export interface MarkdownEditorProps {
   className?: string
