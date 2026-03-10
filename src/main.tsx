@@ -38,7 +38,9 @@ createRoot(document.getElementById('root')!).render(
         </div>}
     >
       <RouterProvider router={router}/>
-      <Toaster position="top-center"/>
+      <Toaster position="top-center" richColors icons={{
+        error: null
+      }}/>
     </Suspense>
   </StrictMode>,
 )
