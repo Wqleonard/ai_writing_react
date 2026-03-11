@@ -106,7 +106,7 @@ export const AddNewWorkPopover = (
       setLoading(true)
       const req = await createWorkReq('editor')
       if (!req?.id) return
-      navigate(`/editor/${req.id}`, { state: { isNew: true } })
+      navigate(`/editor/${req.id}`, { state: { showTake2: true } })
     } catch {
       toast.error("创建作品失败，请重试")
     } finally {

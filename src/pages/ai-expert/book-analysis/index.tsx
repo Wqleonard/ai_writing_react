@@ -351,16 +351,16 @@ const BookAnalysisPage = () => {
           setLoading(false)
           return
         }
-        sessionStorage.setItem(
-          'editorInitialParams',
-          JSON.stringify({
-            isNew: true,
-            template: JSON.stringify(template),
-            skipRecommendDialog: true,
-          })
-        )
+        // sessionStorage.setItem(
+        //   'editorInitialParams',
+        //   JSON.stringify({
+        //     isNew: true,
+        //     template: JSON.stringify(template),
+        //     skipRecommendDialog: true,
+        //   })
+        // )
         navigate(`/editor/${req.id}`, {
-          state: { isNew: true, template: JSON.stringify(template), skipRecommendDialog: true },
+          state: { isNew: true, template: JSON.stringify(template)},
         })
       } catch {
         toast.error('创建作品失败，请重试')

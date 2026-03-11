@@ -330,80 +330,6 @@ function CanvasToolbar({
   );
 }
 
-function MermaidRelationPreview({ markdown }: { markdown: string }) {
-  const [svgs, setSvgs] = useState<string[]>([]);
-  const [error, setError] = useState<string>("");
-
-  useEffect(() => {
-    let disposed = false;
-    const fencedBlocks = Array.from(
-      markdown.matchAll(/```mermaid\s*([\s\S]*?)```/g)
-    ).map((m) => (m[1] || "").trim()).filter(Boolean);
-    const plainText = markdown.trim();
-    const looksLikeMermaid = /(^|\n)\s*(graph|flowchart|erDiagram|classDiagram|sequenceDiagram|stateDiagram|mindmap|journey|gantt|pie|timeline|gitGraph)\b/.test(plainText);
-    const blocks = fencedBlocks.length > 0
-      ? fencedBlocks
-      : looksLikeMermaid
-        ? [plainText]
-        : [];
-    if (blocks.length === 0) {
-      setSvgs([]);
-      setError("未检测到 Mermaid 关系图代码块");
-      return;
-    }
-
-    (async () => {
-      try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "loose",
-          theme: "default",
-        });
-        const rendered: string[] = [];
-        for (let i = 0; i < blocks.length; i++) {
-          const id = `relation-${Date.now()}-${i}`;
-          const { svg } = await mermaid.render(id, blocks[i]);
-          rendered.push(svg);
-        }
-        if (!disposed) {
-          setSvgs(rendered);
-          setError("");
-        }
-      } catch {
-        if (!disposed) {
-          setSvgs([]);
-          setError("关系图渲染失败，请检查 Mermaid 语法");
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [markdown]);
-
-  if (error) {
-    return (
-      <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 text-sm text-muted-foreground">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 space-y-4">
-      {svgs.map((svg, idx) => (
-        <div
-          key={idx}
-          className="w-full overflow-auto [&>svg]:max-w-none"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ))}
-    </div>
-  );
-}
-
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1693,7 +1619,17 @@ const MarkdownEditorPage = () => {
     highlightChangeInEditor,
   ]);
 
-  const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
+  // stepWorkFlow 相关逻辑
+  useEffect(() => {
+    if (location.state?.template){
+      stepWorkflowRef.current.startTemplateCreate(location.state.template);
+      return
+    }
+    if (location.state?.showTake2){
+      stepWorkflowRef.current.openStepCreateDialog()
+      return;
+    }
+  }, [location]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
