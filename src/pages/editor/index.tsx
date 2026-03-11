@@ -751,6 +751,7 @@ const MarkdownEditorPage = () => {
     currentContent,
     currentEditingId,
     currentEditingNode,
+    treeData,
     initEditorData,
     saveEditorData,
     setServerData,
@@ -766,6 +767,7 @@ const MarkdownEditorPage = () => {
       currentContent: s.currentContent,
       currentEditingId: s.currentEditingId,
       currentEditingNode: s.currentEditingNode,
+      treeData: s.treeData,
       initEditorData: s.initEditorData,
       saveEditorData: s.saveEditorData,
       setServerData: s.setServerData,
@@ -807,11 +809,6 @@ const MarkdownEditorPage = () => {
     }
   });
 
-  const sidebarTreeData = useMemo(
-    () => serverDataToTree(serverData),
-    [serverData]
-  );
-
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
   const lastAutoLoadSessionKeyRef = useRef<string>("");
@@ -823,23 +820,26 @@ const MarkdownEditorPage = () => {
   const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    (async ()=>{
-      console.log(workId)
-      if (!workId) return;
-      console.log(location)
+    setWorkId(workId ?? null);
+  }, [workId, setWorkId]);
 
+  useEffect(() => {
+    (async ()=>{
+      if (!workId) return;
       if (lastInitWorkIdRef.current === workId) return;
       lastInitWorkIdRef.current = workId;
       await initEditorData(workId);
-      // if (workInfo.stage == 'blank'){
-      //   stepWorkflowRef.current.openStepCreateDialog()
-      // }
     })()
   }, [workId, initEditorData, location]);
 
+  // 页面卸载时再重置 editor store
   useEffect(() => {
-    setWorkId(workId ?? null);
-  }, [workId, setWorkId]);
+    return () => {
+      initEditorStore();
+      lastInitWorkIdRef.current = null;
+      lastAutoLoadSessionKeyRef.current = "";
+    };
+  }, [initEditorStore]);
 
   useEffect(() => {
     if (!workId || currentWorkId !== workId) return;
@@ -859,15 +859,6 @@ const MarkdownEditorPage = () => {
     faqCurrentSession,
     loadLatestSession,
   ]);
-
-  // 页面卸载时再重置 editor store
-  useEffect(() => {
-    return () => {
-      initEditorStore();
-      lastInitWorkIdRef.current = null;
-      lastAutoLoadSessionKeyRef.current = "";
-    };
-  }, [initEditorStore]);
 
   useEffect(() => {
     const applyKey = `${workId ?? ""}:${location.key ?? "default"}`;
@@ -2442,7 +2433,7 @@ const MarkdownEditorPage = () => {
                 <AssociationSelectorDialog
                   open={showAssociationSelector}
                   onOpenChange={setShowAssociationSelector}
-                  treeData={sidebarTreeData}
+                  treeData={treeData}
                   selectedIds={associationTags}
                   onConfirm={(ids) => {
                     const filtered = ids.filter(
