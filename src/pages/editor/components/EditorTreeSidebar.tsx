@@ -27,6 +27,7 @@ import {
 } from "@/components/StepWorkflow/components/TagSelector"
 import type { Tag as WorkflowTag } from "@/components/StepWorkflow/types"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
@@ -564,6 +565,7 @@ export const EditorTreeSidebar = ({
 
   const handleAddFileUnder = useCallback(
     (parent: FileTreeNode) => {
+      trackEvent('Directory', 'Add', 'File')
       const nextTreeData = structuredClone(treeData) as FileTreeNode[]
       const findNodeById = (nodes: FileTreeNode[], id: string): FileTreeNode | null => {
         for (const node of nodes) {
@@ -611,6 +613,7 @@ export const EditorTreeSidebar = ({
 
   const handleAddFolderUnder = useCallback(
     (parent: FileTreeNode) => {
+      trackEvent('Directory', 'Add', 'Folder')
       const nextTreeData = structuredClone(treeData) as FileTreeNode[]
       const findNodeById = (nodes: FileTreeNode[], id: string): FileTreeNode | null => {
         for (const node of nodes) {
@@ -750,6 +753,7 @@ export const EditorTreeSidebar = ({
   }, [])
 
   const addFileAtRoot = useCallback(() => {
+    trackEvent('Directory', 'Add', 'File')
     const nextTreeData = structuredClone(treeData) as FileTreeNode[]
     const unique = generateUniqueName(nextTreeData, "新文件", false)
     const newPath = [`${unique}.md`]
@@ -774,6 +778,7 @@ export const EditorTreeSidebar = ({
   }, [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData])
 
   const addFolderAtRoot = useCallback(() => {
+    trackEvent('Directory', 'Add', 'Folder')
     const nextTreeData = structuredClone(treeData) as FileTreeNode[]
     const unique = generateUniqueName(nextTreeData, "新建文件夹", true)
     const newPath = [unique]

@@ -71,6 +71,7 @@ import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CircleAlert } from "lucide-react";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
 const getNewPathFromLabel = (currentPath: string, newLabel: string): string => {
@@ -1353,6 +1354,7 @@ const MarkdownEditorPage = () => {
   }, [workId, setServerData]);
 
   const helpWriteClick = useCallback(() => {
+    trackEvent('AI Tool', 'Click', 'Guided Writing')
     stepWorkflowRef.current?.openStepCreateDialog();
   }, []);
 
