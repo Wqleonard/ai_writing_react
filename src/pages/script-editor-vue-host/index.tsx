@@ -3,8 +3,9 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { useNavigate, useParams } from "react-router-dom";
-import "element-plus/dist/index.css";
 import ScriptEditorVuePage from "@/vue/views/script-editor-vue/index.vue";
+import '@/vue/assets/element-theme.css'
+import '@/vue/assets/element-css.css'
 
 const ScriptEditorVueHostPage = () => {
   const mountRef = useRef<HTMLDivElement | null>(null);
