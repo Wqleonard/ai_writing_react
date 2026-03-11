@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/core'
@@ -98,6 +98,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const containerRef = useRef<HTMLDivElement | null>(null)
     const readonlyRef = useRef(readonly)
     const onChangeRef = useRef(onChange)
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const onKeyDownRef = useRef(onKeyDown)
     const [isSelectionToolbarPinned, setIsSelectionToolbarPinned] = useState(false)
     const [selectionToolbarRenderKey, setSelectionToolbarRenderKey] = useState(0)
@@ -186,11 +187,16 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         },
         onUpdate: ({ editor: currentEditor }) => {
           if (readonlyRef.current) return
-          const nextMarkdown = currentEditor.getMarkdown?.() || ''
-          onChangeRef.current?.(nextMarkdown)
-          queueMicrotask(() => {
-            isInternalUpdate.current = false
-          })
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+          debounceTimerRef.current = setTimeout(() => {
+            startTransition(() => {
+              const nextMarkdown = currentEditor.getMarkdown?.() || ''
+              onChangeRef.current?.(nextMarkdown)
+            })
+            queueMicrotask(() => {
+              isInternalUpdate.current = false
+            })
+          }, 300)
         },
       },
       // 不把 readonly/onChange/onKeyDown 放入 deps，避免父组件重渲染导致 editor 重建（光标跳转、中文 IME 打断）
@@ -271,6 +277,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     // 卸载时销毁
     useEffect(() => {
       return () => {
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
         editor?.destroy()
       }
     }, [editor])
