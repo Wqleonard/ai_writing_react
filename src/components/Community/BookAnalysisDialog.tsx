@@ -21,6 +21,7 @@ import { AutoScrollArea } from "../AutoScrollArea";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/stores/editorStore";
 import { handleGenerationSave } from "@/utils/handleGenerationSave";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 const SIZE_LIMIT = 8 * 1024 * 1024;
 
@@ -164,6 +165,7 @@ export const BookAnalysisDialog = ({
       await doStreamGenerate();
       return;
     } else {
+      trackEvent('AI Tool', 'Use', 'Book Analysis')
       await handleSave();
     }
   };

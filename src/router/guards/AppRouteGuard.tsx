@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useLocation, type Location } from 'react-router-dom'
+import { useLocation, useMatches, type Location } from 'react-router-dom'
 import { MobileRedirectGuard } from '@/router/guards/MobileRedirect'
 import { getMatomoTracker } from '@/matomo/trackingMatomoEvent'
 
@@ -64,6 +64,7 @@ const getPageRoute = (pathname: string): string => {
  */
 export const AppRouteGuard = () => {
   const location = useLocation()
+  const matches = useMatches()
   const prevLocationRef = useRef<Location | null>(null)
 
   useEffect(() => {
@@ -72,14 +73,11 @@ export const AppRouteGuard = () => {
 
     const beforeRoute = getPageRoute(before?.pathname || '')
     const afterRoute = getPageRoute(after.pathname || '')
-    const pageTitle = getPageTitle(after.pathname)
-
-    // 同步设置 document.title
-    if (pageTitle == '落地页'){
-      document.title = '爆文猫写作'
-    } else {
-      document.title = '爆文猫写作' + pageTitle
-    }
+    const matchedTitle = [...matches]
+      .reverse()
+      .map((match) => (match.handle as { title?: string } | undefined)?.title)
+      .find(Boolean)
+    const pageTitle = matchedTitle || getPageTitle(after.pathname)
 
     const tracker = getMatomoTracker()
     if (!tracker) {
@@ -94,7 +92,7 @@ export const AppRouteGuard = () => {
     tracker.push(['trackPageView'])
 
     prevLocationRef.current = location
-  }, [location])
+  }, [location, matches])
 
   return <MobileRedirectGuard/>
 }

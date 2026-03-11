@@ -58,6 +58,7 @@ const routes: RouteObject[] = [
       {
         index: true,
         element: <LandingPage/>,
+        handle: { title: '落地页' },
       },
       {
         path: 'workspace',
@@ -65,31 +66,38 @@ const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            element: <Navigate to="/workspace/my-place" replace />
+            element: <Navigate to="/workspace/my-place" replace />,
+            handle: { title: '我的空间' },
           },
           {
             path: 'my-place',
-            element: <MyPlacePage/>
+            element: <MyPlacePage/>,
+            handle: { title: '我的空间' },
           },
           {
             path: 'trending-list',
-            element: <TrendingListPage/>
+            element: <TrendingListPage/>,
+            handle: { title: '创作榜单' },
           },
           {
             path: 'creation-community/course',
-            element: <CoursePage/>
+            element: <CoursePage/>,
+            handle: { title: '课程' },
           },
           {
             path: 'creation-community/course/details/:id',
-            element: <CourseDetailsPage/>
+            element: <CourseDetailsPage/>,
+            handle: { title: '课程详情' },
           },
           {
             path: 'creation-community/share',
-            element: <SharePage/>
+            element: <SharePage/>,
+            handle: { title: '分享' },
           },
           {
             path: 'creation-community/share/details/:id',
-            element: <ShareDetailsPage/>
+            element: <ShareDetailsPage/>,
+            handle: { title: '分享详情' },
           },
           {
             path: 'creation-community/share/create/:id',
@@ -97,15 +105,18 @@ const routes: RouteObject[] = [
           },
           {
             path: 'creation-community/prompt',
-            element: <PromptPage/>
+            element: <PromptPage/>,
+            handle: { title: '提示词' },
           },
           {
             path: 'ai-expert/book-analysis',
-            element: <BookAnalysisPage/>
+            element: <BookAnalysisPage/>,
+            handle: { title: '拆书仿写' },
           },
           {
             path: 'ai-expert/writing-styles',
-            element: <WritingStylesPage/>
+            element: <WritingStylesPage/>,
+            handle: { title: '文风提炼' },
           },
         ],
       },
@@ -113,84 +124,102 @@ const routes: RouteObject[] = [
         path: '/editor/:workId',
         element: <MarkdownEditorPage/>,
         loader: editorAuthMiddleware,
+        handle: { title: '编辑器 / 通用创作短篇' },
       },
       {
         path: '/quick-editor/:workId',
         element: <QuickEditorVueHostPage/>,
         loader: editorAuthMiddleware,
+        handle: { title: '编辑器 / 快捷创作短篇' },
       },
       {
         path: '/script-editor/:workId',
         element: <ScriptEditorVueHostPage/>,
         loader: editorAuthMiddleware,
+        handle: { title: '编辑器 / 剧本创作短篇' },
       },
       {
-        path: '/test',
-        element: <TestPage/>,
+        path: '/user-agreement',
+        element: <UserServiceAgreementPage/>,
+        handle: { title: '用户服务协议' },
       },
+      {
+        path: '/privacy-policy',
+        element: <PrivacyPolicyPage/>,
+        handle: { title: '隐私政策' },
+      },
+      {
+        path: '/children-privacy-protection-policy',
+        element: <ChildrenPrivacyProtectionPolicyPage/>,
+        handle: { title: '儿童隐私保护政策' },
+      },
+      // {
+      //   path: '/test',
+      //   element: <TestPage/>,
+      // },
       {
         path: '/m',
         element: <MLayout/>,
+        handle: { title: '移动端' },
         children: [
           {
             index: true,
             element: <MLandingPage/>,
+            handle: { title: '移动端落地页' },
           },
           {
             path: 'workspace',
             element: <MWorkSpace/>,
+            handle: { title: '移动端工作空间' },
             children: [
               {
                 index: true,
                 element: <MChatPage/>,
+                handle: { title: '移动端对话' },
               },
               {
                 path: 'chat',
                 element: <MChatPage/>,
+                handle: { title: '移动端对话' },
               },
               {
                 path: 'notes',
                 element: <MNotesPage/>,
+                handle: { title: '移动端笔记' },
               },
               {
                 path: 'notes/detail',
                 element: <MNotesDetailPage/>,
+                handle: { title: '移动端笔记详情' },
               },
               {
                 path: 'mine',
                 element: <MMinePage/>,
+                handle: { title: '移动端我的' },
               },
             ],
           },
           {
             path: 'rules',
             element: <MRulesPage/>,
+            handle: { title: '移动端条款与规则' },
           },
           {
             path: 'feedback-issue',
             element: <MFeedbackIssuePage/>,
+            handle: { title: '移动端反馈问题' },
           },
           {
             path: 'user-agreement',
             element: <MUserAgreementPage/>,
+            handle: { title: '移动端用户服务协议' },
           },
           {
             path: 'privacy-policy',
             element: <MPrivacyPolicyPage/>,
+            handle: { title: '移动端隐私政策' },
           },
         ],
-      },
-      {
-        path: '/user-agreement',
-        element: <UserServiceAgreementPage/>,
-      },
-      {
-        path: '/privacy-policy',
-        element: <PrivacyPolicyPage/>,
-      },
-      {
-        path: '/children-privacy-protection-policy',
-        element: <ChildrenPrivacyProtectionPolicyPage/>,
       },
       {
         path: '*',
