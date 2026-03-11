@@ -12,6 +12,7 @@ export type MatomoEventSpec =
         | 'Quick New from Workspace'
         | 'Common New from Workspace'
         | 'Common New from Chat'
+        | 'Script New from Landing'
         | 'Script New from Sidebar'
         | 'Script New from Workspace'
     }
