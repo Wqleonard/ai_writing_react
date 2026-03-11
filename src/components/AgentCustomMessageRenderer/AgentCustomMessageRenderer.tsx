@@ -4,7 +4,7 @@
  * 与 Vue AgentCustomMessageRenderer.vue 的 toolCallsActiveObject 及各 ToolCallsKey 展示逻辑一致：
  * getToolCallDisplayText、formatToolCallArgs、visibleToolCallsMap、shouldShowExpand、getToolCallIconStatus 等。
  */
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import clsx from "clsx";
 import {
   ChevronRight,
@@ -41,6 +41,26 @@ import { messageLikeReq } from "@/api/works";
 import { openFeedbackDialog } from "@/components/FeedbackDialog";
 import { useLoginStore } from "@/stores/loginStore";
 import "./AgentCustomMessageRenderer.css";
+
+const LOCAL_HILT_STATUS_STORAGE_KEY = "boom_cat:hilt.localHiltStatusByMessageId:v1";
+const DISMISSED_HILT_CARD_KEY_STORAGE_KEY = "boom_cat:hilt.dismissedHiltCardKeyByMessageId:v1";
+
+function safeReadRecordFromLocalStorage(key: string): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 export interface AgentCustomMessageRendererProps {
   customMessage: AgentCustomMessageItem[];
@@ -176,11 +196,18 @@ const AgentCustomMessageRenderer = ({
   /** 当从 write_todos tool call 推导外层卡片时，用本地状态记录用户点击拒绝/接受，避免未设置 hiltTodos/hiltStatus 时直接展示建议列表 */
   const [localHiltStatusByMessageId, setLocalHiltStatusByMessageId] = useState<
     Record<string, "in_progress" | "approved" | "rejected">
-  >({});
+  >(() => {
+    const raw = safeReadRecordFromLocalStorage(LOCAL_HILT_STATUS_STORAGE_KEY);
+    const out: Record<string, "in_progress" | "approved" | "rejected"> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === "in_progress" || v === "approved" || v === "rejected") out[k] = v;
+    }
+    return out;
+  });
   /** 接受后仅收起“当前这轮 todo 快照”的确认卡片；当 todo 进入下一步（快照变化）时重新弹出 */
   const [dismissedHiltCardKeyByMessageId, setDismissedHiltCardKeyByMessageId] = useState<
     Record<string, string>
-  >({});
+  >(() => safeReadRecordFromLocalStorage(DISMISSED_HILT_CARD_KEY_STORAGE_KEY));
   const [hiltActionLoadingByMessageId, setHiltActionLoadingByMessageId] = useState<
     Record<string, boolean>
   >({});
@@ -315,6 +342,24 @@ const AgentCustomMessageRenderer = ({
     [localHiltStatusByMessageId]
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(LOCAL_HILT_STATUS_STORAGE_KEY, JSON.stringify(localHiltStatusByMessageId));
+    } catch {
+      // ignore
+    }
+  }, [localHiltStatusByMessageId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(DISMISSED_HILT_CARD_KEY_STORAGE_KEY, JSON.stringify(dismissedHiltCardKeyByMessageId));
+    } catch {
+      // ignore
+    }
+  }, [dismissedHiltCardKeyByMessageId]);
+
   const getHiltTodosProgressKey = useCallback((effectiveTodos: HiltTodoItem[] | undefined): string => {
     if (!effectiveTodos?.length) return "";
     return effectiveTodos
@@ -325,9 +370,14 @@ const AgentCustomMessageRenderer = ({
   const handleHiltRejectForMessage = useCallback(
     (msg: AgentCustomMessageItem) => {
       setLocalHiltStatusByMessageId((prev) => ({ ...prev, [msg.id]: "rejected" }));
+      const effectiveTodos = getEffectiveHiltTodos(msg);
+      const currentTodosKey = getHiltTodosProgressKey(effectiveTodos);
+      if (currentTodosKey) {
+        setDismissedHiltCardKeyByMessageId((prev) => ({ ...prev, [msg.id]: currentTodosKey }));
+      }
       onHiltReject?.({ ...msg, hiltStatus: "rejected" });
     },
-    [onHiltReject]
+    [getEffectiveHiltTodos, getHiltTodosProgressKey, onHiltReject]
   );
 
   const handleHiltApproveForMessage = useCallback(
