@@ -152,8 +152,14 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
     }, [getViewport, bottomThreshold])
 
     const handleWheel = useCallback(() => {
+      // 仅当用户确实离开底部区域时，才停止自动滚动。
+      // 否则在底部轻微滚轮/触控板滚动也会误触发“用户已上翻”。
+      if (isNearBottom(bottomThreshold)) {
+        setUserScrolledAway(false)
+        return
+      }
       setUserScrolledAway(true)
-    }, [])
+    }, [isNearBottom, bottomThreshold])
 
     useEffect(() => {
       if (!autoScroll) return
