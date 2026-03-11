@@ -171,6 +171,7 @@ export const CreationInput = (props: CreationInputProps) => {
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
   const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
+  // “仅回答提示气泡”由 chatInputStore 的 isShowAnswerTip 控制
 
   const openToolPopover = useCallback(() => {
     setToolPopoverOpen(true)
@@ -195,6 +196,8 @@ export const CreationInput = (props: CreationInputProps) => {
     selectedNotes,
     selectedFiles,
     selectedTexts,
+    isShowAnswerTip,
+    setShowAnswerTip,
     addFile,
     addNote,
     clearSelectedNotes,
@@ -325,17 +328,60 @@ export const CreationInput = (props: CreationInputProps) => {
     selectedFiles.length > 0 ||
     selectedTexts.length > 0
 
+  const answerOnlyWrapRef = useRef<HTMLDivElement | null>(null)
+
+  /** 仅回答提示：打开（不做 toggle），用于“文件/笔记/热点”等入口 */
+  const openAnswerOnlyTip = useCallback(() => {
+    if (!isAnswerOnly) return
+    setShowAnswerTip(true)
+  }, [isAnswerOnly, setShowAnswerTip])
+
+  /** 仅回答提示：toggle（再次点击关闭），用于工具标签点击 */
+  const toggleAnswerOnlyTip = useCallback(() => {
+    if (!isAnswerOnly) {
+      setShowAnswerTip(false)
+      return
+    }
+    setShowAnswerTip(!isShowAnswerTip)
+  }, [isAnswerOnly, isShowAnswerTip, setShowAnswerTip])
+
+  // 与 QuillChatInput 对齐：当“仅回答 + 选择了关联内容”时提示用户关闭仅回答
+  useEffect(() => {
+    if (!hasTags || !isAnswerOnly) return
+    openAnswerOnlyTip()
+  }, [hasTags, isAnswerOnly, openAnswerOnlyTip])
+
+  useEffect(() => {
+    if (!isShowAnswerTip) return
+    const close = (e: MouseEvent) => {
+      const wrap = answerOnlyWrapRef.current
+      if (wrap && e.target instanceof Node && wrap.contains(e.target)) return
+      setShowAnswerTip(false)
+    }
+    document.addEventListener("click", close)
+    return () => document.removeEventListener("click", close)
+  }, [isShowAnswerTip, setShowAnswerTip])
+
   const {
     selectedTool,
     currentChannel,
     closeToolMode,
-    handleToolTagClick,
+    handleToolTagClick: rawHandleToolTagClick,
   } = useQuickToolComposer({
     channels: QUICK_CHAT_INPUT_CHANNELS,
     onChange,
     onSelectTool,
     onCloseMode: () => setRichInputValues([]),
   })
+
+  // 统一包装：不管从哪里调用 tool tag 切换，都能触发“仅回答提示气泡”
+  const handleToolTagClick = useCallback(
+    (toolTitle: string) => {
+      toggleAnswerOnlyTip()
+      rawHandleToolTagClick(toolTitle)
+    },
+    [rawHandleToolTagClick, toggleAnswerOnlyTip]
+  )
 
   const syncRichToValue = (channel: QuickChatInputChannel, inputValues: string[]) => {
     onChange?.(buildQuickChannelFullText(channel, inputValues))
@@ -714,7 +760,11 @@ export const CreationInput = (props: CreationInputProps) => {
                     isActive && 'bg-[#efc04e]! text-white!'
                   )}
                   title={isActive ? '再次点击切换回普通输入模式' : '点击使用此工具'}
-                  onClick={() => handleToolTagClick(channel.title)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleToolTagClick(channel.title)
+                    openAnswerOnlyTip()
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
@@ -871,7 +921,9 @@ export const CreationInput = (props: CreationInputProps) => {
                     <div
                       key={channel.title}
                       className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openAnswerOnlyTip()
                         handleToolTagClick(channel.title)
                         setToolPopoverOpen(false)
                       }}
@@ -910,6 +962,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                     onClick={() => {
+                      openAnswerOnlyTip()
                       handleLocalFileSelect()
                       setFilePopoverOpen(false)
                     }}
@@ -932,6 +985,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
                     onClick={() => {
+                      openAnswerOnlyTip()
                       void handleOpenNotesSelector()
                       setFilePopoverOpen(false)
                     }}
@@ -1071,16 +1125,31 @@ export const CreationInput = (props: CreationInputProps) => {
                 </PopoverContent>
               </Popover>
 
-              {/* 仅回答 + 提示 */}
-              <div className="answer-only-wrap flex items-center" title="直接成文需要关闭仅回答哦！">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-(--text-secondary)">
-                  <Checkbox
-                    checked={isAnswerOnly}
-                    onCheckedChange={checked => onAnswerOnlyChange?.(checked === true)}
-                    className="rounded-full text-white!"
-                  />
-                  <span>仅回答</span>
-                </label>
+              {/* 仅回答（checkbox 始终展示；tip 仅在触发后展示） */}
+              <div className="quill-chat-input">
+                <div ref={answerOnlyWrapRef} className="answer-only-wrap">
+                  {isAnswerOnly && isShowAnswerTip && (
+                    <div className="answer-tip-box">
+                      <div className="answer-tip-content">
+                        <div className="answer-tip-line1">直接成文需要</div>
+                        <div className="answer-tip-line2">关闭仅回答哦！</div>
+                      </div>
+                    </div>
+                  )}
+                  <label className="answer-only-checkbox flex items-center gap-1.5 cursor-pointer text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={isAnswerOnly}
+                      disabled={!onAnswerOnlyChange}
+                      onChange={
+                        onAnswerOnlyChange
+                          ? (e) => onAnswerOnlyChange(e.target.checked)
+                          : undefined
+                      }
+                    />
+                    <span>仅回答</span>
+                  </label>
+                </div>
               </div>
 
               {/* 发送按钮 - 多状态图标 */}
@@ -1138,7 +1207,10 @@ export const CreationInput = (props: CreationInputProps) => {
                       key={`left-${memeWord.originalIndex}`}
                       memeWord={memeWord}
                       getNumberClass={getNumberClass}
-                      onMemeWordClick={handleMemeWordClick}
+                      onMemeWordClick={(name, e) => {
+                        openAnswerOnlyTip()
+                        handleMemeWordClick(name, e)
+                      }}
                     />
                   ))}
                 </div>
@@ -1149,7 +1221,10 @@ export const CreationInput = (props: CreationInputProps) => {
                       key={`right-${memeWord.originalIndex}`}
                       memeWord={memeWord}
                       getNumberClass={getNumberClass}
-                      onMemeWordClick={handleMemeWordClick}
+                      onMemeWordClick={(name, e) => {
+                        openAnswerOnlyTip()
+                        handleMemeWordClick(name, e)
+                      }}
                     />
                   ))}
                 </div>
@@ -1169,7 +1244,10 @@ export const CreationInput = (props: CreationInputProps) => {
                       role="button"
                       className="meme-word-preview-item max-w-[calc(33.333%-11px)] min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded-[20px] border-none bg-transparent px-3 py-1 text-sm leading-normal text-black/50 transition-colors"
                       style={{ flex: '0 1 calc(33.333% - 11px)' }}
-                      onClick={e => handleMemeWordClick(memeWord.name, e)}
+                      onClick={e => {
+                        openAnswerOnlyTip()
+                        handleMemeWordClick(memeWord.name, e)
+                      }}
                       title={memeWord.name}
                     >
                       {memeWord.name}
