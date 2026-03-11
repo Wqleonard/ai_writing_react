@@ -143,7 +143,7 @@ const ProChatContainer = (props: ProChatContainerProps) => {
       mode: activeTab,
     }
     setInputValue("")
-    onSendMessage?.(userMessage)
+    await onSendMessage?.(userMessage)
     onSaveCurrentSession?.()
     // 发送后滚动对话到底部（与 Vue 版 NuxtUIProChatContainer 一致）；短延迟确保 DOM 已更新
     setTimeout(() => scrollToBottomRef.current?.(), 100)

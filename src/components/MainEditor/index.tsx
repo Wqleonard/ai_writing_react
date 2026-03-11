@@ -11,6 +11,9 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from '@tiptap/markdown'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mermaid from '@/extensions/Mermaid'
+import StreamedContentMark from '@/extensions/StreamedContentMark'
+import HighlightMarker from '@/vue/extensions/HighlightMarker'
+import { HIGHLIGHT_END, HIGHLIGHT_START } from '@/vue/utils/constant'
 import SelectionToolbarComponent, { type SelectionToolbarAction } from '@/components/editor/SelectionToolbarComponent'
 import './index.css'
 
@@ -123,6 +126,11 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         Placeholder.configure({
           placeholder,
           showOnlyCurrent: false,
+        }),
+        StreamedContentMark,
+        HighlightMarker.configure({
+          startMarker: HIGHLIGHT_START,
+          endMarker: HIGHLIGHT_END,
         }),
         StarterKit.configure({
           codeBlock: false,
