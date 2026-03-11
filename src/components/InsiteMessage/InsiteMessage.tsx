@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/Popover'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Button } from '@/components/ui/Button'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { useLoginStore, selectHasUnreadMessages } from '@/stores/loginStore'
 import type { Message } from '@/stores/loginStore'
 import { MessageDetailDialog } from './MessageDetailDialog'

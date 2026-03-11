@@ -16,7 +16,7 @@ import { Drawer, DrawerContent } from '@/components/ui/Drawer'
 import BOOM_CAT_ICON from '@/assets/images/boom_cat.png'
 import LOGO from '@/assets/images/logo.png'
 import { Button } from '@/components/ui/Button';
-import { Iconfont } from '@/components/IconFont';
+import { Iconfont } from '@/components/Iconfont';
 import { mtoast } from '@/components/ui/toast';
 
 interface ChatHistory {

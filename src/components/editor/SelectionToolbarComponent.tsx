@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import type { PostStreamData } from "@/api";
 import { generateImage, postSelectionToolbarStream } from "@/api/selection-toolbar";
-import IconFont from "@/components/IconFont/Iconfont";
+import IconFont from "@/components/Iconfont/Iconfont";
 import { StreamIndicator } from "@/components/StreamIndicator";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";

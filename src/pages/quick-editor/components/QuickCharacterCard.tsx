@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { addNote } from "@/api/notes";
 import MALE from "@/assets/images/quick-editor/character_man_sex.svg";
 import FEMALE from "@/assets/images/quick-editor/character_woman_sex.svg";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { LinkButton } from "@/components/ui/LinkButton";
 
 export interface QuickCharacterCardData {

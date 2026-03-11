@@ -20,7 +20,7 @@ import ROLE_1 from '@/assets/images/mlanding/role_1.webp'
 import ROLE_2 from '@/assets/images/mlanding/role_2.webp'
 import ROLE_3 from '@/assets/images/mlanding/role_3.webp'
 import ROLE_4 from '@/assets/images/mlanding/role_4.webp'
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { mtoast } from '@/components/ui/toast'
 // 角色数据
 const ROLE_DATA = [

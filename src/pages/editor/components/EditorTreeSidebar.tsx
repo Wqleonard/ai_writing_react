@@ -3,7 +3,7 @@
 import React, { useCallback, useState, useEffect, useRef } from "react"
 import clsx from "clsx"
 import { toast } from "sonner"
-import IconFont from "@/components/IconFont/Iconfont"
+import IconFont from "@/components/Iconfont/Iconfont"
 import { TriangleAlert } from "lucide-react"
 import { ScrollArea } from "@/components/ui/ScrollArea"
 import {

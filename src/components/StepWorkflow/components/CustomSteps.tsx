@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import IconFont from "@/components/IconFont/Iconfont";
+import IconFont from "@/components/Iconfont/Iconfont";
 import { cn } from "@/lib/utils";
 
 export interface CustomStepsProps {

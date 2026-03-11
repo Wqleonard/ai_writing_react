@@ -18,7 +18,7 @@ import type {
 import { useNavigate } from "react-router-dom";
 import type { TourConfig, TourCallbacks } from "./types.ts";
 import { Button } from "@/components/ui/Button.tsx";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 
 interface SendIdeaTourProps {
   open: boolean;

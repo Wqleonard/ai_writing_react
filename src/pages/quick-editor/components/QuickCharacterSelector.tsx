@@ -4,8 +4,8 @@ import { getQuickCharacterSettings } from "@/api/generate-quick";
 import QuickCharacterCard, { type QuickCharacterCardData } from "./QuickCharacterCard";
 import { useEditorStore } from "@/stores/editorStore";
 import { LinkButton } from "@/components/ui/LinkButton";
-import IconFont from "@/components/IconFont/Iconfont";
-import Iconfont from "@/components/IconFont/Iconfont";
+import IconFont from "@/components/Iconfont/Iconfont";
+import Iconfont from "@/components/Iconfont/Iconfont";
 
 interface CharacterCardData extends QuickCharacterCardData {
   isCustom?: boolean;

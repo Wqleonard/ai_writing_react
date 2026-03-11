@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { Dialog, DialogContent, DialogTitle, VisuallyHidden } from '@/components/ui/Dialog'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import {
   Select,
   SelectContent,

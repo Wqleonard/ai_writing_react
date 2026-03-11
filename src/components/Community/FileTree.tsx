@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import type { FileTreeNode } from "../../utils/aiTreeNodeConverter";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { Button } from "../ui/Button";
 
 export const getCheckedNodesFromIds = (nodes: FileTreeNode[], checkedIds: Set<string>, leafOnly: boolean): FileTreeNode[] => {

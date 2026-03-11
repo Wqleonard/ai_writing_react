@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { Button } from '@/components/ui/Button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover'

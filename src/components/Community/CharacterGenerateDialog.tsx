@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { ScrollArea } from '@/components/ui/ScrollArea'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup'
 import { Textarea } from '@/components/ui/Textarea'
 import { FormRecommendLabel } from '@/components/ui/FormRecommendLabel'

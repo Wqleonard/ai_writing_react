@@ -6,7 +6,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from "@/components/ui/Button.tsx";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { mtoast } from '@/components/ui/toast'
 
 interface NoteItem {

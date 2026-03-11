@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/RadioGroup'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20

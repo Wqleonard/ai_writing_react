@@ -54,7 +54,7 @@ import type {
 import customCoverImg from "@/assets/images/step_create/custom-cover.png";
 import templateCoverImg from "@/assets/images/step_create/template-cover.png";
 import tagCoverImg from "@/assets/images/step_create/tag-cover.png";
-import Iconfont from "@/components/IconFont/Iconfont";
+import Iconfont from "@/components/Iconfont/Iconfont";
 import { getWorkTagsReq } from "@/api/works";
 import { cn } from "@/lib/utils";
 import { LinkButton } from "@/components/ui/LinkButton";

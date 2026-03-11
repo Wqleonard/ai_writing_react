@@ -6,7 +6,7 @@ import { ChevronDown, FileText, Link, Loader2, Trash2, Upload, X } from 'lucide-
 import clsx from 'clsx'
 import type { QuickChatInputChannel } from '../types'
 import { Button } from '@/components/ui/Button'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Popover, PopoverContent, PopoverAnchor, PopoverTrigger } from "@/components/ui/Popover.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";

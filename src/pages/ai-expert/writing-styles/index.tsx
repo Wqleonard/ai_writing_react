@@ -35,7 +35,7 @@ import type { WritingStyleCardData } from './types'
 import { useLLM } from '@/hooks/useLLM'
 import clsx from 'clsx'
 import './writing-styles.css'
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import Empty from '@/components/ui/Empty'

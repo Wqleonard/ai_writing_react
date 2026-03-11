@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { useEditorStore } from "@/stores/editorStore";
 import { WorkspaceHeader } from "@/layout/WorkspaceLayout/WorkspaceHeader";
 import { QuickExportDialog } from "./QuickExportDialog";

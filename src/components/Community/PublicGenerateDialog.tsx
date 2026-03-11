@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Textarea'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { SelectConnectedFile } from './SelectConnectedFile'
 import type { PromptItem } from './types'
 import type { ConnectedFile, FileTreeNode } from './types'

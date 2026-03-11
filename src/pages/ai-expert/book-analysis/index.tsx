@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/Button'
 import { HistoryCard } from './components/HistoryCard'
 import { TemplateCard } from './components/TemplateCard'
 import type { TemplateCardData, HistoryItem } from './types'
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import Empty from '@/components/ui/Empty'

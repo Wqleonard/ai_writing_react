@@ -4,7 +4,7 @@ import { getQuickStoriesReq } from "@/api/generate-quick";
 import QuickStoryCard, { type QuickStoryCardData } from "./QuickStoryCard";
 import { useEditorStore } from "@/stores/editorStore";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 
 export interface StoryData extends QuickStoryCardData {
   isCustom?: boolean;

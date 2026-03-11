@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
-import IconFont from "@/components/IconFont/Iconfont";
+import IconFont from "@/components/Iconfont/Iconfont";
 import {
   EditorTopToolbar,
   EditorTreeSidebar,
@@ -920,11 +920,16 @@ const MarkdownEditorPage = () => {
   const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!workId) return;
-    if (lastInitWorkIdRef.current === workId) return;
-    lastInitWorkIdRef.current = workId;
-    void initEditorData(workId);
-  }, [workId, initEditorData]);
+    (async ()=>{
+      if (!workId) return;
+      if (lastInitWorkIdRef.current === workId) return;
+      lastInitWorkIdRef.current = workId;
+      await initEditorData(workId);
+      // if (workInfo.stage == 'blank'){
+      //   stepWorkflowRef.current.openStepCreateDialog()
+      // }
+    })()
+  }, []);
 
   useEffect(() => {
     setWorkId(workId ?? null);
@@ -1045,38 +1050,6 @@ const MarkdownEditorPage = () => {
       setShouldAutoSubmitInitialMessage(false);
     }
   }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
-
-  useEffect(() => {
-    // if (!pendingStepTemplate) return;
-    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
-    // if (opened) {
-    //   setPendingStepTemplate(null);
-    // }
-  }, [pendingStepTemplate, serverData, currentEditingId]);
-
-  // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
-  // useEffect(() => {
-  //   // serverData 还未加载完成
-  //   if (!serverData || Object.keys(serverData).length === 0) return;
-  //   // 用户已经有当前编辑文件且存在于 serverData，则不干预
-  //   if (currentEditingId && serverData[currentEditingId] !== undefined) return;
-
-  //   const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
-  //   if (allMdKeys.length === 0) return;
-
-  //   // 优先正文目录下的章节，例如 "正文/第一章.md"
-  //   const chapterCandidates = allMdKeys
-  //     .filter((k) => k.startsWith("正文/"))
-  //     .sort();
-
-  //   const targetKey =
-  //     chapterCandidates[0] ??
-  //     allMdKeys.sort()[0] ??
-  //     DEFAULT_EDITING_FILE_KEY;
-
-  //   const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
-  //   setCurrentEditingId(targetKey);
-  // }, [serverData, currentEditingId]);
 
   const handleBackClick = useCallback(async () => {
     const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
