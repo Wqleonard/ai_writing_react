@@ -67,7 +67,6 @@
               </div>
             </template>
           </template>
-          <StreamIndicator v-if="chatLoading" class="ml-2.5 h-9!" />
         </div>
       </AutoScrollbar>
 
@@ -116,7 +115,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from 'vue'
-import { ElMessage, ElInput } from 'element-plus'
+import { ElMessage, ElInput, ElImage, ElButton } from 'element-plus'
 import { generateImage, postSelectionToolbarStream } from '@/api/selection-toolbar.ts'
 import type { PostStreamData } from '@/api/index.ts'
 import AutoScrollbar from '@/vue/components/AutoScrollbar.vue'

@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import type { TemplateCardData } from '../types'
 import { Button } from '@/components/ui/Button'
+import { Iconfont } from "@/components/Iconfont";
 
 export interface TemplateCardProps {
   data: TemplateCardData
@@ -38,7 +39,7 @@ export const TemplateCard = ({
             onCreate(data)
           }}
         >
-          <Plus className="size-4" />
+          <Iconfont unicode="&#xe642;" className="text-xl" />
         </Button>
       ) : null}
     </div>

@@ -4,7 +4,7 @@ import { addCustomTagReq, delCustomTagReq, getScriptSelectedTagsReq, getScriptTa
 import { useEditorStore } from "@/stores/editorStore";
 import type { Tag } from "@/components/StepWorkflow/types";
 import { toast } from "sonner";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { cn } from "@/lib/utils";
 
 interface TagCategoryDataItem {

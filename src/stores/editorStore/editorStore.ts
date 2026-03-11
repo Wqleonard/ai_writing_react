@@ -281,7 +281,8 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setCurrentContent: (content) =>
           set((state) => {
-            const normalizedContent = normalizeServerContent(content);
+            const normalizedContent = normalizeServerContent(content ?? "");
+
             const fileKey = state.currentEditingId;
             const editingNode =
               state.currentEditingNode?.id === fileKey

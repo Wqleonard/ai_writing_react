@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { Upload } from "@/components/Upload";
 import type { UploadFile } from "@/components/Upload";
 import { MarkdownEditor } from "@/components/MarkdownEditor";

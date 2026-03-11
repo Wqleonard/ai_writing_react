@@ -5,45 +5,47 @@
       <div class="toolbar-group">
         <!-- 文本格式 -->
         <button @click="editor?.chain().focus().toggleBold().run()" :class="{ 'is-active': editor?.isActive('bold') }"
-          class="toolbar-btn" title="加粗">
+                class="toolbar-btn" title="加粗">
           <span class="icon-bold">B</span>
         </button>
         <button @click="editor?.chain().focus().toggleItalic().run()"
-          :class="{ 'is-active': editor?.isActive('italic') }" class="toolbar-btn" title="斜体">
+                :class="{ 'is-active': editor?.isActive('italic') }" class="toolbar-btn" title="斜体">
           <span class="icon-italic">I</span>
         </button>
         <button @click="editor?.chain().focus().toggleUnderline().run()"
-          :class="{ 'is-active': editor?.isActive('underline') }" class="toolbar-btn" title="下划线">
+                :class="{ 'is-active': editor?.isActive('underline') }" class="toolbar-btn" title="下划线">
           <span class="icon-underline">U</span>
         </button>
         <button @click="editor?.chain().focus().toggleStrike().run()"
-          :class="{ 'is-active': editor?.isActive('strike') }" class="toolbar-btn" title="删除线">
+                :class="{ 'is-active': editor?.isActive('strike') }" class="toolbar-btn" title="删除线">
           <span class="icon-strike">S</span>
         </button>
       </div>
 
       <div class="toolbar-group">
         <!-- 颜色 -->
-        <input type="color" @input="setTextColor" :value="getTextColor()" class="color-input" title="文字颜色" />
-        <input type="color" @input="setHighlightColor" :value="getHighlightColor()" class="color-input" title="背景颜色" />
+        <input type="color" @input="setTextColor" :value="getTextColor()" class="color-input" title="文字颜色"/>
+        <input type="color" @input="setHighlightColor" :value="getHighlightColor()" class="color-input"
+               title="背景颜色"/>
       </div>
 
       <div class="toolbar-group">
         <!-- 对齐 -->
         <button @click="editor?.chain().focus().setTextAlign('left').run()"
-          :class="{ 'is-active': editor?.isActive({ textAlign: 'left' }) }" class="toolbar-btn" title="左对齐">
+                :class="{ 'is-active': editor?.isActive({ textAlign: 'left' }) }" class="toolbar-btn" title="左对齐">
           <span class="icon-align-left">⬅</span>
         </button>
         <button @click="editor?.chain().focus().setTextAlign('center').run()"
-          :class="{ 'is-active': editor?.isActive({ textAlign: 'center' }) }" class="toolbar-btn" title="居中">
+                :class="{ 'is-active': editor?.isActive({ textAlign: 'center' }) }" class="toolbar-btn" title="居中">
           <span class="icon-align-center">↔</span>
         </button>
         <button @click="editor?.chain().focus().setTextAlign('right').run()"
-          :class="{ 'is-active': editor?.isActive({ textAlign: 'right' }) }" class="toolbar-btn" title="右对齐">
+                :class="{ 'is-active': editor?.isActive({ textAlign: 'right' }) }" class="toolbar-btn" title="右对齐">
           <span class="icon-align-right">➡</span>
         </button>
         <button @click="editor?.chain().focus().setTextAlign('justify').run()"
-          :class="{ 'is-active': editor?.isActive({ textAlign: 'justify' }) }" class="toolbar-btn" title="两端对齐">
+                :class="{ 'is-active': editor?.isActive({ textAlign: 'justify' }) }" class="toolbar-btn"
+                title="两端对齐">
           <span class="icon-align-justify">⬌</span>
         </button>
       </div>
@@ -64,11 +66,11 @@
       <div class="toolbar-group">
         <!-- 列表 -->
         <button @click="editor?.chain().focus().toggleBulletList().run()"
-          :class="{ 'is-active': editor?.isActive('bulletList') }" class="toolbar-btn" title="无序列表">
+                :class="{ 'is-active': editor?.isActive('bulletList') }" class="toolbar-btn" title="无序列表">
           <span class="icon-bullet-list">•</span>
         </button>
         <button @click="editor?.chain().focus().toggleOrderedList().run()"
-          :class="{ 'is-active': editor?.isActive('orderedList') }" class="toolbar-btn" title="有序列表">
+                :class="{ 'is-active': editor?.isActive('orderedList') }" class="toolbar-btn" title="有序列表">
           <span class="icon-ordered-list">1.</span>
         </button>
       </div>
@@ -76,11 +78,11 @@
       <div class="toolbar-group">
         <!-- 其他格式 -->
         <button @click="editor?.chain().focus().toggleBlockquote().run()"
-          :class="{ 'is-active': editor?.isActive('blockquote') }" class="toolbar-btn" title="引用">
+                :class="{ 'is-active': editor?.isActive('blockquote') }" class="toolbar-btn" title="引用">
           <span class="icon-blockquote">"</span>
         </button>
         <button @click="editor?.chain().focus().toggleCodeBlock().run()"
-          :class="{ 'is-active': editor?.isActive('codeBlock') }" class="toolbar-btn" title="代码块">
+                :class="{ 'is-active': editor?.isActive('codeBlock') }" class="toolbar-btn" title="代码块">
           <span class="icon-code-block">&lt;/&gt;</span>
         </button>
       </div>
@@ -95,11 +97,11 @@
       <div class="toolbar-group">
         <!-- 历史操作 -->
         <button @click="editor?.chain().focus().undo().run()" :disabled="!editor?.can().undo()" class="toolbar-btn"
-          title="撤销">
+                title="撤销">
           <span class="icon-undo">↶</span>
         </button>
         <button @click="editor?.chain().focus().redo().run()" :disabled="!editor?.can().redo()" class="toolbar-btn"
-          title="重做">
+                title="重做">
           <span class="icon-redo">↷</span>
         </button>
       </div>
@@ -111,10 +113,13 @@
     </div>
 
     <!-- 选中文本工具栏 -->
-    <SelectionToolbarComponent v-if="editor && needSelectionToolbar" ref="selectionToolbarElement"
-      v-model="showSelectionToolbar" :editor="editor" :left="selectionToolbarPosition.left"
-      :top="selectionToolbarPosition.top" :from="selectionRange.from" :to="selectionRange.to"
-      :selected-text="selectedText" :btns="props.btns" @add="handleAddClick" @note="handleNoteClick" />
+    <SelectionToolbarComponent
+        v-if="editor && needSelectionToolbar" ref="selectionToolbarElement"
+        v-model="showSelectionToolbar" :editor="editor" :left="selectionToolbarPosition.left"
+        :top="selectionToolbarPosition.top" :from="selectionRange.from" :to="selectionRange.to"
+        :selected-text="selectedText" :btns="props.btns" @add="handleAddClick"
+        @note="handleNoteClick"
+    />
   </div>
 </template>
 
@@ -135,12 +140,14 @@ import CharacterCount from "@tiptap/extension-character-count";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
 import Image from "@tiptap/extension-image";
-import Mermaid from "@/extensions/Mermaid";
+import Mermaid from "@/vue/extensions/Mermaid";
 import StreamedContentMark from "@/vue/extensions/StreamedContentMark";
 import StreamedContentActionBar from "@/vue/extensions/StreamedContentActionBar";
 import HighlightMarker from "@/vue/extensions/HighlightMarker";
 import SelectionToolbar from "@/vue/extensions/SelectionToolbar/index";
-import SelectionToolbarComponent, { type SelectionToolBarAction } from "@/vue/extensions/SelectionToolbar/SelectionToolbarComponent.vue";
+import SelectionToolbarComponent, {
+  type SelectionToolBarAction
+} from "@/vue/extensions/SelectionToolbar/SelectionToolbarComponent.vue";
 import { type TiptapDocument } from "@/utils/mdConverter";
 import { HIGHLIGHT_END, HIGHLIGHT_START } from "@/vue/utils/constant";
 
@@ -186,6 +193,7 @@ interface Emits {
   (e: "streamed-content-accept", selectedOption?: "chapter" | "para" | "once"): void;
 
   (e: "selection-add", selectedText: string): void;
+
   (e: "selection-note", selectedText: string): void;
 }
 
@@ -254,134 +262,134 @@ const extensions = computed(() => {
 
   // StarterKit
   exts.push(
-    StarterKit.configure({
-      // 排除 codeBlock，我们将单独配置它来排除 mermaid
-      codeBlock: false,
-    })
+      StarterKit.configure({
+        // 排除 codeBlock，我们将单独配置它来排除 mermaid
+        codeBlock: false,
+      })
   );
 
   // 单独添加 codeBlock
   exts.push(
-    CodeBlock.extend({
-      parseHTML() {
-        return [
-          {
-            tag: "pre",
-            preserveWhitespace: "full",
-            getAttrs: (node) => {
-              if (typeof node === "string") return false;
-              if (!(node instanceof HTMLElement)) return false;
-              const codeElement = node.querySelector("code");
-              // 如果禁用了 Mermaid，则将所有代码块（包括 mermaid）都作为普通代码块处理
-              // 如果启用了 Mermaid，则排除 language-mermaid，让 Mermaid 扩展处理
-              if (
-                !props.disableMermaid &&
-                codeElement &&
-                codeElement.classList.contains("language-mermaid")
-              ) {
-                return false;
-              }
-              return {};
+      CodeBlock.extend({
+        parseHTML() {
+          return [
+            {
+              tag: "pre",
+              preserveWhitespace: "full",
+              getAttrs: (node) => {
+                if (typeof node === "string") return false;
+                if (!(node instanceof HTMLElement)) return false;
+                const codeElement = node.querySelector("code");
+                // 如果禁用了 Mermaid，则将所有代码块（包括 mermaid）都作为普通代码块处理
+                // 如果启用了 Mermaid，则排除 language-mermaid，让 Mermaid 扩展处理
+                if (
+                    !props.disableMermaid &&
+                    codeElement &&
+                    codeElement.classList.contains("language-mermaid")
+                ) {
+                  return false;
+                }
+                return {};
+              },
             },
-          },
-        ];
-      },
-    })
+          ];
+        },
+      })
   );
 
   // 添加其他扩展
   exts.push(
-    Color,
-    FontFamily,
-    Highlight.configure({
-      multicolor: true,
-    }),
-    CharacterCount,
-    TableRow,
-    TableHeader,
-    TableCell,
-    Table.configure({
-      resizable: true,
-    }),
-    TextAlign.configure({
-      types: ["heading", "paragraph"],
-    }),
-    Placeholder.configure({
-      placeholder: props.placeholder,
-    }),
-    Image.configure({
-      inline: true,
-      allowBase64: true,
-    }),
-    StreamedContentMark, // 添加流式内容 Mark 扩展
-    HighlightMarker.configure({
-      startMarker: HIGHLIGHT_START,
-      endMarker: HIGHLIGHT_END,
-    }),
-    StreamedContentActionBar.configure({
-      // 优先使用 props 中的处理函数（不再传递 range，由 WorkflowGenerate 内部维护）
-      onEdit: () => {
-        if (props.actionBarHandlers?.onEdit) {
-          props.actionBarHandlers.onEdit();
-        } else {
-          emit("streamed-content-edit");
-        }
-      },
-      onRegenerate: () => {
-        if (props.actionBarHandlers?.onRegenerate) {
-          props.actionBarHandlers.onRegenerate();
-        } else {
-          emit("streamed-content-regenerate");
-        }
-      },
-      onReject: () => {
-        if (props.actionBarHandlers?.onReject) {
-          props.actionBarHandlers.onReject();
-        } else {
-          emit("streamed-content-reject");
-        }
-      },
-      onAccept: (selectedOption) => {
-        if (props.actionBarHandlers?.onAccept) {
-          props.actionBarHandlers.onAccept(selectedOption);
-        } else {
-          emit("streamed-content-accept", selectedOption);
-        }
-      },
-      onEditingCancel: () => {
-        if (props.actionBarHandlers?.onEditingCancel) {
-          props.actionBarHandlers.onEditingCancel();
-        }
-      },
-      onEditingConfirm: () => {
-        if (props.actionBarHandlers?.onEditingConfirm) {
-          props.actionBarHandlers.onEditingConfirm();
-        }
-      },
-    }), // 添加流式内容操作栏扩展
-    // 添加 SelectionToolbar，使用 getter 函数动态获取 element
-    SelectionToolbar.configure({
-      getElement: () => {
-        const toolbar = selectionToolbarElement.value;
-        if (toolbar && toolbar.$el) {
-          return toolbar.$el as HTMLElement;
-        }
-        return null;
-      },
-      setVisible: (visible: boolean) => {
-        showSelectionToolbar.value = visible;
-      },
-      getVisible: () => {
-        return showSelectionToolbar.value;
-      },
-      setPosition: (left: number, top: number) => {
-        selectionToolbarPosition.value = { left, top };
-      },
-      setSelection: (from: number, to: number, text: string) => {
-        selectionRange.value = { from, to };
-        selectedText.value = text;
-      },
-    })
+      Color,
+      FontFamily,
+      Highlight.configure({
+        multicolor: true,
+      }),
+      CharacterCount,
+      TableRow,
+      TableHeader,
+      TableCell,
+      Table.configure({
+        resizable: true,
+      }),
+      TextAlign.configure({
+        types: ["heading", "paragraph"],
+      }),
+      Placeholder.configure({
+        placeholder: props.placeholder,
+      }),
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+      }),
+      StreamedContentMark, // 添加流式内容 Mark 扩展
+      HighlightMarker.configure({
+        startMarker: HIGHLIGHT_START,
+        endMarker: HIGHLIGHT_END,
+      }),
+      StreamedContentActionBar.configure({
+        // 优先使用 props 中的处理函数（不再传递 range，由 WorkflowGenerate 内部维护）
+        onEdit: () => {
+          if (props.actionBarHandlers?.onEdit) {
+            props.actionBarHandlers.onEdit();
+          } else {
+            emit("streamed-content-edit");
+          }
+        },
+        onRegenerate: () => {
+          if (props.actionBarHandlers?.onRegenerate) {
+            props.actionBarHandlers.onRegenerate();
+          } else {
+            emit("streamed-content-regenerate");
+          }
+        },
+        onReject: () => {
+          if (props.actionBarHandlers?.onReject) {
+            props.actionBarHandlers.onReject();
+          } else {
+            emit("streamed-content-reject");
+          }
+        },
+        onAccept: (selectedOption) => {
+          if (props.actionBarHandlers?.onAccept) {
+            props.actionBarHandlers.onAccept(selectedOption);
+          } else {
+            emit("streamed-content-accept", selectedOption);
+          }
+        },
+        onEditingCancel: () => {
+          if (props.actionBarHandlers?.onEditingCancel) {
+            props.actionBarHandlers.onEditingCancel();
+          }
+        },
+        onEditingConfirm: () => {
+          if (props.actionBarHandlers?.onEditingConfirm) {
+            props.actionBarHandlers.onEditingConfirm();
+          }
+        },
+      }), // 添加流式内容操作栏扩展
+      // 添加 SelectionToolbar，使用 getter 函数动态获取 element
+      SelectionToolbar.configure({
+        getElement: () => {
+          const toolbar = selectionToolbarElement.value;
+          if (toolbar && toolbar.$el) {
+            return toolbar.$el as HTMLElement;
+          }
+          return null;
+        },
+        setVisible: (visible: boolean) => {
+          showSelectionToolbar.value = visible;
+        },
+        getVisible: () => {
+          return showSelectionToolbar.value;
+        },
+        setPosition: (left: number, top: number) => {
+          selectionToolbarPosition.value = { left, top };
+        },
+        setSelection: (from: number, to: number, text: string) => {
+          selectionRange.value = { from, to };
+          selectedText.value = text;
+        },
+      })
   );
 
   return exts;
@@ -395,9 +403,9 @@ const editor = useEditor({
     attributes: {
       class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
       style: `min-height: 200px; padding: 20px; ${props.disableSelection
-        ? "user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;"
-        : ""
-        }`,
+          ? "user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;"
+          : ""
+      }`,
       "data-placeholder": props.placeholder,
     },
   },
@@ -486,155 +494,155 @@ const editor = useEditor({
 
 // 监听 placeholder 变化，更新编辑器配置
 watch(
-  () => props.placeholder,
-  (newPlaceholder) => {
-    if (editor.value) {
-      // 通过 setOptions 更新 Placeholder 扩展配置
-      const currentExtensions = editor.value.extensionManager.extensions;
-      const updatedExtensions = currentExtensions.map((ext) => {
-        if (ext.name === "placeholder") {
-          return Placeholder.configure({
-            placeholder: newPlaceholder,
-          });
-        }
-        return ext;
-      });
-      editor.value.setOptions({
-        extensions: updatedExtensions,
-      });
+    () => props.placeholder,
+    (newPlaceholder) => {
+      if (editor.value) {
+        // 通过 setOptions 更新 Placeholder 扩展配置
+        const currentExtensions = editor.value.extensionManager.extensions;
+        const updatedExtensions = currentExtensions.map((ext) => {
+          if (ext.name === "placeholder") {
+            return Placeholder.configure({
+              placeholder: newPlaceholder,
+            });
+          }
+          return ext;
+        });
+        editor.value.setOptions({
+          extensions: updatedExtensions,
+        });
+      }
     }
-  }
 );
 
 // 监听 editable 变化，动态更新编辑器可编辑状态
 watch(
-  () => props.editable,
-  (newEditable) => {
-    if (editor.value) {
-      console.log(`[TiptapEditor] 更新编辑器可编辑状态: ${newEditable}`);
-      editor.value.setEditable(newEditable);
-    }
-  },
-  { immediate: false }
+    () => props.editable,
+    (newEditable) => {
+      if (editor.value) {
+        console.log(`[TiptapEditor] 更新编辑器可编辑状态: ${newEditable}`);
+        editor.value.setEditable(newEditable);
+      }
+    },
+    { immediate: false }
 );
 
 // 监听 disableMermaid 变化，需要重新创建编辑器以应用新的扩展配置
 watch(
-  () => props.disableMermaid,
-  () => {
-    // 当 disableMermaid 变化时，需要重新创建编辑器
-    // 通过更新 editorKey 来触发重新创建（由父组件控制）
-    // 这里我们只记录变化，实际重新创建由父组件通过 editorKey 控制
-    console.log(`[TiptapEditor] disableMermaid changed: ${props.disableMermaid}`);
-  }
+    () => props.disableMermaid,
+    () => {
+      // 当 disableMermaid 变化时，需要重新创建编辑器
+      // 通过更新 editorKey 来触发重新创建（由父组件控制）
+      // 这里我们只记录变化，实际重新创建由父组件通过 editorKey 控制
+      console.log(`[TiptapEditor] disableMermaid changed: ${props.disableMermaid}`);
+    }
 );
 
 // 监听外部内容变化
 watch(
-  () => props.modelValue,
-  (newValue) => {
-    if (!editor.value) return;
+    () => props.modelValue,
+    (newValue) => {
+      if (!editor.value) return;
 
-    try {
-      if (props.modelType === "json") {
-        const currentJson = editor.value.getJSON();
-        // 将 Proxy 对象转换为纯对象
-        const pureValue = JSON.parse(JSON.stringify(newValue));
-        if (JSON.stringify(currentJson) !== JSON.stringify(pureValue)) {
-          isUpdatingFromExternal.value = true;
-          editor.value.commands.setContent(pureValue as TiptapDocument);
-          setTimeout(() => {
-            isUpdatingFromExternal.value = false;
-          }, 0);
-        }
-      } else if (props.modelType === "md") {
-        // 获取当前编辑器的 markdown 内容
-        const markdownStorage = (editor.value.storage as any).markdown;
-        const currentMarkdown = markdownStorage?.getMarkdown?.() || "";
+      try {
+        if (props.modelType === "json") {
+          const currentJson = editor.value.getJSON();
+          // 将 Proxy 对象转换为纯对象
+          const pureValue = JSON.parse(JSON.stringify(newValue));
+          if (JSON.stringify(currentJson) !== JSON.stringify(pureValue)) {
+            isUpdatingFromExternal.value = true;
+            editor.value.commands.setContent(pureValue as TiptapDocument);
+            setTimeout(() => {
+              isUpdatingFromExternal.value = false;
+            }, 0);
+          }
+        } else if (props.modelType === "md") {
+          // 获取当前编辑器的 markdown 内容
+          const markdownStorage = (editor.value.storage as any).markdown;
+          const currentMarkdown = markdownStorage?.getMarkdown?.() || "";
 
-        // 只有当内容真正改变时才更新
-        if (currentMarkdown !== newValue) {
-          // 设置标志位，防止触发 onUpdate
-          isUpdatingFromExternal.value = true;
+          // 只有当内容真正改变时才更新
+          if (currentMarkdown !== newValue) {
+            // 设置标志位，防止触发 onUpdate
+            isUpdatingFromExternal.value = true;
 
-          try {
-            // 使用 Markdown 插件的方法设置 markdown 内容
-            if (markdownStorage && typeof markdownStorage.setMarkdown === "function") {
-              markdownStorage.setMarkdown((newValue as string) || "");
-            } else {
-              // 如果 Markdown 插件方法不可用，回退到 setContent
-              editor.value.commands.setContent(newValue as string);
+            try {
+              // 使用 Markdown 插件的方法设置 markdown 内容
+              if (markdownStorage && typeof markdownStorage.setMarkdown === "function") {
+                markdownStorage.setMarkdown((newValue as string) || "");
+              } else {
+                // 如果 Markdown 插件方法不可用，回退到 setContent
+                editor.value.commands.setContent(newValue as string);
+              }
+            } finally {
+              // 使用 setTimeout 确保在下一个事件循环中重置标志位
+              setTimeout(() => {
+                isUpdatingFromExternal.value = false;
+              }, 0);
             }
-          } finally {
-            // 使用 setTimeout 确保在下一个事件循环中重置标志位
+          }
+        } else {
+          // modelType === 'html'
+          if (editor.value.getHTML() !== newValue) {
+            isUpdatingFromExternal.value = true;
+            editor.value.commands.setContent(newValue as string);
             setTimeout(() => {
               isUpdatingFromExternal.value = false;
             }, 0);
           }
         }
-      } else {
-        // modelType === 'html'
-        if (editor.value.getHTML() !== newValue) {
+      } catch (error) {
+        console.error("Error updating editor content:", error);
+        try {
           isUpdatingFromExternal.value = true;
           editor.value.commands.setContent(newValue as string);
-          setTimeout(() => {
-            isUpdatingFromExternal.value = false;
-          }, 0);
-        }
-      }
-    } catch (error) {
-      console.error("Error updating editor content:", error);
-      try {
-        isUpdatingFromExternal.value = true;
-        editor.value.commands.setContent(newValue as string);
-      } catch (e) {
-        console.error("Error setting content:", e);
-      } finally {
-        setTimeout(() => {
-          isUpdatingFromExternal.value = false;
-        }, 0);
-      }
-    }
-  },
-  { immediate: false }
-);
-
-// 监听editorKey变化，强制重新渲染
-watch(
-  () => props.editorKey,
-  () => {
-    if (editor.value) {
-      nextTick(() => {
-        isUpdatingFromExternal.value = true;
-        try {
-          if (props.modelType === "json") {
-            // 将 Proxy 对象转换为纯对象
-            const pureValue = JSON.parse(JSON.stringify(props.modelValue));
-            editor.value?.commands.setContent(pureValue as TiptapDocument);
-          } else if (props.modelType === "md") {
-            if (editor.value) {
-              const markdownStorage = (editor.value.storage as any).markdown;
-              if (markdownStorage && typeof markdownStorage.setMarkdown === "function") {
-                markdownStorage.setMarkdown((props.modelValue as string) || "");
-              } else {
-                editor.value.commands.setContent(props.modelValue as string);
-              }
-            }
-          } else {
-            // modelType === 'html'
-            editor.value?.commands.setContent(props.modelValue as string);
-          }
-        } catch (error) {
-          console.error("Error setting content:", error);
-          editor.value?.commands.setContent(props.modelValue as string);
+        } catch (e) {
+          console.error("Error setting content:", e);
         } finally {
           setTimeout(() => {
             isUpdatingFromExternal.value = false;
           }, 0);
         }
-      });
+      }
+    },
+    { immediate: false }
+);
+
+// 监听editorKey变化，强制重新渲染
+watch(
+    () => props.editorKey,
+    () => {
+      if (editor.value) {
+        nextTick(() => {
+          isUpdatingFromExternal.value = true;
+          try {
+            if (props.modelType === "json") {
+              // 将 Proxy 对象转换为纯对象
+              const pureValue = JSON.parse(JSON.stringify(props.modelValue));
+              editor.value?.commands.setContent(pureValue as TiptapDocument);
+            } else if (props.modelType === "md") {
+              if (editor.value) {
+                const markdownStorage = (editor.value.storage as any).markdown;
+                if (markdownStorage && typeof markdownStorage.setMarkdown === "function") {
+                  markdownStorage.setMarkdown((props.modelValue as string) || "");
+                } else {
+                  editor.value.commands.setContent(props.modelValue as string);
+                }
+              }
+            } else {
+              // modelType === 'html'
+              editor.value?.commands.setContent(props.modelValue as string);
+            }
+          } catch (error) {
+            console.error("Error setting content:", error);
+            editor.value?.commands.setContent(props.modelValue as string);
+          } finally {
+            setTimeout(() => {
+              isUpdatingFromExternal.value = false;
+            }, 0);
+          }
+        });
+      }
     }
-  }
 );
 
 // 工具栏功能函数
@@ -661,10 +669,10 @@ const setHeading = (event: Event) => {
   const level = parseInt(target.value);
   if (level) {
     editor.value
-      ?.chain()
-      .focus()
-      .toggleHeading({ level: level as 1 | 2 | 3 | 4 | 5 | 6 })
-      .run();
+        ?.chain()
+        .focus()
+        .toggleHeading({ level: level as 1 | 2 | 3 | 4 | 5 | 6 })
+        .run();
   } else {
     editor.value?.chain().focus().setParagraph().run();
   }
@@ -804,23 +812,23 @@ defineExpose({
 
     // 辅助函数：将规范化文本位置转换为文档位置
     const normalizedToDocPos = (
-      normalizedStart: number,
-      normalizedEnd: number
+        normalizedStart: number,
+        normalizedEnd: number
     ): { from: number; to: number } | null => {
       if (
-        normalizedStart < 0 ||
-        normalizedEnd < 0 ||
-        normalizedStart >= normalizedEnd ||
-        normalizedStart >= charMap.length
+          normalizedStart < 0 ||
+          normalizedEnd < 0 ||
+          normalizedStart >= normalizedEnd ||
+          normalizedStart >= charMap.length
       ) {
         return null;
       }
 
       const from = charMap[normalizedStart]?.docPos;
       const to =
-        normalizedEnd < charMap.length
-          ? charMap[normalizedEnd]?.docPos
-          : charMap[charMap.length - 1]?.docPos + 1;
+          normalizedEnd < charMap.length
+              ? charMap[normalizedEnd]?.docPos
+              : charMap[charMap.length - 1]?.docPos + 1;
 
       if (from === undefined || to === undefined) {
         return null;
@@ -845,9 +853,9 @@ defineExpose({
 
     // 辅助函数：验证范围是否正确，如果不正确则调整偏移量
     const validateAndAdjustRange = (
-      initialFrom: number,
-      initialTo: number,
-      maxAdjustments: number = 20
+        initialFrom: number,
+        initialTo: number,
+        maxAdjustments: number = 20
     ): { from: number; to: number } | null => {
       let from = initialFrom;
       let to = initialTo;
@@ -920,8 +928,8 @@ defineExpose({
             } else {
               // 实际文本太短，扩大范围
               to = Math.min(
-                doc.content.size,
-                to + Math.min(Math.floor(Math.abs(lengthDiff) / 2), 3)
+                  doc.content.size,
+                  to + Math.min(Math.floor(Math.abs(lengthDiff) / 2), 3)
               );
             }
           } else {

@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/Button'
 import { HistoryCard } from './components/HistoryCard'
 import { TemplateCard } from './components/TemplateCard'
 import type { TemplateCardData, HistoryItem } from './types'
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import Empty from '@/components/ui/Empty'
@@ -351,16 +351,16 @@ const BookAnalysisPage = () => {
           setLoading(false)
           return
         }
-        sessionStorage.setItem(
-          'editorInitialParams',
-          JSON.stringify({
-            isNew: true,
-            template: JSON.stringify(template),
-            skipRecommendDialog: true,
-          })
-        )
+        // sessionStorage.setItem(
+        //   'editorInitialParams',
+        //   JSON.stringify({
+        //     isNew: true,
+        //     template: JSON.stringify(template),
+        //     skipRecommendDialog: true,
+        //   })
+        // )
         navigate(`/editor/${req.id}`, {
-          state: { isNew: true, template: JSON.stringify(template), skipRecommendDialog: true },
+          state: { isNew: true, template: JSON.stringify(template)},
         })
       } catch {
         toast.error('创建作品失败，请重试')

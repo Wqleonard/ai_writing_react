@@ -55,6 +55,7 @@
 import {ref, onMounted, watch, onBeforeUnmount, computed, nextTick} from 'vue'
 import {NodeViewWrapper} from '@tiptap/vue-3'
 import mermaid from 'mermaid'
+import { ElButton } from 'element-plus'
 
 interface Props {
   node: {

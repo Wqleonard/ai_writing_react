@@ -5,7 +5,7 @@ import { postDocTemplateStreamOutline } from "@/api/generate-quick";
 import type { PostStreamData } from "@/api";
 import MarkdownEditor from "@/components/MainEditor";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 
 type StoryData = {
   title: string;

@@ -2160,22 +2160,23 @@ onMounted(async () => {
     currentDirectory.value = targetDir;
 
     // 等待DOM完全渲染
-    nextTick(() => {
+    await nextTick(() => {
       setTimeout(() => {
         // 标记初始化完成
         isInitialized.value = true;
 
         // 手动触发初始滚动
-        if (isSectionVisible(targetDir)) {
-          // 执行滚动
-          const sectionEl = getSectionElement(targetDir);
-          if (sectionEl) {
-            console.log("[QuickEditor] Scrolling to initial position:", targetDir);
-            sectionEl.scrollIntoView({
-              behavior: "smooth",
-              block: "start",
-              inline: "nearest",
-            });
+        // 注意：不用 isSectionVisible 判断，因为 lastLockedDir 已被解锁，可能返回 false
+        // 直接尝试获取元素并滚动
+        const sectionEl = getSectionElement(targetDir!);
+        if (sectionEl) {
+          console.log("[QuickEditor] Scrolling to initial position:", targetDir);
+          if (contentScrollAreaRef.value) {
+            const containerRect = contentScrollAreaRef.value.getBoundingClientRect();
+            const sectionRect = sectionEl.getBoundingClientRect();
+            const scrollOffset = sectionRect.top - containerRect.top + contentScrollAreaRef.value.scrollTop;
+            // 用 scrollTo smooth 实现平滑滚动，在容器内滚动避免 scroll-snap 干扰
+            contentScrollAreaRef.value.scrollTo({ top: scrollOffset, behavior: "smooth" });
           }
 
           // 初始化滚动使用更长的锁定时间（1200ms），确保滚动动画完成
@@ -2188,7 +2189,8 @@ onMounted(async () => {
             console.log("[QuickEditor] Initial scroll lock released");
           }, 1200);
         } else {
-          // 如果section不可见，直接释放锁定
+          // 如果找不到元素，直接释放锁定
+          console.log("[QuickEditor] Section element not found for:", targetDir);
           scrollLock.value = false;
         }
       }, 500); // 延迟500ms，确保DOM和Observer都准备就绪

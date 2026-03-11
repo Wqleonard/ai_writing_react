@@ -38,7 +38,7 @@ import {
     ParentNode,
     InspirationVersion,
   } from "./types";
-import { Iconfont } from "../IconFont";
+import { Iconfont } from "../Iconfont";
 import { saveInspirationCanvasReq } from "@/api/works";
 import { useCanvasStore } from "@/stores/canvasStore";
   

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
 import EditIcon from "@/vue/assets/images/quick_creation/edit.svg";
-import StoryCoverImage from "@/vue/assets/images/logo.png";
+import StoryCoverImage from "@/vue/assets/images/quick_creation/story_card_cover.png";
 import PlotConflictIcon from "@/vue/assets/images/quick_creation/plot_conflict.svg";
 import EmotionalHeartIcon from "@/vue/assets/images/quick_creation/emotional_heart.svg";
 import StarIcon from "@/vue/assets/images/quick_creation/star.svg";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/utils/interfaces";
+import { ElSkeleton, ElSkeletonItem } from "element-plus";
 
 export interface QuickStoryCardData {
   title: string;
@@ -28,6 +29,7 @@ interface Props {
 
 interface Emits {
   (e: "click", event?: MouseEvent): void;
+
   (e: "edit", event: MouseEvent): void;
 }
 
@@ -68,9 +70,9 @@ const handleAddNote = async (e: MouseEvent) => {
 
   try {
     await addNote(
-      props.data.title,
-      props.data.intro,
-      "PC_ADD" as NoteSourceType
+        props.data.title,
+        props.data.intro,
+        "PC_ADD" as NoteSourceType
     );
     ElMessage.success("笔记添加成功");
   } catch (error) {
@@ -106,10 +108,10 @@ const defaultEmotionIndex = "";
     <!-- 骨架图加载状态 -->
     <el-skeleton v-if="props.loading || !props.data?.title" class="story-card-skeleton" animated>
       <template #template>
-        <el-skeleton-item variant="rect" style="height: 120px; margin-top: 0; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 120px; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 28px; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 55px;" />
+        <el-skeleton-item variant="rect" style="height: 120px; margin-top: 0; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 120px; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 28px; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 55px;"/>
       </template>
     </el-skeleton>
 
@@ -123,7 +125,7 @@ const defaultEmotionIndex = "";
             <span class="add-note-text">添加笔记</span>
           </div>
           <div v-if="showEdit" class="edit-btn" @click="handleEdit">
-            <img :src="EditIcon" alt="编辑" class="edit-icon" />
+            <img :src="EditIcon" alt="编辑" class="edit-icon"/>
             <span class="edit-text">编辑</span>
           </div>
         </div>
@@ -131,7 +133,7 @@ const defaultEmotionIndex = "";
         <!-- 书名和封面 -->
         <div class="story-title-section">
           <div class="story-cover">
-            <img :src="StoryCoverImage" alt="封面" class="cover-image" />
+            <img :src="StoryCoverImage" alt="封面" class="cover-image"/>
           </div>
           <div class="story-title">《{{ props.data?.title }}》</div>
         </div>
@@ -153,7 +155,7 @@ const defaultEmotionIndex = "";
           <div class="metrics-group">
             <div class="metric-item metric-item-conflict">
               <div class="metric-icon">
-                <img :src="PlotConflictIcon" alt="剧情冲突" />
+                <img :src="PlotConflictIcon" alt="剧情冲突"/>
               </div>
               <div class="metric-text">
                 剧情冲突：{{ props.data?.conflictLevel || defaultConflictLevel }}
@@ -161,11 +163,11 @@ const defaultEmotionIndex = "";
             </div>
             <div class="metric-item metric-item-emotion">
               <div class="metric-icon">
-                <img :src="EmotionalHeartIcon" alt="情感指数" />
+                <img :src="EmotionalHeartIcon" alt="情感指数"/>
               </div>
               <div class="metric-text">情感指数：</div>
               <div class="metric-stars">
-                <img v-for="i in 5" :key="i" :src="StarIcon" alt="星" class="star-icon" />
+                <img v-for="i in 5" :key="i" :src="StarIcon" alt="星" class="star-icon"/>
               </div>
             </div>
           </div>

@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import MALE from '@/assets/images/quick_creation/character_man_sex.svg'
 import confirmScSvg from '@/assets/images/quick_creation/confirm_sc.svg'
 import { getScriptCharacterSettings } from '@/api/generate-quick'

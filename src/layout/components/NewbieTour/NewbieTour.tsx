@@ -9,7 +9,7 @@ import type { Step, CallBackProps, Placement } from 'react-joyride-react19-compa
 import { useNavigate } from 'react-router-dom'
 import type { TourConfig, TourCallbacks } from './NewbieTour.types.ts'
 import { Button } from "@/components/ui/Button.tsx";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 
 interface NewbieTourProps {
   open: boolean

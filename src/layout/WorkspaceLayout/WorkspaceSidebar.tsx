@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/Popover'
 import { clsx } from 'clsx'
 import { AddNewWorkPopover } from '@/components/AddNewWorkPopover'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { useOptionsStore } from '@/stores/optionsStore'
 import { openFeedbackDialog } from '@/components/FeedbackDialog'
 import { useLoginStore } from '@/stores/loginStore'

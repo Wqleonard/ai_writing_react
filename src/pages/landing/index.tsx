@@ -47,7 +47,7 @@ export default function LandingPage() {
       setIsCreatingWork(true)
       const req = await createWorkReq('editor')
       if (req?.id) {
-        navigate(`/script-editor/${req.id}`, { state: { isNew: true } })
+        navigate(`/script-editor/${req.id}`, { state: { showTake2: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')

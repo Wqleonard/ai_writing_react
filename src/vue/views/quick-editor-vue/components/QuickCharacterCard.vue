@@ -6,6 +6,7 @@ import CUSTOMSEX from "@/vue/assets/images/quick_creation/character_custom_sex.s
 import EditIcon from "@/vue/assets/images/quick_creation/edit.svg";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/utils/interfaces";
+import { ElSkeleton, ElSkeletonItem } from "element-plus";
 
 export interface QuickCharacterCardData {
   name: string;
@@ -29,6 +30,7 @@ interface Props {
 
 interface Emits {
   (e: "click", event?: MouseEvent): void;
+
   (e: "edit", event: MouseEvent): void;
 }
 
@@ -110,9 +112,9 @@ const handleAddNote = async (e: MouseEvent) => {
 
   try {
     await addNote(
-      props.data.name,
-      content,
-      "PC_ADD" as NoteSourceType
+        props.data.name,
+        content,
+        "PC_ADD" as NoteSourceType
     );
     ElMessage.success("笔记添加成功");
   } catch (error) {
@@ -127,7 +129,7 @@ const handleAddNote = async (e: MouseEvent) => {
   <div v-if="isCustom" class="quick-character-card custom-card" @click="handleClick">
     <!-- 背景图片 -->
     <div class="character-gender-bg custom-bg">
-      <img :src="CUSTOMSEX" alt="" />
+      <img :src="CUSTOMSEX" alt=""/>
     </div>
 
     <!-- 内容 -->
@@ -147,10 +149,10 @@ const handleAddNote = async (e: MouseEvent) => {
     <!-- 骨架图加载状态 -->
     <el-skeleton v-if="props.loading || !props.data?.name" class="character-card-skeleton" animated>
       <template #template>
-        <el-skeleton-item variant="rect" style="height: 42px; margin-top: 0; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 28px; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 90px; margin-bottom: 25px;" />
-        <el-skeleton-item variant="rect" style="height: 40px;" />
+        <el-skeleton-item variant="rect" style="height: 42px; margin-top: 0; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 28px; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 90px; margin-bottom: 25px;"/>
+        <el-skeleton-item variant="rect" style="height: 40px;"/>
       </template>
     </el-skeleton>
 
@@ -158,7 +160,7 @@ const handleAddNote = async (e: MouseEvent) => {
     <template v-else>
       <!-- 性别图片背景 -->
       <div class="character-gender-bg">
-        <img :src="props.data?.gender === '女' ? FEMALE : MALE" alt="" />
+        <img :src="props.data?.gender === '女' ? FEMALE : MALE" alt=""/>
       </div>
 
       <!-- 内容区域 -->
@@ -171,7 +173,7 @@ const handleAddNote = async (e: MouseEvent) => {
               <span class="add-note-text">添加笔记</span>
             </div>
             <div v-if="showEdit" class="edit-btn" @click="handleEdit">
-              <img :src="EditIcon" alt="编辑" class="edit-icon" />
+              <img :src="EditIcon" alt="编辑" class="edit-icon"/>
               <span class="edit-text">编辑</span>
             </div>
           </div>

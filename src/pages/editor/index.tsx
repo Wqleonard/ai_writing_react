@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
-import IconFont from "@/components/IconFont/Iconfont";
+import { Iconfont as IconFont } from "@/components/Iconfont";
 import {
   EditorTopToolbar,
   EditorTreeSidebar,
@@ -135,7 +135,6 @@ type EditorInitialParams = {
   modelLLM?: string;
   selectedWritingStyle?: string;
   template?: StepTemplate | string;
-  skipRecommendDialog?: boolean;
   associationTags?: string[];
   selectedNotes?: import("@/api/notes").Note[];
   selectedFiles?: FileItemType[];
@@ -338,109 +337,12 @@ function CanvasToolbar({
   );
 }
 
-function MermaidRelationPreview({ markdown }: { markdown: string }) {
-  const [svgs, setSvgs] = useState<string[]>([]);
-  const [error, setError] = useState<string>("");
-
-  useEffect(() => {
-    let disposed = false;
-    const fencedBlocks = Array.from(
-      markdown.matchAll(/```mermaid\s*([\s\S]*?)```/g)
-    ).map((m) => (m[1] || "").trim()).filter(Boolean);
-    const plainText = markdown.trim();
-    const looksLikeMermaid = /(^|\n)\s*(graph|flowchart|erDiagram|classDiagram|sequenceDiagram|stateDiagram|mindmap|journey|gantt|pie|timeline|gitGraph)\b/.test(plainText);
-    const blocks = fencedBlocks.length > 0
-      ? fencedBlocks
-      : looksLikeMermaid
-        ? [plainText]
-        : [];
-    if (blocks.length === 0) {
-      setSvgs([]);
-      setError("未检测到 Mermaid 关系图代码块");
-      return;
-    }
-
-    (async () => {
-      try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "loose",
-          theme: "default",
-        });
-        const rendered: string[] = [];
-        for (let i = 0; i < blocks.length; i++) {
-          const id = `relation-${Date.now()}-${i}`;
-          const { svg } = await mermaid.render(id, blocks[i]);
-          rendered.push(svg);
-        }
-        if (!disposed) {
-          setSvgs(rendered);
-          setError("");
-        }
-      } catch {
-        if (!disposed) {
-          setSvgs([]);
-          setError("关系图渲染失败，请检查 Mermaid 语法");
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [markdown]);
-
-  if (error) {
-    return (
-      <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 text-sm text-muted-foreground">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4 space-y-4">
-      {svgs.map((svg, idx) => (
-        <div
-          key={idx}
-          className="w-full overflow-auto [&>svg]:max-w-none"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function RoleTablePreview({ markdown }: { markdown: string }) {
-  return (
-    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4">
-      <MarkdownRenderer content={markdown}/>
-    </div>
-  );
-}
-
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
-  const [disableRecommendAutoOpen, setDisableRecommendAutoOpen] = useState(() => {
-    try {
-      const stateParams = (location.state as { skipRecommendDialog?: boolean } | null) ?? null;
-      if (stateParams?.skipRecommendDialog) return true;
-      const paramsStr =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY)
-          : null;
-      if (!paramsStr) return false;
-      const parsed = JSON.parse(paramsStr) as { skipRecommendDialog?: boolean } | null;
-      return !!parsed?.skipRecommendDialog;
-    } catch {
-      return false;
-    }
-  });
   // chatheader 相关
   const [
     activeTab,
@@ -848,6 +750,7 @@ const MarkdownEditorPage = () => {
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
   const { confirm, confirmDialog } = useConfirmDialog();
   const lastInitialAutoSendKeyRef = useRef<string>("");
+  const initialParamsApplyKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
     const fileUrl = file.displayUrl || file.putFilePath;
@@ -965,21 +868,40 @@ const MarkdownEditorPage = () => {
   const [, setCanvasReadyKey] = useState(0);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
 
-  // editor 相关
-  const workInfo = useEditorStore((s) => s.workInfo);
-  const serverData = useEditorStore((s) => s.serverData);
-  const editorTreeData = useEditorStore((s) => s.treeData);
-  const currentContent = useEditorStore((s) => s.currentContent);
-  const currentEditingId = useEditorStore((s) => s.currentEditingId);
-  const currentEditingNode = useEditorStore((s) => s.currentEditingNode);
-  const initEditorData = useEditorStore((s) => s.initEditorData);
-  const saveEditorData = useEditorStore((s) => s.saveEditorData);
-  const setServerData = useEditorStore((s) => s.setServerData);
-  const setServerDataFile = useEditorStore((s) => s.setServerDataFile);
-  const setCurrentContent = useEditorStore((s) => s.setCurrentContent);
-  const setWorkInfo = useEditorStore((s) => s.setWorkInfo);
-  const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath);
-  const initEditorStore = useEditorStore((s) => s.initEditorStore);
+  // editor 相关 - 使用 useShallow 优化订阅，避免不必要的重渲染
+  const {
+    workInfo,
+    serverData,
+    currentContent,
+    currentEditingId,
+    currentEditingNode,
+    treeData,
+    initEditorData,
+    saveEditorData,
+    setServerData,
+    setServerDataFile,
+    setCurrentContent,
+    setWorkInfo,
+    renameServerDataPath,
+    initEditorStore,
+  } = useEditorStore(
+    useShallow((s) => ({
+      workInfo: s.workInfo,
+      serverData: s.serverData,
+      currentContent: s.currentContent,
+      currentEditingId: s.currentEditingId,
+      currentEditingNode: s.currentEditingNode,
+      treeData: s.treeData,
+      initEditorData: s.initEditorData,
+      saveEditorData: s.saveEditorData,
+      setServerData: s.setServerData,
+      setServerDataFile: s.setServerDataFile,
+      setCurrentContent: s.setCurrentContent,
+      setWorkInfo: s.setWorkInfo,
+      renameServerDataPath: s.renameServerDataPath,
+      initEditorStore: s.initEditorStore,
+    }))
+  );
 
   const [leftPanelWidthRem, setLeftPanelWidthRem] = useState(LEFT_DEFAULT_REM);
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
@@ -1011,11 +933,6 @@ const MarkdownEditorPage = () => {
     }
   });
 
-  const sidebarTreeData = useMemo(
-    () => serverDataToTree(serverData),
-    [serverData]
-  );
-
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
   const lastAutoLoadSessionKeyRef = useRef<string>("");
@@ -1028,15 +945,26 @@ const MarkdownEditorPage = () => {
   const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!workId) return;
-    if (lastInitWorkIdRef.current === workId) return;
-    lastInitWorkIdRef.current = workId;
-    void initEditorData(workId);
-  }, [workId, initEditorData]);
-
-  useEffect(() => {
     setWorkId(workId ?? null);
   }, [workId, setWorkId]);
+
+  useEffect(() => {
+    (async ()=>{
+      if (!workId) return;
+      if (lastInitWorkIdRef.current === workId) return;
+      lastInitWorkIdRef.current = workId;
+      await initEditorData(workId);
+    })()
+  }, [workId, initEditorData, location]);
+
+  // 页面卸载时再重置 editor store
+  useEffect(() => {
+    return () => {
+      initEditorStore();
+      lastInitWorkIdRef.current = null;
+      lastAutoLoadSessionKeyRef.current = "";
+    };
+  }, [initEditorStore]);
 
   useEffect(() => {
     if (!workId || currentWorkId !== workId) return;
@@ -1070,7 +998,7 @@ const MarkdownEditorPage = () => {
     }
     if (workInfo?.stage === "blank") return;
     void saveEditorData("1", false);
-  }, [editorTreeData, workInfo?.stage, saveEditorData]);
+  }, [treeData, workInfo?.stage, saveEditorData]);
 
   // 与 Vue 对齐：生产环境每 5 分钟自动保存一次
   useEffect(() => {
@@ -1089,21 +1017,20 @@ const MarkdownEditorPage = () => {
 
   // 页面卸载时再重置 editor store
   useEffect(() => {
-    return () => {
-      initEditorStore();
-      lastInitWorkIdRef.current = null;
-      lastAutoLoadSessionKeyRef.current = "";
-    };
-  }, [initEditorStore]);
+    const applyKey = `${workId ?? ""}:${location.key ?? "default"}`;
+    if (initialParamsApplyKeyRef.current === applyKey) return;
+    initialParamsApplyKeyRef.current = applyKey;
 
-  useEffect(() => {
     let storageParams: EditorInitialParams | null = null;
     let rankingParams: RankingListTransmissionParams | null = null;
     if (typeof window !== "undefined") {
       const paramsStr = sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY);
       if (paramsStr) {
         try {
-          storageParams = JSON.parse(paramsStr) as EditorInitialParams;
+          const parsed = JSON.parse(paramsStr);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            storageParams = parsed as EditorInitialParams;
+          }
         } catch (e) {
           console.error("解析 editorInitialParams 失败:", e);
         } finally {
@@ -1114,7 +1041,10 @@ const MarkdownEditorPage = () => {
       const rankingParamsStr = sessionStorage.getItem(RANKING_LIST_TRANSMISSION_KEY);
       if (rankingParamsStr) {
         try {
-          rankingParams = JSON.parse(rankingParamsStr) as RankingListTransmissionParams;
+          const parsed = JSON.parse(rankingParamsStr);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            rankingParams = parsed as RankingListTransmissionParams;
+          }
         } catch (e) {
           console.error("解析 rankingListTransmission 失败:", e);
         } finally {
@@ -1122,49 +1052,55 @@ const MarkdownEditorPage = () => {
         }
       }
     }
-    const stateParams = (location.state as EditorInitialParams | null) ?? null;
+    const stateRaw = location.state;
+    const stateParams =
+      stateRaw && typeof stateRaw === "object" && !Array.isArray(stateRaw)
+        ? (stateRaw as EditorInitialParams)
+        : null;
     const mergedParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
-    const rankingContent = rankingParams?.content?.trim() ?? "";
-    const rankingMessage = rankingParams?.message?.trim() ?? "";
+    const rankingContent = typeof rankingParams?.content === "string" ? rankingParams.content.trim() : "";
+    const rankingMessage = typeof rankingParams?.message === "string" ? rankingParams.message.trim() : "";
     const rankingDisableAutoSubmit = !!rankingParams?.disableAutoSubmit;
+    const mergedSelectedTexts = Array.isArray(mergedParams.selectedTexts) ? mergedParams.selectedTexts : [];
     const initialParams: EditorInitialParams = {
       ...mergedParams,
       selectedTexts: rankingContent
         ? [
-          ...(mergedParams.selectedTexts ?? []),
+          ...mergedSelectedTexts,
           {
             id: `ranking-transmission-${Date.now()}`,
             file: "",
             content: rankingContent,
           },
         ]
-        : mergedParams.selectedTexts,
+        : (Array.isArray(mergedParams.selectedTexts) ? mergedParams.selectedTexts : undefined),
       message: rankingMessage || mergedParams.message,
     };
-    setDisableRecommendAutoOpen(
-      !!initialParams.skipRecommendDialog ||
-      !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
-    );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
       setPendingStepTemplate(initialTemplate);
     }
 
-    if (initialParams.modelLLM) setModelLLM(initialParams.modelLLM);
-    if (initialParams.selectedWritingStyle) setSelectedWritingStyle(initialParams.selectedWritingStyle);
+    if (typeof initialParams.modelLLM === "string" && initialParams.modelLLM) {
+      setModelLLM(initialParams.modelLLM);
+    }
+    if (typeof initialParams.selectedWritingStyle === "string" && initialParams.selectedWritingStyle) {
+      setSelectedWritingStyle(initialParams.selectedWritingStyle);
+    }
     if (typeof initialParams.isAnswerOnly === "boolean") {
       setIsAnswerOnly(initialParams.isAnswerOnly);
     }
     initializeChatInputFromParams({
-      associationTags: initialParams.associationTags,
-      selectedNotes: initialParams.selectedNotes,
-      selectedFiles: initialParams.selectedFiles,
-      selectedTexts: initialParams.selectedTexts,
-      selectedTools: initialParams.selectedTools,
-      isShowAnswerTip: initialParams.isShowAnswerTip,
+      associationTags: Array.isArray(initialParams.associationTags) ? initialParams.associationTags : undefined,
+      selectedNotes: Array.isArray(initialParams.selectedNotes) ? initialParams.selectedNotes : undefined,
+      selectedFiles: Array.isArray(initialParams.selectedFiles) ? initialParams.selectedFiles : undefined,
+      selectedTexts: Array.isArray(initialParams.selectedTexts) ? initialParams.selectedTexts : undefined,
+      selectedTools: Array.isArray(initialParams.selectedTools) ? initialParams.selectedTools : undefined,
+      isShowAnswerTip: typeof initialParams.isShowAnswerTip === "boolean" ? initialParams.isShowAnswerTip : undefined,
     });
-    if (initialParams.message?.trim()) {
-      const msg = initialParams.message.trim();
+    const initialMessage = typeof initialParams.message === "string" ? initialParams.message.trim() : "";
+    if (initialMessage) {
+      const msg = initialMessage;
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
         const submitKey = `${workId ?? ""}:${msg}`;
@@ -1182,39 +1118,7 @@ const MarkdownEditorPage = () => {
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
-
-  useEffect(() => {
-    // if (!pendingStepTemplate) return;
-    // const opened = stepWorkflowRef.current?.startTemplateCreate(pendingStepTemplate) ?? false;
-    // if (opened) {
-    //   setPendingStepTemplate(null);
-    // }
-  }, [pendingStepTemplate, serverData, currentEditingId]);
-
-  // // 进入编辑器后，默认选中「第一章」：优先选正文目录下的首个 .md 文件
-  // useEffect(() => {
-  //   // serverData 还未加载完成
-  //   if (!serverData || Object.keys(serverData).length === 0) return;
-  //   // 用户已经有当前编辑文件且存在于 serverData，则不干预
-  //   if (currentEditingId && serverData[currentEditingId] !== undefined) return;
-
-  //   const allMdKeys = Object.keys(serverData).filter((k) => k.endsWith(".md"));
-  //   if (allMdKeys.length === 0) return;
-
-  //   // 优先正文目录下的章节，例如 "正文/第一章.md"
-  //   const chapterCandidates = allMdKeys
-  //     .filter((k) => k.startsWith("正文/"))
-  //     .sort();
-
-  //   const targetKey =
-  //     chapterCandidates[0] ??
-  //     allMdKeys.sort()[0] ??
-  //     DEFAULT_EDITING_FILE_KEY;
-
-  //   const setCurrentEditingId = useEditorStore.getState().setCurrentEditingId;
-  //   setCurrentEditingId(targetKey);
-  // }, [serverData, currentEditingId]);
+  }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   const handleBackClick = useCallback(async () => {
     const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
@@ -1471,7 +1375,7 @@ const MarkdownEditorPage = () => {
       Math.min(effectiveMaxLeft, dragStartLeftRem.current + deltaRem)
     );
     setLeftPanelWidthRem(newWidth);
-  }, [rightPanelWidthRem, isChangesPanelVisible]);
+  }, [rightPanelWidthRem, centerRequiredRem]);
 
   const onRightResizeStart = useCallback(() => {
     dragStartRightRem.current = rightPanelWidthRem;
@@ -2056,16 +1960,56 @@ const MarkdownEditorPage = () => {
     highlightChangeInEditor,
   ]);
 
-  // 仅当 serverData 的 key 列表变化时重建树，避免每次输入都跑 serverDataToTree
-  const serverDataKeysSig = useMemo(
-    () => Object.keys(serverData ?? {}).sort().join(","),
-    [serverData]
-  );
-  const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
+  // stepWorkFlow 相关逻辑
+  useEffect(() => {
+    const { template, showTake2 } = location.state ?? {};
+    if (!template && !showTake2) return;
+
+    let rafId = 0;
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const runWhenReady = () => {
+      const stepWorkflow = stepWorkflowRef.current;
+      if (!stepWorkflow) {
+        attempts += 1;
+        if (attempts < maxAttempts) {
+          rafId = requestAnimationFrame(runWhenReady);
+        }
+        return;
+      }
+
+      if (template) {
+        stepWorkflow.startTemplateCreate(template);
+        return;
+      }
+
+      if (showTake2) {
+        stepWorkflow.openStepCreateDialog();
+      }
+    };
+
+    rafId = requestAnimationFrame(runWhenReady);
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [location]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
-  const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
+  // wordCount debounce：字数统计不需要随每次按键实时更新，300ms 后计算一次
+  const [wordCount, setWordCount] = useState(() => getWordCount(currentContent));
+  const wordCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (wordCountTimerRef.current) clearTimeout(wordCountTimerRef.current);
+    wordCountTimerRef.current = setTimeout(() => {
+      setWordCount(getWordCount(currentContent));
+    }, 300);
+    return () => {
+      if (wordCountTimerRef.current) clearTimeout(wordCountTimerRef.current);
+    };
+  }, [currentContent]);
+
   const isCurrentEditorEmpty = useMemo(
     () => isEditorContentEffectivelyEmpty(currentContent),
     [currentContent]
@@ -2596,7 +2540,6 @@ const MarkdownEditorPage = () => {
                           <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
                             <MainEditor
                               ref={markdownEditorRef}
-                              key={fileKey}
                               className="editor-outer-scroll-mode"
                               fontClassName="font-KaiTi"
                               value={currentContent}
@@ -2907,7 +2850,7 @@ const MarkdownEditorPage = () => {
                 <AssociationSelectorDialog
                   open={showAssociationSelector}
                   onOpenChange={setShowAssociationSelector}
-                  treeData={sidebarTreeData}
+                  treeData={treeData}
                   selectedIds={associationTags}
                   onConfirm={(ids) => {
                     const filtered = ids.filter(

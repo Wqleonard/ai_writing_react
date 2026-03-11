@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import clsx from "clsx"
-import IconFont from "@/components/IconFont/Iconfont"
+import IconFont from "@/components/Iconfont/Iconfont"
 
 export interface RecommendItem {
   label: string

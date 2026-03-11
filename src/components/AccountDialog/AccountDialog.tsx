@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogClose, VisuallyHidden } from '@/components/ui/Dialog'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 import { Input } from '@/components/ui/Input'
 import { useLoginStore } from '@/stores/loginStore'
 import { getUserInfoReq, updateUserInfo } from '@/api/users'

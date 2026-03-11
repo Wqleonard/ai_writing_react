@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { getScriptStorySynopsisReq, type ScriptStorySynopsisResult } from "@/api/generate-quick";
 import titleIcon from "@/assets/images/quick_creation/script_story_title.svg";
 import synopsisIcon from "@/assets/images/quick_creation/script_story_synopsis.svg";

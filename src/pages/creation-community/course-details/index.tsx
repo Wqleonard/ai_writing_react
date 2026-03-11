@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { Button } from '@/components/ui/Button'
 import { ScrollArea } from '@/components/ui/ScrollArea'
+import RichTextRender from '@/components/RichTextRender'
 
 dayjs.extend(utc)
 
@@ -114,11 +115,9 @@ const CourseDetailsPage = () => {
                     <span className="read-count">点赞量:{courseData.likeCount}</span>
                   </div>
 
-                  <div
+                  <RichTextRender
+                    content={courseData.content || ''}
                     className="course-detail-content mt-4 w-200 bg-gray-200 p-4 rounded-lg mb-8 whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{
-                      __html: courseData.content || '',
-                    }}
                   />
                 </>
               ) : loading ? (
@@ -130,35 +129,6 @@ const CourseDetailsPage = () => {
           </div>
         </ScrollArea>
       </div>
-
-      <style>{`
-        .course-detail-content {
-          color: #303133;
-          line-height: 1.8;
-          font-size: 14px;
-          font-family: 'YaHei', system-ui;
-        }
-        .course-detail-content p { margin: 0.5em 0; line-height: 1.8; word-break: break-word; }
-        .course-detail-content p:empty { min-height: 1em; display: block; }
-        .course-detail-content h1, .course-detail-content h2, .course-detail-content h3,
-        .course-detail-content h4, .course-detail-content h5, .course-detail-content h6 {
-          margin: 0.8em 0 0.4em 0; font-weight: 600; line-height: 1.4; color: #303133;
-        }
-        .course-detail-content h1 { font-size: 1.8em; }
-        .course-detail-content h2 { font-size: 1.5em; }
-        .course-detail-content h3 { font-size: 1.25em; }
-        .course-detail-content strong { font-weight: 600; color: #303133; }
-        .course-detail-content code {
-          background: #f5f5f5; padding: 2px 6px; border-radius: 3px;
-          font-size: 0.9em; color: #26282c;
-        }
-        .course-detail-content pre {
-          background: #f7f7f7; color: #26282c; border: 1px solid rgba(37,39,45,0.1);
-          margin: 1.5em 0; padding: 1em; font-size: 1rem; border-radius: 6px;
-        }
-        .course-detail-content a { color: #1890ff; text-decoration: none; }
-        .course-detail-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; display: block; }
-      `}</style>
     </div>
   )
 }

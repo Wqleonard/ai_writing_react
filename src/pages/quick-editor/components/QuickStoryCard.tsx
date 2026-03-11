@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { toast } from "sonner";
 import { addNote } from "@/api/notes";
-import { Iconfont } from "@/components/IconFont";
+import { Iconfont } from "@/components/Iconfont";
 import { LinkButton } from "@/components/ui/LinkButton";
 
 export interface QuickStoryCardData {

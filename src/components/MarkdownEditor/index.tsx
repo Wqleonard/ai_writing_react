@@ -95,7 +95,7 @@ export const MarkdownEditor = ({
       className={`markdown-editor w-full h-full p-3 ${readonly ? 'is-readonly' : ''} ${className}`.trim()}
     >
       <EditorContent editor={editor} className="editor-content markdown-editor-content" />
-      {loading ? <StreamIndicator /> : null}
+      {/*{loading ? <StreamIndicator /> : null}*/}
     </div>
   )
 }

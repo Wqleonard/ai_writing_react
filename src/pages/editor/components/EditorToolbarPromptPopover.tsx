@@ -5,7 +5,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover"
 import { ScrollArea } from "@/components/ui/ScrollArea"
-import IconFont from "@/components/IconFont/Iconfont"
+import IconFont from "@/components/Iconfont/Iconfont"
 import { getPromptsByCategoryId } from "@/api/community-prompt"
 import type { PromptItem } from "@/components/Community/types"
 import { Button } from "@/components/ui/Button";

@@ -11,7 +11,7 @@ import {
   Link,
   Upload,
 } from "lucide-react"
-import { Iconfont } from "@/components/IconFont"
+import { Iconfont } from "@/components/Iconfont"
 import {
   Popover,
   PopoverContent,

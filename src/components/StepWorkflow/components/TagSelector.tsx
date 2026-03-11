@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { debounce } from "lodash-es"
 import { toast } from "sonner"
-import IconFont from "@/components/IconFont/Iconfont"
+import IconFont from "@/components/Iconfont/Iconfont"
 import { addCustomTagReq, delCustomTagReq, getWorkTagsReq } from "@/api/works"
 import type { Tag } from "../types"
 

@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/Sonner";
 import { initMatomo } from "@certible/use-matomo";
 import { setMatomoTracker } from '@/matomo/trackingMatomoEvent'
 import { useLoginStore } from '@/stores/loginStore'
+import { initInvitationCode } from '@/utils/invitationCode'
 import '@/stores/themeStore'
 import './index.css'
 
@@ -28,6 +29,7 @@ try {
 }
 
 useLoginStore.getState().initUserInfo()
+void initInvitationCode()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -28,7 +28,7 @@ import {
 import type { PostStreamData } from '@/api'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import { AddConnectedFile } from '@/components/Community/AddConnectedFile'
-import { Iconfont } from '../IconFont'
+import { Iconfont } from '../Iconfont'
 import { cn } from "@/lib/utils.ts";
 
 export interface AddNewPromptsDialogProps {

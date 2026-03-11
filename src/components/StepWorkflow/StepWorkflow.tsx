@@ -84,6 +84,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   const setServerData = useEditorStore((s) => s.setServerData)
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
+  const setNewNodeIds = useEditorStore((s) => s.setNewNodeIds)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
   const treeData = useEditorStore((s) => s.treeData)
   const totalMdContentLength = useMemo(() => calculateTotalMdContentLength(treeData), [treeData])
@@ -168,15 +169,11 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   }, [openStepCreateDialogSafely])
 
   useEffect(() => {
-    isAnimatingRef.current = isAnimating
-  }, [isAnimating])
-
-  useEffect(() => {
     initialQuickStartTimerRef.current = window.setTimeout(() => {
       hasInitializedQuickStartRef.current = true
       applyQuickStartStatus(calculateTotalMdContentLength(useEditorStore.getState().treeData))
       initialQuickStartTimerRef.current = null
-    }, 200)
+    }, 300)
     return () => {
       if (initialQuickStartTimerRef.current) {
         window.clearTimeout(initialQuickStartTimerRef.current)
@@ -241,6 +238,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
           title: titleLine,
           stage: "final",
         })
+        setNewNodeIds(['大纲.md','设定/角色设定.md','设定/故事设定.md','正文/第一章.md'])
       }
       await saveEditorData("1")
     } else if (data.saveTarget == 'new') {
@@ -268,7 +266,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
     }
     setStepCreateDialogShow(false)
 
-  }, [setWorkInfo, setServerData, setCurrentEditingId, saveEditorData])
+  }, [setServerData, setCurrentEditingId, saveEditorData, setWorkInfo, setNewNodeIds])
 
   return (
     <>

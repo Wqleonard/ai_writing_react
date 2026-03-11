@@ -3,7 +3,7 @@ import { Heart, BarChart2 } from 'lucide-react'
 import type { PromptItem } from '@/components/Community/types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { Iconfont } from '@/components/IconFont'
+import { Iconfont } from '@/components/Iconfont'
 
 const STATUS_MAP: Record<string, string> = {
   UNDER_REVIEW: '审核中',
