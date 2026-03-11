@@ -65,8 +65,6 @@ export default function LandingPage() {
       }
     } catch {
       toast.error("创建作品失败，请稍后重试")
-    } finally {
-      setLoading(false)
     }
   },[isCreatingWork, navigate])
 
@@ -76,7 +74,7 @@ export default function LandingPage() {
       setIsCreatingWork(true)
       const req = await createWorkReq()
       if (req?.id) {
-        navigate(`/editor/${req.id}`, { state: { isNew: true } })
+        navigate(`/editor/${req.id}`, { state: { showTake2: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')
@@ -86,12 +84,12 @@ export default function LandingPage() {
   }, [isCreatingWork, navigate])
 
   const handleShortStoryClick = async () => {
-    trackEvent('Story Creation', 'Click', 'Quick New From Landing')
+    trackEvent('Story Creation', 'Click', 'Quick New from Landing')
     await requireLogin(addWork)
   }
 
   const handleScriptClick = async () => {
-    trackEvent('Story Creation', 'Click', 'Script New From Landing')
+    trackEvent('Story Creation', 'Click', 'Script New from Landing')
     await requireLogin(addScript)
   }
 

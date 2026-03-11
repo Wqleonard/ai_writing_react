@@ -1,0 +1,37 @@
+/* 浅色主题 - 基于原型图提炼的主题色 */
+:root {
+
+  &.theme-light {
+    /* ========== 主色系 (Primary) ========== */
+    --el-color-primary: #eaa801;
+    --el-color-primary-light-1: #ecb01a;
+    --el-color-primary-light-2: #eeb833;
+    --el-color-primary-light-3: #f0c04d;
+    --el-color-primary-light-4: #f2c866;
+    --el-color-primary-light-5: #f4d080;
+    --el-color-primary-light-6: #f6d899;
+    --el-color-primary-light-7: #f8e0b3;
+    --el-color-primary-light-8: #fcefcc;
+    --el-color-primary-light-9: #fffaef;
+    --el-color-primary-dark-2: #d19601;
+
+    .el-dialog {
+      --el-text-color-regular: #000000;
+    }
+  }
+
+  .el-message {
+    &.mobile-message {
+      --el-message-padding: 20px;
+      margin-top: 48px;
+
+      .el-message__icon {
+        font-size: 32px;
+      }
+
+      .el-message__content {
+        font-size: 32px;
+      }
+    }
+  }
+}

@@ -71,6 +71,7 @@ import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CircleAlert } from "lucide-react";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
 const getNewPathFromLabel = (currentPath: string, newLabel: string): string => {
@@ -1348,6 +1349,7 @@ const MarkdownEditorPage = () => {
   }, [workId, setServerData]);
 
   const helpWriteClick = useCallback(() => {
+    trackEvent('AI Tool', 'Click', 'Guided Writing')
     stepWorkflowRef.current?.openStepCreateDialog();
   }, []);
 
@@ -2265,7 +2267,7 @@ const MarkdownEditorPage = () => {
 
         {/* 中间编辑面板 */}
         <div
-          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-editor)"
+          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-editor) relative"
           style={{ minWidth: "0rem" }}
         >
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
@@ -2434,6 +2436,7 @@ const MarkdownEditorPage = () => {
                     !isEditorEditable && "cursor-not-allowed-all",
                     isStreamingOverlayVisible && "cursor-not-allowed"
                   )}
+                  key={fileKey}
                 >
                   <div className="min-h-[calc(100vh-108px)] h-full flex flex-col relative overflow-x-hidden">
                     <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
@@ -2492,20 +2495,18 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={false}
+                              readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
                               needSelectionToolbar
+                              minHeight={400}
                             />
                           </div>
                         </div>
                         <StepWorkflow ref={stepWorkflowRef}/>
                       </div>
                     </div>
-                    {!isEditorEditable && (
-                      <div contentEditable={false} className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
-                    )}
                   </div>
                 </ScrollArea>
                 {shouldShowRemarkOverlay && (
@@ -2563,6 +2564,23 @@ const MarkdownEditorPage = () => {
               )}
             </div>
           </div>
+          {!isEditorEditable && (
+            <div
+              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-auto"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onPointerMove={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            />
+          )}
         </div>
 
         <EditorResizeHandle

@@ -11,6 +11,7 @@ import tagCoverImg from "@/assets/images/step_create/tag-cover.png"
 import { useEditorStore } from "@/stores/editorStore"
 import { createWorkReq, updateWorkInfoReq, updateWorkVersionReq } from "@/api/works"
 import { toast } from "sonner";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 const CUSTOM_COVER = customCoverImg as string
 const TEMPLATE_COVER = templateCoverImg as string
@@ -141,6 +142,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   }, [])
 
   const handleCreateWithTags = useCallback(() => {
+    trackEvent('Guided Writing', 'Start', 'Tag Write from Popup')
     setRecommendDialogShow(false)
     setStepCreateDialogShow(true)
     requestAnimationFrame(() => {
@@ -149,6 +151,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   }, [])
 
   const handleCreateTemplate = useCallback((template: Template) => {
+    trackEvent('Guided Writing', 'Start', 'Template Write from Popup')
     setRecommendDialogShow(false)
     setStepCreateDialogShow(true)
     requestAnimationFrame(() => {

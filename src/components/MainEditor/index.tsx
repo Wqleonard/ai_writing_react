@@ -176,7 +176,9 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         extensions,
         editorProps: {
           attributes: {
-            class: `prose prose-sm max-w-none focus:outline-none min-h-[${minHeight}px] ${fontClassName}`.trim(),
+            class: `prose prose-sm max-w-none focus:outline-none ${fontClassName}`.trim(),
+            style: `min-height: ${minHeight/16}rem; padding: 1rem;`,
+            'data-placeholder': placeholder,
           },
           handleKeyDown: (_, event) => {
             const onKeyDown = onKeyDownRef.current

@@ -20,6 +20,7 @@ import type { PromptItem } from "./types";
 import { LinkButton } from "../ui/LinkButton";
 import { AutoScrollArea } from "../AutoScrollArea";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 
 const SIZE_LIMIT = 10 * 1024 * 1024;
 
@@ -278,6 +279,7 @@ export const WritingStyleDialog = ({
   }, [hasError, markdownContent, uploadedFile?.name]);
 
   const validateAndAddStyle = useCallback(async () => {
+    trackEvent('AI Tool', 'Use', 'Style Analysis')
     const name = styleName.trim();
     if (!name) {
       setStyleNameError("请输入文风名称");
