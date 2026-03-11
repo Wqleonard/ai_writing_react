@@ -377,7 +377,7 @@ const MarkdownEditorPage = () => {
   const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
-  const [todosExpanded, setTodosExpanded] = useState(true);
+  const [todosExpanded, setTodosExpanded] = useState(false);
   const {
     findTextInMarkdown,
     insertHighlightMarkers,
