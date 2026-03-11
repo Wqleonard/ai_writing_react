@@ -2701,11 +2701,25 @@ const MarkdownEditorPage = () => {
                                     const custom = prev.customMessage ?? [];
                                     return {
                                       ...prev,
-                                      customMessage: custom.map((item) =>
-                                        item.id === rejectedMsg.id ? { ...item, hiltStatus: "rejected" as const } : item
-                                      ),
+                                      customMessage: custom.map((item, idx) => {
+                                        const hasHiltTodos =
+                                          Array.isArray((item as { hiltTodos?: unknown[] } | undefined)?.hiltTodos) &&
+                                          ((item as { hiltTodos?: unknown[] }).hiltTodos?.length ?? 0) > 0;
+                                        const hasWriteTodos =
+                                          Array.isArray((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)?.tool_calls) &&
+                                          (((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
+                                            (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+                                          ));
+                                        const isPendingHiltCandidate = hasHiltTodos || hasWriteTodos;
+                                        const shouldReject =
+                                          item.id === rejectedMsg.id ||
+                                          (idx === custom.length - 1 && isPendingHiltCandidate);
+                                        return shouldReject ? { ...item, hiltStatus: "rejected" as const } : item;
+                                      }),
                                     };
                                   });
+                                  // 与 approve 对齐：将“拒绝”明确传回后端，结束 hilt_pending 等待态
+                                  sendChatText("", { command: "reject", addUserMessage: false });
                                   try {
                                     const res = await generateGuideReq(sessionId, Number(workId)) as {
                                       guides?: string[] | string

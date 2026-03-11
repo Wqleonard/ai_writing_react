@@ -789,6 +789,7 @@ const AgentCustomMessageRenderer = ({
                     const effectiveTodos = getEffectiveHiltTodos(msg);
                     const effectiveStatus = getEffectiveHiltStatus(msg, effectiveTodos);
                     const currentTodosKey = getHiltTodosProgressKey(effectiveTodos);
+                    const isLastCustomMessage = index === customMessage.length - 1;
                     const isDismissedForCurrentTodos =
                       !!currentTodosKey &&
                       dismissedHiltCardKeyByMessageId[msg.id] === currentTodosKey;
@@ -796,6 +797,7 @@ const AgentCustomMessageRenderer = ({
                       effectiveTodos &&
                       effectiveTodos.length > 0 &&
                       isLastMessage &&
+                      isLastCustomMessage &&
                       streamingStatus !== "streaming" &&
                       effectiveStatus === "in_progress" &&
                       !isDismissedForCurrentTodos;
