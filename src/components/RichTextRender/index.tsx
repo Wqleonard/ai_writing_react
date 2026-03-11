@@ -15,7 +15,7 @@ export interface RenderRichTextProps extends Omit<HTMLAttributes<HTMLElement>, "
   contentStyle?: CSSProperties;
 }
 
-const RenderRichText = forwardRef<HTMLElement, RenderRichTextProps>(function RenderRichText(
+const RichTextRender = forwardRef<HTMLElement, RenderRichTextProps>(function RenderRichText(
   {
     content = "",
     className,
@@ -64,4 +64,4 @@ const RenderRichText = forwardRef<HTMLElement, RenderRichTextProps>(function Ren
   );
 });
 
-export default RenderRichText;
+export default RichTextRender;

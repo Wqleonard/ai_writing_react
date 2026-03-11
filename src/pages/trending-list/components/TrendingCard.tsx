@@ -4,7 +4,7 @@ import { createWorkReq } from '@/api/works'
 import { KeywordsDetailDialog } from './KeywordsDetailDialog'
 import { SocialDetailDialog } from './SocialDetailDialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
-import RenderRichText from '@/components/RichTextRender'
+import RichTextRender from '@/components/RichTextRender'
 import { Iconfont } from "@/components/Iconfont";
 
 export interface KeywordsDetailData {

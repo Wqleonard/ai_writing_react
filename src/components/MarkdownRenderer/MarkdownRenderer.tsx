@@ -10,7 +10,7 @@ import markdown from "highlight.js/lib/languages/markdown";
 import typescript from "highlight.js/lib/languages/typescript";
 import "highlight.js/styles/github.css";
 import "./MarkdownRenderer.css";
-import RenderRichText from "@/components/RichTextRender";
+import RichTextRender from "@/components/RichTextRender";
 
 export interface MarkdownRendererProps {
   content: string;
@@ -85,7 +85,7 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
   }, [html, onFileNameClick]);
 
   return (
-    <RenderRichText
+    <RichTextRender
       ref={containerRef}
       content={html}
       className="markdown-content markdown-renderer leading-relaxed text-[var(--text-primary)] prose prose-neutral max-w-none dark:prose-invert"
