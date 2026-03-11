@@ -19,9 +19,11 @@ const PromptPage = lazy(() => import('@/pages/creation-community/prompt'))
 const BookAnalysisPage = lazy(() => import('@/pages/ai-expert/book-analysis'))
 const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
 const MyPlacePage = lazy(() => import('@/pages/my-place'))
-const QuickEditorPage = lazy(() => import('@/pages/quick-editor'))
 const QuickEditorVueHostPage = lazy(() => import('@/pages/quick-editor-vue-host'))
 const ScriptEditorVueHostPage = lazy(() => import('@/pages/script-editor-vue-host'))
+const UserServiceAgreementPage = lazy(() => import('@/pages/agreement/user-service-agreement'))
+const PrivacyPolicyPage = lazy(() => import('@/pages/agreement/privacy-policy'))
+const ChildrenPrivacyProtectionPolicyPage = lazy(() => import('@/pages/agreement/children-privacy-protection-policy'))
 // const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts
@@ -172,6 +174,18 @@ const routes: RouteObject[] = [
             element: <MPrivacyPolicyPage/>,
           },
         ],
+      },
+      {
+        path: '/user-agreement',
+        element: <UserServiceAgreementPage/>,
+      },
+      {
+        path: '/privacy-policy',
+        element: <PrivacyPolicyPage/>,
+      },
+      {
+        path: '/children-privacy-protection-policy',
+        element: <ChildrenPrivacyProtectionPolicyPage/>,
       },
       {
         path: '*',
