@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useEffect, useCallback } from "react"
+import React, { useRef, useEffect, useCallback, useState } from "react"
 import clsx from "clsx"
 import { AutoScrollArea, type AutoScrollAreaRef } from "@/components/AutoScrollArea"
 import { QuillChatInput } from "@/components/QuillChatInput"
@@ -17,6 +17,7 @@ export const ProChatPanel = () => {
   const ctx = useProChatContainerRequired()
   const panelRootRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef<AutoScrollAreaRef | null>(null)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
   const {
     inputValue,
@@ -46,6 +47,27 @@ export const ProChatPanel = () => {
       scrollToBottomRef.current = null
     }
   }, [scrollToBottomRef, scrollToBottom])
+
+  const updateScrollToBottomButton = useCallback(() => {
+    const info = autoScrollRef.current?.getScrollInfo()
+    if (!info) return
+    // 与 AutoScrollArea 默认阈值保持一致（bottomThreshold=50）
+    setShowScrollToBottom(info.distanceToBottom > 50)
+  }, [])
+
+  useEffect(() => {
+    // 监听消息区滚动：用户上翻则显示按钮；回到底部则隐藏按钮
+    const container = autoScrollRef.current?.containerRef
+    const viewport = container?.querySelector?.(
+      '[data-slot="scroll-area-viewport"]'
+    ) as HTMLElement | null
+    if (!viewport) return
+
+    updateScrollToBottomButton()
+    const onScroll = () => updateScrollToBottomButton()
+    viewport.addEventListener("scroll", onScroll, { passive: true })
+    return () => viewport.removeEventListener("scroll", onScroll)
+  }, [displayMessages.length, updateScrollToBottomButton])
 
   const defaultEmptyState = (
     <div className="flex-1 w-full flex items-center justify-center min-h-full">
@@ -156,28 +178,43 @@ export const ProChatPanel = () => {
           </div>
         ) : (
           <>
-            <AutoScrollArea
-              ref={autoScrollRef}
-              className="flex-1 min-h-0 w-full overflow-hidden"
-              maxHeight="100%"
-              autoScroll={true}
-              bottomThreshold={50}
-            >
-              <div className="w-full max-w-full min-w-0 box-border p-4 flex flex-col gap-3 chat-container">
-                {slots?.beforeMessages}
-                {displayMessages.map((msg, index) =>
-                  slots?.renderMessage ? (
-                    <React.Fragment key={msg.id}>
-                      {slots.renderMessage(msg, {
-                        isLastMessage: index === displayMessages.length - 1,
-                      })}
-                    </React.Fragment>
-                  ) : (
-                    defaultMessageBubble(msg)
-                  )
-                )}
-              </div>
-            </AutoScrollArea>
+            <div className="relative flex-1 min-h-0 w-full overflow-hidden">
+              <AutoScrollArea
+                ref={autoScrollRef}
+                className="h-full w-full overflow-hidden"
+                maxHeight="100%"
+                autoScroll={true}
+                bottomThreshold={50}
+              >
+                <div className="w-full max-w-full min-w-0 box-border p-4 flex flex-col gap-3 chat-container">
+                  {slots?.beforeMessages}
+                  {displayMessages.map((msg, index) =>
+                    slots?.renderMessage ? (
+                      <React.Fragment key={msg.id}>
+                        {slots.renderMessage(msg, {
+                          isLastMessage: index === displayMessages.length - 1,
+                        })}
+                      </React.Fragment>
+                    ) : (
+                      defaultMessageBubble(msg)
+                    )
+                  )}
+                </div>
+              </AutoScrollArea>
+
+              {showScrollToBottom && (
+                <button
+                  type="button"
+                  className="absolute bottom-3 right-3 z-10 rounded-full border bg-white/90 px-3 py-1.5 text-xs text-black shadow-sm backdrop-blur hover:bg-white"
+                  onClick={() => {
+                    autoScrollRef.current?.scrollToBottom()
+                    setShowScrollToBottom(false)
+                  }}
+                >
+                  回到底部
+                </button>
+              )}
+            </div>
             <div className="shrink-0 w-[95%] self-center rounded-[10px] px-0 chat-panel-footer">
               {slots?.todos}
               {inputBlock}

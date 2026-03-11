@@ -854,6 +854,7 @@ const MarkdownEditorPage = () => {
   const chatHeaderRef = useRef<ChatHeaderRef>(null);
   const markdownEditorRef = useRef<MarkdownEditorRef | null>(null);
   const editorMainScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingFileNameClickRef = useRef<string>("");
 
   const leftPanelRef = useRef<HTMLDivElement | null>(null);
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
@@ -2175,7 +2176,6 @@ const MarkdownEditorPage = () => {
   );
 
   const handleFileNameClick = useCallback((rawFileName: string) => {
-    console.log(rawFileName, 'rawFileName')
     const fileName = (rawFileName || "")
       .trim()
       .replace(/^\.?\//, "")
@@ -2183,31 +2183,80 @@ const MarkdownEditorPage = () => {
       .trim();
     if (!fileName) return;
 
+    const normalized = fileName.replace(/^\/+/, "").trim();
+    const isPathLike = normalized.includes("/");
+
     const findNodeRecursive = (
       nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
-      include = true,
+      predicate: (id: string) => boolean,
     ): { id: string; content?: string } | null => {
       for (const node of nodes) {
-        if (include ? node.id.includes(`/${fileName}`) : node.id === fileName) {
-          return node as { id: string; content?: string };
-        }
+        if (predicate(node.id)) return node as { id: string; content?: string };
         if (node.children && node.children.length > 0) {
-          const found = findNodeRecursive(node.children as any, include);
+          const found = findNodeRecursive(node.children as any, predicate);
           if (found) return found;
         }
       }
       return null;
     };
 
-    const tree = useEditorStore.getState().treeData;
+    const tree = treeData as any;
     const targetNode =
-      findNodeRecursive(tree as any, true) ??
-      findNodeRecursive(tree as any, false);
+      // 1) 全路径优先：直接命中（或后端返回带前缀路径时，兜底 endsWith）
+      (isPathLike
+        ? (findNodeRecursive(tree, (id) => id === normalized) ??
+          findNodeRecursive(tree, (id) => id.endsWith(`/${normalized}`)))
+        : null) ??
+      // 2) basename：用 endsWith 精确匹配文件名（避免 includes 误匹配）
+      findNodeRecursive(tree, (id) => id === normalized || id.endsWith(`/${normalized}`)) ??
+      // 3) 兜底：兼容旧逻辑（某些节点 id 结构不规范时）
+      findNodeRecursive(tree, (id) => id.includes(`/${normalized}`));
 
-    if (!targetNode) return;
+    if (!targetNode) {
+      // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
+      if (chatInputStatus === "streaming") {
+        pendingFileNameClickRef.current = normalized;
+      }
+      return;
+    }
     // 与 Vue 行为一致：只定位到左侧目录并切换当前编辑文件，不在这里改写 serverData
     useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
-  }, []);
+    pendingFileNameClickRef.current = "";
+  }, [chatInputStatus, treeData]);
+
+  useEffect(() => {
+    const pending = pendingFileNameClickRef.current;
+    if (!pending) return;
+
+    const findNodeRecursive = (
+      nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
+      predicate: (id: string) => boolean,
+    ): { id: string; content?: string } | null => {
+      for (const node of nodes) {
+        if (predicate(node.id)) return node as { id: string; content?: string };
+        if (node.children && node.children.length > 0) {
+          const found = findNodeRecursive(node.children as any, predicate);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const normalized = pending.replace(/^\/+/, "").trim();
+    const isPathLike = normalized.includes("/");
+    const tree = treeData as any;
+    const targetNode =
+      (isPathLike
+        ? (findNodeRecursive(tree, (id) => id === normalized) ??
+          findNodeRecursive(tree, (id) => id.endsWith(`/${normalized}`)))
+        : null) ??
+      findNodeRecursive(tree, (id) => id === normalized || id.endsWith(`/${normalized}`)) ??
+      findNodeRecursive(tree, (id) => id.includes(`/${normalized}`));
+
+    if (!targetNode) return;
+    useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
+    pendingFileNameClickRef.current = "";
+  }, [treeData]);
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {

@@ -165,17 +165,17 @@ const md = new MarkdownIt({
 
 const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastHandledLinkRef = useRef<{ key: string; ts: number } | null>(null);
   const html = useMemo(() => md.render(content ?? ""), [content]);
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  const tryHandleMdLink = useCallback(
+    (target: HTMLElement | null): { handled: boolean; key?: string } => {
       const root = containerRef.current;
-      if (!root) return;
-      const target = e.target as HTMLElement | null;
+      if (!root) return { handled: false };
       const a = target?.closest?.("a") as HTMLAnchorElement | null;
-      if (!a || !root.contains(a)) return;
+      if (!a || !root.contains(a)) return { handled: false };
       const href = a.getAttribute("href") || "";
-      if (!href) return;
+      if (!href) return { handled: false };
 
       let decodedHref = href;
       try {
@@ -184,20 +184,63 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
         // keep href
       }
       const isMdFile = decodedHref.endsWith(".md") || /\.md($|[?#])/.test(decodedHref);
-      if (!isMdFile) return;
+      if (!isMdFile) return { handled: false };
+
+      const fileName = (a.textContent || a.innerText || decodedHref).trim();
+      if (!fileName) return { handled: false };
+
+      const key = `${decodedHref}@@${fileName}`;
+      onFileNameClick?.(fileName);
+      return { handled: true, key };
+    },
+    [onFileNameClick]
+  );
+
+  const shouldIgnoreDuplicate = useCallback((key: string) => {
+    const last = lastHandledLinkRef.current;
+    if (!last) return false;
+    if (last.key !== key) return false;
+    return Date.now() - last.ts < 800;
+  }, []);
+
+  const rememberHandled = useCallback((key: string) => {
+    lastHandledLinkRef.current = { key, ts: Date.now() };
+  }, []);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      // 用 pointerdown 提前触发：流式频繁更新会导致 DOM 在 down/up 间被替换，从而 click 合成失败
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement | null;
+      const res = tryHandleMdLink(target);
+      if (!res.handled || !res.key) return;
+      if (shouldIgnoreDuplicate(res.key)) return;
 
       e.preventDefault();
       e.stopPropagation();
-      const fileName = (a.textContent || a.innerText || decodedHref).trim();
-      if (!fileName) return;
-      onFileNameClick?.(fileName);
+      rememberHandled(res.key);
     },
-    [onFileNameClick]
+    [rememberHandled, shouldIgnoreDuplicate, tryHandleMdLink]
+  );
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement | null;
+      const res = tryHandleMdLink(target);
+      if (!res.handled || !res.key) return;
+      if (shouldIgnoreDuplicate(res.key)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      rememberHandled(res.key);
+    },
+    [rememberHandled, shouldIgnoreDuplicate, tryHandleMdLink]
   );
 
   return (
     <div
       ref={containerRef}
+      onPointerDownCapture={handlePointerDown}
       onClickCapture={handleClick}
       className="markdown-content markdown-renderer leading-relaxed text-[var(--text-primary)] prose prose-neutral max-w-none dark:prose-invert"
       dangerouslySetInnerHTML={{ __html: html }}
