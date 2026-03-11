@@ -228,21 +228,25 @@ export default function MyPlacePage() {
     }, 2000, { leading: true, trailing: false })
   ).current
 
-  const handleJumpCallbackRef = useRef<(data: MyWorkData) => Promise<void>>(async () => {
-  })
+  const handleJumpCallbackRef = useRef<(data: MyWorkData) => Promise<void>>(async () => {})
+
   useEffect(() => {
     handleJumpCallbackRef.current = async (data: MyWorkData) => {
       if (!data.id) {
         toast.error('作品ID不存在，无法跳转')
         return
       }
-      if (data.workType != 'editor') {
-        toast.error('敬请期待！')
-        return
+      let path = `/editor/${data.id}`
+      if (data.workType == 'editor'){
+        path = `/editor/${data.id}`
+      } else if (data.workType == 'doc'){
+        path = `/quick-editor/${data.id}`
+      } else if (data.workType == 'script'){
+        path = `/script-editor/${data.id}`
       }
       setLoading(true)
       try {
-        navigate(`/editor/${data.id}`, { state: { workId: data.id } })
+        navigate(path)
       } catch {
         toast.error('跳转失败，请重试')
       } finally {

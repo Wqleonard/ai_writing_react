@@ -2,16 +2,21 @@ import { useEffect, useRef } from "react";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import "element-plus/dist/index.css";
 import QuickEditorVuePage from "@/vue/views/quick-editor-vue/index.vue";
 
 const QuickEditorVueHostPage = () => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const { workId } = useParams<{ workId: string }>();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!mountRef.current) return;
+    if (!workId) {
+      navigate("/workspace/my-place");
+      return;
+    }
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -35,7 +40,7 @@ const QuickEditorVueHostPage = () => {
     return () => {
       app.unmount();
     };
-  }, [workId]);
+  }, [navigate, workId]);
 
   return <div ref={mountRef} className="h-screen w-screen overflow-hidden bg-(--bg-editor)" />;
 };

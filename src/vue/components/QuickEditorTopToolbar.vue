@@ -5,7 +5,7 @@ import MainHeader from "@/vue/components/MainHeader.vue";
 import QuickExportDialog from "@/vue/components/QuickExportDialog.vue";
 import { useEditorStore } from "@/vue/stores/editor.ts";
 import { storeToRefs } from "pinia";
-import { ElButton } from "element-plus";
+import { ElButton, ElIcon } from "element-plus";
 
 // import { showNotesSelectorDialog } from "@/utils/showNotesSelectorDialog";
 
