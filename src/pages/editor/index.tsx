@@ -2320,7 +2320,7 @@ const MarkdownEditorPage = () => {
 
         {/* 中间编辑面板 */}
         <div
-          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-editor)"
+          className="flex-1 min-w-0 flex flex-col h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-editor) relative"
           style={{ minWidth: "0rem" }}
         >
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
@@ -2548,7 +2548,7 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={false}
+                              readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
@@ -2559,9 +2559,6 @@ const MarkdownEditorPage = () => {
                         <StepWorkflow ref={stepWorkflowRef}/>
                       </div>
                     </div>
-                    {!isEditorEditable && (
-                      <div className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
-                    )}
                   </div>
                 </ScrollArea>
                 {shouldShowRemarkOverlay && (
@@ -2619,6 +2616,23 @@ const MarkdownEditorPage = () => {
               )}
             </div>
           </div>
+          {!isEditorEditable && (
+            <div
+              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-auto"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onPointerMove={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            />
+          )}
         </div>
 
         <EditorResizeHandle
