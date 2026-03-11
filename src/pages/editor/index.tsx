@@ -2489,6 +2489,7 @@ const MarkdownEditorPage = () => {
                     !isEditorEditable && "cursor-not-allowed-all",
                     isStreamingOverlayVisible && "cursor-not-allowed"
                   )}
+                  key={fileKey}
                 >
                   <div className="min-h-[calc(100vh-108px)] h-full flex flex-col relative overflow-x-hidden">
                     <div className="editor-content-layout flex flex-1 min-h-0 relative min-w-0 overflow-x-hidden">
