@@ -841,20 +841,38 @@ const MarkdownEditorPage = () => {
   const [, setCanvasReadyKey] = useState(0);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
 
-  // editor 相关
-  const workInfo = useEditorStore((s) => s.workInfo);
-  const serverData = useEditorStore((s) => s.serverData);
-  const currentContent = useEditorStore((s) => s.currentContent);
-  const currentEditingId = useEditorStore((s) => s.currentEditingId);
-  const currentEditingNode = useEditorStore((s) => s.currentEditingNode);
-  const initEditorData = useEditorStore((s) => s.initEditorData);
-  const saveEditorData = useEditorStore((s) => s.saveEditorData);
-  const setServerData = useEditorStore((s) => s.setServerData);
-  const setServerDataFile = useEditorStore((s) => s.setServerDataFile);
-  const setCurrentContent = useEditorStore((s) => s.setCurrentContent);
-  const setWorkInfo = useEditorStore((s) => s.setWorkInfo);
-  const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath);
-  const initEditorStore = useEditorStore((s) => s.initEditorStore);
+  // editor 相关 - 使用 useShallow 优化订阅，避免不必要的重渲染
+  const {
+    workInfo,
+    serverData,
+    currentContent,
+    currentEditingId,
+    currentEditingNode,
+    initEditorData,
+    saveEditorData,
+    setServerData,
+    setServerDataFile,
+    setCurrentContent,
+    setWorkInfo,
+    renameServerDataPath,
+    initEditorStore,
+  } = useEditorStore(
+    useShallow((s) => ({
+      workInfo: s.workInfo,
+      serverData: s.serverData,
+      currentContent: s.currentContent,
+      currentEditingId: s.currentEditingId,
+      currentEditingNode: s.currentEditingNode,
+      initEditorData: s.initEditorData,
+      saveEditorData: s.saveEditorData,
+      setServerData: s.setServerData,
+      setServerDataFile: s.setServerDataFile,
+      setCurrentContent: s.setCurrentContent,
+      setWorkInfo: s.setWorkInfo,
+      renameServerDataPath: s.renameServerDataPath,
+      initEditorStore: s.initEditorStore,
+    }))
+  );
 
   const [leftPanelWidthRem, setLeftPanelWidthRem] = useState(LEFT_DEFAULT_REM);
   const dragStartLeftRem = useRef(LEFT_DEFAULT_REM);
@@ -1706,16 +1724,23 @@ const MarkdownEditorPage = () => {
     highlightChangeInEditor,
   ]);
 
-  // 仅当 serverData 的 key 列表变化时重建树，避免每次输入都跑 serverDataToTree
-  const serverDataKeysSig = useMemo(
-    () => Object.keys(serverData ?? {}).sort().join(","),
-    [serverData]
-  );
   const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
-  const wordCount = useMemo(() => getWordCount(currentContent), [currentContent]);
+  // wordCount debounce：字数统计不需要随每次按键实时更新，300ms 后计算一次
+  const [wordCount, setWordCount] = useState(() => getWordCount(currentContent));
+  const wordCountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (wordCountTimerRef.current) clearTimeout(wordCountTimerRef.current);
+    wordCountTimerRef.current = setTimeout(() => {
+      setWordCount(getWordCount(currentContent));
+    }, 300);
+    return () => {
+      if (wordCountTimerRef.current) clearTimeout(wordCountTimerRef.current);
+    };
+  }, [currentContent]);
+
   const isCurrentEditorEmpty = useMemo(
     () => isEditorContentEffectivelyEmpty(currentContent),
     [currentContent]
@@ -2199,7 +2224,6 @@ const MarkdownEditorPage = () => {
                           <div className="flex-1 min-h-[200px] flex flex-col gap-2 relative">
                             <MainEditor
                               ref={markdownEditorRef}
-                              key={fileKey}
                               className="editor-outer-scroll-mode"
                               fontClassName="font-KaiTi"
                               value={currentContent}

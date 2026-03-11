@@ -209,12 +209,11 @@ const TreeNodeRow = React.memo(({
       onMarkNodeAsRead(node.id)
     }
     if (isMd) {
-      setCurrentEditingId(node.id)
-
+      setCurrentEditingId(node.id, node)
     } else if (isDir) {
       onToggleExpand(node.id)
     }
-  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead,setCurrentEditingId, onToggleExpand])
+  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead, setCurrentEditingId, onToggleExpand])
 
   return (
     <div className="w-full">

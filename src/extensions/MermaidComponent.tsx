@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import mermaid from "mermaid";
 import "./MermaidComponent.css";
@@ -19,22 +19,23 @@ const initMermaid = () => {
   mermaidInited = true;
 };
 
+initMermaid();
+
 const MermaidComponent: React.FC<NodeViewProps> = ({ node, updateAttributes }) => {
   const mermaidRef = useRef<HTMLDivElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
-  const [editableCode, setEditableCode] = useState<string>((node.attrs?.code as string) || "");
+  // 用 ref 追踪上一次渲染的 code，避免 code 未变时重复渲染
+  const lastRenderedCodeRef = useRef<string | null>(null);
   const renderIdRef = useRef("");
-  const code = useMemo(() => ((node.attrs?.code as string) || "").trim(), [node.attrs?.code]);
 
-  useEffect(() => {
-    initMermaid();
-  }, []);
+  const code = ((node.attrs?.code as string) || "").trim();
+  const [editableCode, setEditableCode] = useState(code);
 
-  const renderMermaid = async () => {
-    if (!code) {
+  const renderMermaid = useCallback(async (codeToRender: string) => {
+    if (!codeToRender) {
       setIsLoading(false);
       return;
     }
@@ -48,49 +49,44 @@ const MermaidComponent: React.FC<NodeViewProps> = ({ node, updateAttributes }) =
       mermaidRef.current.innerHTML = "";
       const renderId = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       renderIdRef.current = renderId;
-      const { svg } = await mermaid.render(renderId, code);
+      const { svg } = await mermaid.render(renderId, codeToRender);
       if (mermaidRef.current) {
         mermaidRef.current.innerHTML = svg;
       }
+      lastRenderedCodeRef.current = codeToRender;
       setIsLoading(false);
     } catch (error) {
       setHasError(true);
       setIsLoading(false);
-
       const errorDiv = document.querySelector(`#${renderIdRef.current}`);
       const errorDiv2 = document.querySelector(`#d${renderIdRef.current}`);
       errorDiv?.remove();
       errorDiv2?.remove();
       if (mermaidRef.current) mermaidRef.current.innerHTML = "";
-
-      if (error instanceof Error) {
-        setErrorMessage(error.message || "Mermaid 图表渲染失败");
-      } else {
-        setErrorMessage("Mermaid 图表渲染失败");
-      }
+      setErrorMessage(error instanceof Error ? (error.message || "Mermaid 图表渲染失败") : "Mermaid 图表渲染失败");
     }
-  };
+  }, []);
 
-  const toggleEditMode = () => {
+  // code 变化时才重新渲染，跳过相同内容的重复渲染
+  useEffect(() => {
+    if (isEditMode) return;
+    if (code === lastRenderedCodeRef.current) return;
+    void renderMermaid(code);
+  }, [code, isEditMode, renderMermaid]);
+
+  const toggleEditMode = useCallback(() => {
     if (isEditMode) {
       if (editableCode !== (node.attrs?.code as string)) {
         updateAttributes?.({ code: editableCode });
       }
       setIsEditMode(false);
-      void renderMermaid();
+      // 退出编辑模式时强制重渲染
+      lastRenderedCodeRef.current = null;
       return;
     }
     setEditableCode((node.attrs?.code as string) || "");
     setIsEditMode(true);
-  };
-
-  useEffect(() => {
-    setEditableCode((node.attrs?.code as string) || "");
-    if (!isEditMode) {
-      void renderMermaid();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.attrs?.code, isEditMode]);
+  }, [isEditMode, editableCode, node.attrs?.code, updateAttributes]);
 
   useEffect(() => {
     return () => {

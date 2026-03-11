@@ -267,7 +267,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setCurrentContent: (content) =>
           set((state) => {
-            const normalizedContent = normalizeServerContent(content);
             const fileKey = state.currentEditingId;
             const editingNode =
               state.currentEditingNode?.id === fileKey
@@ -276,15 +275,15 @@ export const useEditorStore = create<EditorState & EditorActions>()(
             const shouldSyncFileNode = !!editingNode && !editingNode.isDirectory;
 
             return {
-              currentContent: normalizedContent,
+              currentContent: content,
               currentEditingNode: shouldSyncFileNode
                 ? {
                     ...editingNode,
-                    content: normalizedContent,
+                    content: content,
                   }
                 : editingNode,
               treeData: shouldSyncFileNode
-                ? updateTreeNodeContent(state.treeData, fileKey, normalizedContent)
+                ? updateTreeNodeContent(state.treeData, fileKey, content)
                 : state.treeData,
             };
           }),
