@@ -111,11 +111,6 @@ const routes: RouteObject[] = [
         element: <MarkdownEditorPage/>,
         loader: editorAuthMiddleware,
       },
-      // {
-      //   path: '/quick-editor/:workId',
-      //   element: <QuickEditorPage/>,
-      //   loader: editorAuthMiddleware,
-      // },
       {
         path: '/quick-editor/:workId',
         element: <QuickEditorVueHostPage/>,

@@ -39,7 +39,7 @@ export const TemplateCard = ({
             onCreate(data)
           }}
         >
-          <Iconfont unicode="&#xe642;" className="size-4" />
+          <Iconfont unicode="&#xe642;" className="text-xl" />
         </Button>
       ) : null}
     </div>

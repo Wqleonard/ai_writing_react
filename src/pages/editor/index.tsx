@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
-import IconFont from "@/components/Iconfont/Iconfont";
+import { Iconfont as IconFont } from "@/components/Iconfont";
 import {
   EditorTopToolbar,
   EditorTreeSidebar,
@@ -134,7 +134,6 @@ type EditorInitialParams = {
   modelLLM?: string;
   selectedWritingStyle?: string;
   template?: StepTemplate | string;
-  skipRecommendDialog?: boolean;
   associationTags?: string[];
   selectedNotes?: import("@/api/notes").Note[];
   selectedFiles?: FileItemType[];
@@ -405,35 +404,12 @@ function MermaidRelationPreview({ markdown }: { markdown: string }) {
   );
 }
 
-function RoleTablePreview({ markdown }: { markdown: string }) {
-  return (
-    <div className="h-full w-full overflow-auto rounded-md border bg-background p-4">
-      <MarkdownRenderer content={markdown}/>
-    </div>
-  );
-}
-
 const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
-  const [disableRecommendAutoOpen, setDisableRecommendAutoOpen] = useState(() => {
-    try {
-      const stateParams = (location.state as { skipRecommendDialog?: boolean } | null) ?? null;
-      if (stateParams?.skipRecommendDialog) return true;
-      const paramsStr =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY)
-          : null;
-      if (!paramsStr) return false;
-      const parsed = JSON.parse(paramsStr) as { skipRecommendDialog?: boolean } | null;
-      return !!parsed?.skipRecommendDialog;
-    } catch {
-      return false;
-    }
-  });
   // chatheader 相关
   const [
     activeTab,
@@ -728,6 +704,7 @@ const MarkdownEditorPage = () => {
   const [isAnswerOnly, setIsAnswerOnly] = useState(true);
   const { confirm, confirmDialog } = useConfirmDialog();
   const lastInitialAutoSendKeyRef = useRef<string>("");
+  const initialParamsApplyKeyRef = useRef<string>("");
 
   const handleMessageFileClick = useCallback((file: FileItemType) => {
     const fileUrl = file.displayUrl || file.putFilePath;
@@ -921,7 +898,10 @@ const MarkdownEditorPage = () => {
 
   useEffect(() => {
     (async ()=>{
+      console.log(workId)
       if (!workId) return;
+      console.log(location)
+
       if (lastInitWorkIdRef.current === workId) return;
       lastInitWorkIdRef.current = workId;
       await initEditorData(workId);
@@ -929,7 +909,7 @@ const MarkdownEditorPage = () => {
       //   stepWorkflowRef.current.openStepCreateDialog()
       // }
     })()
-  }, []);
+  }, [workId, initEditorData, location]);
 
   useEffect(() => {
     setWorkId(workId ?? null);
@@ -964,13 +944,20 @@ const MarkdownEditorPage = () => {
   }, [initEditorStore]);
 
   useEffect(() => {
+    const applyKey = `${workId ?? ""}:${location.key ?? "default"}`;
+    if (initialParamsApplyKeyRef.current === applyKey) return;
+    initialParamsApplyKeyRef.current = applyKey;
+
     let storageParams: EditorInitialParams | null = null;
     let rankingParams: RankingListTransmissionParams | null = null;
     if (typeof window !== "undefined") {
       const paramsStr = sessionStorage.getItem(EDITOR_INITIAL_PARAMS_KEY);
       if (paramsStr) {
         try {
-          storageParams = JSON.parse(paramsStr) as EditorInitialParams;
+          const parsed = JSON.parse(paramsStr);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            storageParams = parsed as EditorInitialParams;
+          }
         } catch (e) {
           console.error("解析 editorInitialParams 失败:", e);
         } finally {
@@ -981,7 +968,10 @@ const MarkdownEditorPage = () => {
       const rankingParamsStr = sessionStorage.getItem(RANKING_LIST_TRANSMISSION_KEY);
       if (rankingParamsStr) {
         try {
-          rankingParams = JSON.parse(rankingParamsStr) as RankingListTransmissionParams;
+          const parsed = JSON.parse(rankingParamsStr);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            rankingParams = parsed as RankingListTransmissionParams;
+          }
         } catch (e) {
           console.error("解析 rankingListTransmission 失败:", e);
         } finally {
@@ -989,49 +979,55 @@ const MarkdownEditorPage = () => {
         }
       }
     }
-    const stateParams = (location.state as EditorInitialParams | null) ?? null;
+    const stateRaw = location.state;
+    const stateParams =
+      stateRaw && typeof stateRaw === "object" && !Array.isArray(stateRaw)
+        ? (stateRaw as EditorInitialParams)
+        : null;
     const mergedParams = { ...(stateParams ?? {}), ...(storageParams ?? {}) };
-    const rankingContent = rankingParams?.content?.trim() ?? "";
-    const rankingMessage = rankingParams?.message?.trim() ?? "";
+    const rankingContent = typeof rankingParams?.content === "string" ? rankingParams.content.trim() : "";
+    const rankingMessage = typeof rankingParams?.message === "string" ? rankingParams.message.trim() : "";
     const rankingDisableAutoSubmit = !!rankingParams?.disableAutoSubmit;
+    const mergedSelectedTexts = Array.isArray(mergedParams.selectedTexts) ? mergedParams.selectedTexts : [];
     const initialParams: EditorInitialParams = {
       ...mergedParams,
       selectedTexts: rankingContent
         ? [
-          ...(mergedParams.selectedTexts ?? []),
+          ...mergedSelectedTexts,
           {
             id: `ranking-transmission-${Date.now()}`,
             file: "",
             content: rankingContent,
           },
         ]
-        : mergedParams.selectedTexts,
+        : (Array.isArray(mergedParams.selectedTexts) ? mergedParams.selectedTexts : undefined),
       message: rankingMessage || mergedParams.message,
     };
-    setDisableRecommendAutoOpen(
-      !!initialParams.skipRecommendDialog ||
-      !!((location.state as { skipRecommendDialog?: boolean } | null) ?? null)?.skipRecommendDialog
-    );
     const initialTemplate = parseStepTemplate(initialParams.template);
     if (initialTemplate) {
       setPendingStepTemplate(initialTemplate);
     }
 
-    if (initialParams.modelLLM) setModelLLM(initialParams.modelLLM);
-    if (initialParams.selectedWritingStyle) setSelectedWritingStyle(initialParams.selectedWritingStyle);
+    if (typeof initialParams.modelLLM === "string" && initialParams.modelLLM) {
+      setModelLLM(initialParams.modelLLM);
+    }
+    if (typeof initialParams.selectedWritingStyle === "string" && initialParams.selectedWritingStyle) {
+      setSelectedWritingStyle(initialParams.selectedWritingStyle);
+    }
     if (typeof initialParams.isAnswerOnly === "boolean") {
       setIsAnswerOnly(initialParams.isAnswerOnly);
     }
     initializeChatInputFromParams({
-      associationTags: initialParams.associationTags,
-      selectedNotes: initialParams.selectedNotes,
-      selectedFiles: initialParams.selectedFiles,
-      selectedTexts: initialParams.selectedTexts,
-      selectedTools: initialParams.selectedTools,
-      isShowAnswerTip: initialParams.isShowAnswerTip,
+      associationTags: Array.isArray(initialParams.associationTags) ? initialParams.associationTags : undefined,
+      selectedNotes: Array.isArray(initialParams.selectedNotes) ? initialParams.selectedNotes : undefined,
+      selectedFiles: Array.isArray(initialParams.selectedFiles) ? initialParams.selectedFiles : undefined,
+      selectedTexts: Array.isArray(initialParams.selectedTexts) ? initialParams.selectedTexts : undefined,
+      selectedTools: Array.isArray(initialParams.selectedTools) ? initialParams.selectedTools : undefined,
+      isShowAnswerTip: typeof initialParams.isShowAnswerTip === "boolean" ? initialParams.isShowAnswerTip : undefined,
     });
-    if (initialParams.message?.trim()) {
-      const msg = initialParams.message.trim();
+    const initialMessage = typeof initialParams.message === "string" ? initialParams.message.trim() : "";
+    if (initialMessage) {
+      const msg = initialMessage;
       setPendingInitialMessage(msg);
       if (!rankingDisableAutoSubmit) {
         const submitKey = `${workId ?? ""}:${msg}`;
@@ -1049,7 +1045,7 @@ const MarkdownEditorPage = () => {
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+  }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   const handleBackClick = useCallback(async () => {
     const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
@@ -1304,7 +1300,7 @@ const MarkdownEditorPage = () => {
       Math.min(effectiveMaxLeft, dragStartLeftRem.current + deltaRem)
     );
     setLeftPanelWidthRem(newWidth);
-  }, [rightPanelWidthRem, isChangesPanelVisible]);
+  }, [rightPanelWidthRem, centerRequiredRem]);
 
   const onRightResizeStart = useCallback(() => {
     dragStartRightRem.current = rightPanelWidthRem;
