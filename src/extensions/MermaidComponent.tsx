@@ -133,7 +133,7 @@ const MermaidComponent: React.FC<NodeViewProps> = ({ node, updateAttributes }) =
               <div className="error-hint">提示：点击右上角"编辑"按钮修改代码</div>
             </div>
           )}
-          <div ref={mermaidRef} className="mermaid-content" />
+          <div ref={mermaidRef} className="mermaid-content"/>
         </>
       )}
     </NodeViewWrapper>

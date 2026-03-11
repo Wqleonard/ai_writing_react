@@ -1,9 +1,9 @@
 <template>
   <el-scrollbar
-    ref="scrollbarRef"
-    :max-height="maxHeight"
-    @scroll="handleScrollbarScroll"
-    class="auto-scrollbar"
+      ref="scrollbarRef"
+      :max-height="maxHeight"
+      @scroll="handleScrollbarScroll"
+      class="auto-scrollbar"
   >
     <slot/>
   </el-scrollbar>
@@ -11,6 +11,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ElScrollbar } from "element-plus";
 
 interface Props {
   maxHeight?: string | number;
@@ -52,7 +53,7 @@ const isNearBottom = (threshold = props.bottomThreshold): boolean => {
   const scrollbarWrap = scrollbarRef.value?.wrapRef;
   if (!scrollbarWrap) return false;
 
-  const {scrollTop, scrollHeight, clientHeight} = scrollbarWrap;
+  const { scrollTop, scrollHeight, clientHeight } = scrollbarWrap;
   return scrollHeight - scrollTop - clientHeight <= threshold;
 };
 
@@ -260,7 +261,7 @@ const setupContentObserver = () => {
 
       // 监听 wheel 事件，更精确地检测用户操作
       wheelHandler = handleWheel;
-      scrollbarWrap.addEventListener('wheel', wheelHandler, {passive: true});
+      scrollbarWrap.addEventListener('wheel', wheelHandler, { passive: true });
 
       // 初始化滚动位置
       lastScrollTop.value = scrollbarWrap.scrollTop;
