@@ -1612,14 +1612,37 @@ const MarkdownEditorPage = () => {
 
   // stepWorkFlow 相关逻辑
   useEffect(() => {
-    if (location.state?.template){
-      stepWorkflowRef.current.startTemplateCreate(location.state.template);
-      return
-    }
-    if (location.state?.showTake2){
-      stepWorkflowRef.current.openStepCreateDialog()
-      return;
-    }
+    const { template, showTake2 } = location.state ?? {};
+    if (!template && !showTake2) return;
+
+    let rafId = 0;
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const runWhenReady = () => {
+      const stepWorkflow = stepWorkflowRef.current;
+      if (!stepWorkflow) {
+        attempts += 1;
+        if (attempts < maxAttempts) {
+          rafId = requestAnimationFrame(runWhenReady);
+        }
+        return;
+      }
+
+      if (template) {
+        stepWorkflow.startTemplateCreate(template);
+        return;
+      }
+
+      if (showTake2) {
+        stepWorkflow.openStepCreateDialog();
+      }
+    };
+
+    rafId = requestAnimationFrame(runWhenReady);
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
   }, [location]);
 
   const currentLabel = currentEditingNode?.label ?? "";

@@ -2,6 +2,7 @@
 import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import { toast } from "sonner";
+import { getOrCreateVisitorId } from "@/utils/visitorId";
 
 export const WRITE_STREAM_URL = "/api/v1/writing/generate-stream";
 export const SUBMIT_URL = "/submit";
@@ -73,6 +74,18 @@ function extractErrorMessage(data: any, fallback: string) {
   return data?.message || data?.error || data?.msg || fallback;
 }
 
+function applyAuthOrVisitorHeader(headers: Record<string, string>, token: string | null | undefined) {
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    delete headers["X-Visitor-Id"];
+    return;
+  }
+
+  delete headers.Authorization;
+  const visitorId = getOrCreateVisitorId();
+  if (visitorId) headers["X-Visitor-Id"] = visitorId;
+}
+
 export function createApiClient(options: ApiClientOptions = {}) {
   const {
     baseURL = defaultBaseURL(),
@@ -102,7 +115,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       // Vue 版里设置了该 header，这里保留但通常无意义（CORS 是响应头）
       (config.headers as any)["Access-Control-Allow-Origin"] = "*";
       const token = getToken?.();
-      if (token) (config.headers as any).Authorization = `Bearer ${token}`;
+      applyAuthOrVisitorHeader(config.headers as Record<string, string>, token);
       return config;
     },
     (error) => Promise.reject(error)
@@ -291,7 +304,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       ...(((config?.headers as any) || {}) as Record<string, string>),
     };
     const token = getToken?.();
-    if (token) headers.Authorization = `Bearer ${token}`;
+    applyAuthOrVisitorHeader(headers, token);
 
     const requestConfig: RequestInit = {
       method: "POST",
@@ -469,7 +482,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
     xhr.setRequestHeader("Cache-Control", "no-cache");
 
     const token = getToken?.();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    } else {
+      const visitorId = getOrCreateVisitorId();
+      if (visitorId) xhr.setRequestHeader("X-Visitor-Id", visitorId);
+    }
 
     if (config?.headers) {
       Object.entries(config.headers).forEach(([k, v]) => xhr.setRequestHeader(k, String(v)));
@@ -541,7 +559,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       ...(((config?.headers as any) || {}) as Record<string, string>),
     };
     const token = getToken?.();
-    if (token) headers.Authorization = `Bearer ${token}`;
+    applyAuthOrVisitorHeader(headers, token);
 
     try {
       const response = await fetch(fullUrl, {
