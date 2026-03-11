@@ -5,6 +5,7 @@ import { lazy } from 'react'
 import LandingPage from '@/pages/landing'
 import { WorkspaceLayout } from '@/layout'
 import { AppRouteGuard } from '@/router/guards/AppRouteGuard'
+import TestPage from '@/pages/test'
 
 
 // 懒加载页面组件
@@ -122,6 +123,10 @@ const routes: RouteObject[] = [
         path: '/script-editor/:workId',
         element: <ScriptEditorVueHostPage/>,
         loader: editorAuthMiddleware,
+      },
+      {
+        path: '/test',
+        element: <TestPage/>,
       },
       {
         path: '/m',

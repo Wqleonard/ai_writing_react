@@ -13,6 +13,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Mermaid from '@/extensions/Mermaid'
 import SelectionToolbarComponent, { type SelectionToolbarAction } from '@/components/editor/SelectionToolbarComponent'
 import './index.css'
+import TokenizerHighlight from '@/extensions/TokenizerHighlight.ts'
 
 export interface MarkdownEditorProps {
   className?: string
@@ -120,6 +121,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     const extensions = useMemo(
       () => [
         Markdown,
+        TokenizerHighlight,
         Mermaid,
         Placeholder.configure({
           placeholder,

@@ -104,17 +104,8 @@ export const initInvitationCode = async (): Promise<void> => {
     if (!codeFromUrl) {
       return;
     }
-
     // 保存新邀请码到缓存
     saveNewInvitationCode(codeFromUrl);
-
-    // 检查用户是否登录
-    // const loginStore = useLoginStore();
-    // if (loginStore.isLoggedIn) {
-    //   // 如果已登录，立即调用兑换接口
-    //   await redeemInvitationCode();
-    // }
-    // 如果未登录，等待登录成功后再调用（在 LoginDialog 中处理）
   } catch (error) {
     console.error("[initInvitationCode] 初始化邀请码失败:", error);
   }
