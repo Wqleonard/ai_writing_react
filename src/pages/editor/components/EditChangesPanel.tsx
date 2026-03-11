@@ -1,6 +1,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
+import { ScrollArea } from "@/components/ui/ScrollArea";
 
 export type ChangeStatus = "pending" | "accepted" | "rejected";
 
@@ -98,124 +99,124 @@ export function EditChangesPanel({
           <div className="text-sm font-medium text-foreground">修改详情</div>
           <div className="text-xs text-muted-foreground">待确认 {visibleChanges.length}</div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {visibleChanges.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[var(--border-color)] px-3 py-6 text-center text-xs text-muted-foreground">
-              暂无待确认修改
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {visibleChanges.map((change) => {
-                const selected = selectedIndex === change.index;
-                const expanded = expandedMap[change.index] === true;
-                const segmentPreview = extractChangedSegment(change.oldString, change.newString);
-                const canExpand =
-                  segmentPreview.oldPreview.length > 60 || segmentPreview.newPreview.length > 60;
-                return (
-                  <div
-                    key={change.index}
-                    role="button"
-                    tabIndex={0}
-                    className={clsx(
-                      "rounded-md border bg-[var(--bg-primary)] p-3 text-left transition-colors",
-                      selected
-                        ? "border-[var(--bg-editor-save)]"
-                        : "border-[var(--border-color)] hover:border-[var(--bg-editor-save)]"
-                    )}
-                    onClick={() =>
-                      setSelectedIndex(selected ? null : change.index)
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedIndex(selected ? null : change.index);
-                      }
-                    }}
-                  >
-                    <div className="text-[11px] text-muted-foreground">原文</div>
+        <ScrollArea className="min-h-0 flex-1 pr-3">
+          <div>
+            {visibleChanges.length === 0 ? (
+              <div className="rounded-md border border-dashed border-[var(--border-color)] px-3 py-6 text-center text-xs text-muted-foreground">
+                暂无待确认修改
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {visibleChanges.map((change) => {
+                  const selected = selectedIndex === change.index;
+                  const expanded = expandedMap[change.index] === true;
+                  const segmentPreview = extractChangedSegment(change.oldString, change.newString);
+                  const canExpand =
+                    segmentPreview.oldPreview.length > 60 || segmentPreview.newPreview.length > 60;
+                  return (
                     <div
-                      className="mt-1 whitespace-pre-wrap break-words text-xs text-foreground overflow-hidden"
-                      style={
-                        expanded
-                          ? undefined
-                          : {
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                            }
-                      }
+                      key={change.index}
+                      role="button"
+                      tabIndex={0}
+                      className={clsx(
+                        "rounded-md border bg-[var(--bg-primary)] p-3 text-left transition-colors",
+                        selected
+                          ? "border-[var(--bg-editor-save)]"
+                          : "border-[var(--border-color)] hover:border-[var(--bg-editor-save)]"
+                      )}
+                      onClick={() => setSelectedIndex(selected ? null : change.index)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedIndex(selected ? null : change.index);
+                        }
+                      }}
                     >
-                      {segmentPreview.oldPreview || "（无内容）"}
-                    </div>
-                    {canExpand && (
-                      <div className="mt-1 flex justify-end">
-                        <button
-                          type="button"
-                          className="text-[11px] text-[var(--bg-editor-save)] hover:opacity-90"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedMap((prev) => ({
-                              ...prev,
-                              [change.index]: !expanded,
-                            }));
-                          }}
-                        >
-                          {expanded ? "收起" : "展开"}
-                        </button>
+                      <div className="text-[11px] text-muted-foreground">原文</div>
+                      <div
+                        className="mt-1 overflow-hidden whitespace-pre-wrap break-words text-xs text-foreground"
+                        style={
+                          expanded
+                            ? undefined
+                            : {
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                              }
+                        }
+                      >
+                        {segmentPreview.oldPreview || "（无内容）"}
                       </div>
-                    )}
-                    {selected && (
-                      <>
-                        <div className="mt-2 text-[11px] text-muted-foreground">修改后</div>
-                        <div
-                          className="mt-1 whitespace-pre-wrap break-words text-xs text-foreground overflow-hidden"
-                          style={
-                            expanded
-                              ? undefined
-                              : {
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                }
-                          }
-                        >
-                          {segmentPreview.newPreview || "（无内容）"}
-                        </div>
-                        <div className="mt-3 flex justify-end gap-2">
-                          <Button
+                      {canExpand && (
+                        <div className="mt-1 flex justify-end">
+                          <button
                             type="button"
-                            size="sm"
-                            variant="outline"
+                            className="text-[11px] text-[var(--bg-editor-save)] hover:opacity-90"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onReject(change.index);
-                              setSelectedIndex(null);
-                              onSelectChange?.(null);
+                              setExpandedMap((prev) => ({
+                                ...prev,
+                                [change.index]: !expanded,
+                              }));
                             }}
                           >
-                            撤销
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAccept(change.index);
-                              setSelectedIndex(null);
-                              onSelectChange?.(null);
-                            }}
-                          >
-                            接受
-                          </Button>
+                            {expanded ? "收起" : "展开"}
+                          </button>
                         </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      )}
+                      {selected && (
+                        <>
+                          <div className="mt-2 text-[11px] text-muted-foreground">修改后</div>
+                          <div
+                            className="mt-1 overflow-hidden whitespace-pre-wrap break-words text-xs text-foreground"
+                            style={
+                              expanded
+                                ? undefined
+                                : {
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: "vertical",
+                                  }
+                            }
+                          >
+                            {segmentPreview.newPreview || "（无内容）"}
+                          </div>
+                          <div className="mt-3 flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReject(change.index);
+                                setSelectedIndex(null);
+                                onSelectChange?.(null);
+                              }}
+                            >
+                              撤销
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAccept(change.index);
+                                setSelectedIndex(null);
+                                onSelectChange?.(null);
+                              }}
+                            >
+                              接受
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
     );
 }

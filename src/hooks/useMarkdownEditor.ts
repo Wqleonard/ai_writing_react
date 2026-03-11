@@ -28,8 +28,11 @@ export interface FileEditInfo {
   status: "pending" | "accepted" | "rejected";
 }
 
-const HIGHLIGHT_START = "<<<--highlight-start";
-const HIGHLIGHT_END = "<<<--highlight-end-->>>";
+const LEGACY_HIGHLIGHT_END = "<<<--highlight-end-->>>";
+const INLINE_HIGHLIGHT_END = "==";
+const BRACKET_HIGHLIGHT_START_PREFIX = "[[[hl-start:";
+const BRACKET_HIGHLIGHT_START_SUFFIX = "]]]";
+const BRACKET_HIGHLIGHT_END = "[[[hl-end]]]";
 
 function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -102,26 +105,22 @@ export function useMarkdownEditor() {
       if (actualText !== searchText) return null;
       const before = mdContent.substring(0, startIndex);
       const after = mdContent.substring(endIndex);
-      const searchTextStartsWithNewline = searchText.startsWith("\n");
-      const needsNewlineAfterStart = !searchTextStartsWithNewline;
-      const separator = needsNewlineAfterStart ? "\n" : "";
       const uniqueId = `highlight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const startMarkerWithId = `<<<--highlight-start data-highlight-id="${uniqueId}"-->>>`;
+      const startMarkerWithId = `${BRACKET_HIGHLIGHT_START_PREFIX}${uniqueId}${BRACKET_HIGHLIGHT_START_SUFFIX}`;
       const newContent =
         before +
         startMarkerWithId +
-        separator +
         searchText +
-        HIGHLIGHT_END +
+        BRACKET_HIGHLIGHT_END +
         after;
-      const actualStartMarkerLength = startMarkerWithId.length + separator.length;
+      const actualStartMarkerLength = startMarkerWithId.length;
       const markerInfo: HighlightMarkerInfo = {
         markerStartIndex: startIndex,
         markerEndIndex:
           startIndex +
           actualStartMarkerLength +
           searchText.length +
-          HIGHLIGHT_END.length,
+          BRACKET_HIGHLIGHT_END.length,
         newStringStartIndex: startIndex + actualStartMarkerLength,
         newStringEndIndex: startIndex + actualStartMarkerLength + searchText.length,
         newStringLength: searchText.length,
@@ -148,12 +147,12 @@ export function useMarkdownEditor() {
         return mdContent;
       let before = mdContent.substring(0, markerStartIndex);
       const after = mdContent.substring(markerEndIndex);
-      if (before.includes(HIGHLIGHT_END)) {
-        const lastEndMarkerIndex = before.lastIndexOf(HIGHLIGHT_END);
+      if (before.includes(LEGACY_HIGHLIGHT_END)) {
+        const lastEndMarkerIndex = before.lastIndexOf(LEGACY_HIGHLIGHT_END);
         if (lastEndMarkerIndex !== -1) {
           before =
             before.substring(0, lastEndMarkerIndex) +
-            before.substring(lastEndMarkerIndex + HIGHLIGHT_END.length);
+            before.substring(lastEndMarkerIndex + LEGACY_HIGHLIGHT_END.length);
         }
       }
       return before + replacementContent + after;
@@ -174,18 +173,50 @@ export function useMarkdownEditor() {
           markerInfo,
           replacementContent
         );
-      const baseStartMarker = `<<<--highlight-start data-highlight-id="${highlightId}"-->>>`;
-      const actualMarkerStartIndex = mdContent.indexOf(baseStartMarker);
-      if (actualMarkerStartIndex === -1) return mdContent;
-      const actualNewStringStartIndex =
-        actualMarkerStartIndex + actualStartMarkerLength;
-      const remainingContent = mdContent.substring(actualNewStringStartIndex);
-      const endMarkerIndex = remainingContent.indexOf(HIGHLIGHT_END);
-      if (endMarkerIndex === -1) return mdContent;
-      const actualMarkerEndIndex =
-        actualNewStringStartIndex + endMarkerIndex + HIGHLIGHT_END.length;
-      const before = mdContent.substring(0, actualMarkerStartIndex);
-      const after = mdContent.substring(actualMarkerEndIndex);
+      const bracketStartMarker = `${BRACKET_HIGHLIGHT_START_PREFIX}${highlightId}${BRACKET_HIGHLIGHT_START_SUFFIX}`;
+      const bracketMarkerStartIndex = mdContent.indexOf(bracketStartMarker);
+      if (bracketMarkerStartIndex !== -1) {
+        const bracketNewStringStartIndex =
+          bracketMarkerStartIndex + bracketStartMarker.length;
+        const bracketEndIndex = mdContent.indexOf(
+          BRACKET_HIGHLIGHT_END,
+          bracketNewStringStartIndex
+        );
+        if (bracketEndIndex === -1) return mdContent;
+        const before = mdContent.substring(0, bracketMarkerStartIndex);
+        const after = mdContent.substring(
+          bracketEndIndex + BRACKET_HIGHLIGHT_END.length
+        );
+        return before + replacementContent + after;
+      }
+      const inlineStartMarker = `==#${highlightId}#`;
+      const inlineMarkerStartIndex = mdContent.indexOf(inlineStartMarker);
+      if (inlineMarkerStartIndex !== -1) {
+        const inlineNewStringStartIndex =
+          inlineMarkerStartIndex + inlineStartMarker.length;
+        const inlineEndIndex = mdContent.indexOf(
+          INLINE_HIGHLIGHT_END,
+          inlineNewStringStartIndex
+        );
+        if (inlineEndIndex === -1) return mdContent;
+        const before = mdContent.substring(0, inlineMarkerStartIndex);
+        const after = mdContent.substring(
+          inlineEndIndex + INLINE_HIGHLIGHT_END.length
+        );
+        return before + replacementContent + after;
+      }
+      const legacyStartMarker = `<<<--highlight-start data-highlight-id="${highlightId}"-->>>`;
+      const legacyMarkerStartIndex = mdContent.indexOf(legacyStartMarker);
+      if (legacyMarkerStartIndex === -1) return mdContent;
+      const legacyNewStringStartIndex =
+        legacyMarkerStartIndex + actualStartMarkerLength;
+      const remainingContent = mdContent.substring(legacyNewStringStartIndex);
+      const legacyEndIndex = remainingContent.indexOf(LEGACY_HIGHLIGHT_END);
+      if (legacyEndIndex === -1) return mdContent;
+      const legacyMarkerEndIndex =
+        legacyNewStringStartIndex + legacyEndIndex + LEGACY_HIGHLIGHT_END.length;
+      const before = mdContent.substring(0, legacyMarkerStartIndex);
+      const after = mdContent.substring(legacyMarkerEndIndex);
       return before + replacementContent + after;
     },
     [replaceContentAndRemoveMarkers_Legacy]
@@ -209,7 +240,7 @@ export function useMarkdownEditor() {
         newStringEndIndex
       );
       const after = mdContent.substring(
-        newStringEndIndex + HIGHLIGHT_END.length
+        newStringEndIndex + LEGACY_HIGHLIGHT_END.length
       );
       return before + newString + after;
     },
@@ -221,22 +252,60 @@ export function useMarkdownEditor() {
       const { highlightId, actualStartMarkerLength } = markerInfo;
       if (!highlightId)
         return removeHighlightMarkersAt_Legacy(mdContent, markerInfo);
-      const baseStartMarker = `<<<--highlight-start data-highlight-id="${highlightId}"-->>>`;
-      const actualMarkerStartIndex = mdContent.indexOf(baseStartMarker);
-      if (actualMarkerStartIndex === -1) return mdContent;
-      const actualNewStringStartIndex =
-        actualMarkerStartIndex + actualStartMarkerLength;
-      const remainingContent = mdContent.substring(actualNewStringStartIndex);
-      const endMarkerIndex = remainingContent.indexOf(HIGHLIGHT_END);
-      if (endMarkerIndex === -1) return mdContent;
-      const actualNewStringEndIndex = actualNewStringStartIndex + endMarkerIndex;
-      const before = mdContent.substring(0, actualMarkerStartIndex);
+      const bracketStartMarker = `${BRACKET_HIGHLIGHT_START_PREFIX}${highlightId}${BRACKET_HIGHLIGHT_START_SUFFIX}`;
+      const bracketMarkerStartIndex = mdContent.indexOf(bracketStartMarker);
+      if (bracketMarkerStartIndex !== -1) {
+        const bracketNewStringStartIndex =
+          bracketMarkerStartIndex + bracketStartMarker.length;
+        const bracketEndIndex = mdContent.indexOf(
+          BRACKET_HIGHLIGHT_END,
+          bracketNewStringStartIndex
+        );
+        if (bracketEndIndex === -1) return mdContent;
+        const before = mdContent.substring(0, bracketMarkerStartIndex);
+        const newString = mdContent.substring(
+          bracketNewStringStartIndex,
+          bracketEndIndex
+        );
+        const after = mdContent.substring(
+          bracketEndIndex + BRACKET_HIGHLIGHT_END.length
+        );
+        return before + newString + after;
+      }
+      const inlineStartMarker = `==#${highlightId}#`;
+      const inlineMarkerStartIndex = mdContent.indexOf(inlineStartMarker);
+      if (inlineMarkerStartIndex !== -1) {
+        const inlineNewStringStartIndex =
+          inlineMarkerStartIndex + inlineStartMarker.length;
+        const inlineEndIndex = mdContent.indexOf(
+          INLINE_HIGHLIGHT_END,
+          inlineNewStringStartIndex
+        );
+        if (inlineEndIndex === -1) return mdContent;
+        const before = mdContent.substring(0, inlineMarkerStartIndex);
+        const newString = mdContent.substring(
+          inlineNewStringStartIndex,
+          inlineEndIndex
+        );
+        const after = mdContent.substring(inlineEndIndex + INLINE_HIGHLIGHT_END.length);
+        return before + newString + after;
+      }
+      const legacyStartMarker = `<<<--highlight-start data-highlight-id="${highlightId}"-->>>`;
+      const legacyMarkerStartIndex = mdContent.indexOf(legacyStartMarker);
+      if (legacyMarkerStartIndex === -1) return mdContent;
+      const legacyNewStringStartIndex =
+        legacyMarkerStartIndex + actualStartMarkerLength;
+      const remainingContent = mdContent.substring(legacyNewStringStartIndex);
+      const legacyEndIndex = remainingContent.indexOf(LEGACY_HIGHLIGHT_END);
+      if (legacyEndIndex === -1) return mdContent;
+      const legacyNewStringEndIndex = legacyNewStringStartIndex + legacyEndIndex;
+      const before = mdContent.substring(0, legacyMarkerStartIndex);
       const newString = mdContent.substring(
-        actualNewStringStartIndex,
-        actualNewStringEndIndex
+        legacyNewStringStartIndex,
+        legacyNewStringEndIndex
       );
       const after = mdContent.substring(
-        actualNewStringEndIndex + HIGHLIGHT_END.length
+        legacyNewStringEndIndex + LEGACY_HIGHLIGHT_END.length
       );
       return before + newString + after;
     },
@@ -245,10 +314,20 @@ export function useMarkdownEditor() {
 
   const removeAllHighlightMarkers = useCallback((content: string): string => {
     if (!content) return content;
-    const startPattern =
+    const legacyStartPattern =
       /<<<--highlight-start(?:\s+data-highlight-id="[^"]+")?\s*-->>>\n?/g;
-    const endPattern = new RegExp(escapeRegExp(HIGHLIGHT_END), "g");
-    return content.replace(startPattern, "").replace(endPattern, "");
+    const legacyEndPattern = new RegExp(escapeRegExp(LEGACY_HIGHLIGHT_END), "g");
+    const withLegacyRemoved = content
+      .replace(legacyStartPattern, "")
+      .replace(legacyEndPattern, "");
+    const withInlineRemoved = withLegacyRemoved.replace(
+      /==#([A-Za-z0-9_-]+)#([\s\S]*?)==/g,
+      "$2"
+    );
+    return withInlineRemoved.replace(
+      /\[\[\[hl-start:[A-Za-z0-9_-]+\]\]\]([\s\S]*?)\[\[\[hl-end\]\]\]/g,
+      "$1"
+    );
   }, []);
 
   const logFileEditInfoMap = useCallback(

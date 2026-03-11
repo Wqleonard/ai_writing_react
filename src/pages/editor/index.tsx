@@ -503,43 +503,39 @@ const MarkdownEditorPage = () => {
           return acc;
         }, {});
         const pendingMarkedContents: Record<string, string> = {};
-        setFileChangesMap((prev) => {
-          const next = { ...prev };
-          Object.keys(grouped).forEach((path) => {
-            const existing = next[path] ?? [];
-            const appended: EditorFileChangeItem[] = grouped[path].map((item, idx) => ({
-              index: Date.now() + idx + Math.floor(Math.random() * 1000),
-              oldString: item.old_string ?? "",
-              newString: item.new_string ?? "",
-              status: "pending",
-            }));
-            // 去重：避免流式多次返回同一条 edit_file 造成重复待确认项
-            const dedup = [...existing];
-            appended.forEach((candidate) => {
-              const exists = dedup.some(
-                (x) =>
-                  x.status === "pending" &&
-                  x.oldString === candidate.oldString &&
-                  x.newString === candidate.newString,
-              );
-              if (!exists) dedup.push(candidate);
-            });
-            const pendingItems = dedup.filter((item) => item.status === "pending");
-            const nonPendingItems = dedup
-              .filter((item) => item.status !== "pending")
-              .map((item) => ({ ...item, markerInfo: undefined }));
-            const baseContent = mergedFiles[path] ?? currentServerData[path] ?? "";
-            console.log(baseContent, 'baseContent',pendingItems, 'pendingItems')
-            const { contentWithMarkers, relabeledPending } = relabelPendingChanges(
-              baseContent,
-              pendingItems
+        const nextFileChangesMap: FileChangesMap = { ...fileChangesMap };
+        Object.keys(grouped).forEach((path) => {
+          const existing = nextFileChangesMap[path] ?? [];
+          const appended: EditorFileChangeItem[] = grouped[path].map((item, idx) => ({
+            index: Date.now() + idx + Math.floor(Math.random() * 1000),
+            oldString: item.old_string ?? "",
+            newString: item.new_string ?? "",
+            status: "pending",
+          }));
+          // 去重：避免流式多次返回同一条 edit_file 造成重复待确认项
+          const dedup = [...existing];
+          appended.forEach((candidate) => {
+            const exists = dedup.some(
+              (x) =>
+                x.status === "pending" &&
+                x.oldString === candidate.oldString &&
+                x.newString === candidate.newString,
             );
-            pendingMarkedContents[path] = contentWithMarkers;
-            next[path] = [...nonPendingItems, ...relabeledPending];
+            if (!exists) dedup.push(candidate);
           });
-          return next;
+          const pendingItems = dedup.filter((item) => item.status === "pending");
+          const nonPendingItems = dedup
+            .filter((item) => item.status !== "pending")
+            .map((item) => ({ ...item, markerInfo: undefined }));
+          const baseContent = mergedFiles[path] ?? currentServerData[path] ?? "";
+          const { contentWithMarkers, relabeledPending } = relabelPendingChanges(
+            baseContent,
+            pendingItems
+          );
+          pendingMarkedContents[path] = contentWithMarkers;
+          nextFileChangesMap[path] = [...nonPendingItems, ...relabeledPending];
         });
-        console.log(pendingMarkedContents, 'pendingMarkedContents')
+        setFileChangesMap(nextFileChangesMap);
         Object.keys(pendingMarkedContents).forEach((path) => {
           setServerDataFile(path, pendingMarkedContents[path] ?? "");
         });
@@ -860,7 +856,6 @@ const MarkdownEditorPage = () => {
 
   const leftPanelRef = useRef<HTMLDivElement | null>(null);
   const rightPanelRef = useRef<HTMLDivElement | null>(null);
-  const activeRemarkHighlightRef = useRef<HTMLElement | null>(null);
   const [activeChangeIndex, setActiveChangeIndex] = useState<number | null>(null);
   const [changesPanelHeight, setChangesPanelHeight] = useState(0);
   const [isEditorActuallyEmpty, setIsEditorActuallyEmpty] = useState(true);
@@ -1452,11 +1447,10 @@ const MarkdownEditorPage = () => {
   const isEditorEditable = chatInputStatus !== "streaming" && !shouldShowRemarkOverlay;
   // ================== EDIT_FILE_END ==================
   const clearRemarkHighlight = useCallback(() => {
-    const active = activeRemarkHighlightRef.current;
-    if (!active) return;
-    active.classList.remove("remark-highlight-paragraph");
-    active.classList.remove("streamed-content-active");
-    activeRemarkHighlightRef.current = null;
+    const editor = markdownEditorRef.current?.editor as
+      | { commands?: { clearActiveTokenizerHighlight?: () => boolean } }
+      | null;
+    editor?.commands?.clearActiveTokenizerHighlight?.();
   }, []);
 
   const hasAnyPendingFileChanges = useMemo(
@@ -1575,91 +1569,15 @@ const MarkdownEditorPage = () => {
   }, [handleBeforeUnload]);
 
   const highlightChangeInEditor = useCallback(
-    (oldText: string, newText?: string, markerInfo?: HighlightMarkerInfo): boolean => {
+    (highlightId?: string): boolean => {
       clearRemarkHighlight();
-      const editorRoot = (markdownEditorRef.current?.editor as { view?: { dom?: HTMLElement } } | null)?.view?.dom;
-      if (!editorRoot) return false;
-      if (markerInfo?.highlightId) {
-        const markerEl = editorRoot.querySelector(
-          `[data-highlight-id="${markerInfo.highlightId.replace(/"/g, '\\"')}"]`
-        ) as HTMLElement | null;
-        if (markerEl) {
-          markerEl.classList.add("streamed-content-active");
-          activeRemarkHighlightRef.current = markerEl;
-          try {
-            markerEl.scrollIntoView({ block: "center", behavior: "smooth" });
-          } catch {
-            // ignore smooth scroll failure
-          }
-          return true;
-        }
-      }
-      const normalize = (input: string) =>
-        (input || "")
-          .replace(/<[^>]*>/g, " ")
-          .replace(/[`*_#>\-()!~\[\]{}]/g, " ")
-          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】]/g, " ")
-          .replace(/\s+/g, "")
-          .toLowerCase()
-          .trim();
-      const buildTargets = (input: string) => {
-        const normalized = normalize(input);
-        const lines = (input || "")
-          .split("\n")
-          .map((line) => normalize(line))
-          .filter((line) => line.length >= 2);
-        const segments = (input || "")
-          .split(/[，。！？；：“”‘’、,.!?;:'"()（）【】\n]/)
-          .map((seg) => normalize(seg))
-          .filter((seg) => seg.length >= 2);
-        const seed = normalize((input || "").slice(0, 40));
-        return [normalized, seed, ...lines, ...segments].filter(Boolean);
-      };
-      const targets = [...buildTargets(newText ?? ""), ...buildTargets(oldText)]
-        .sort((a, b) => b.length - a.length)
-        .slice(0, 24);
-      if (targets.length === 0) return false;
-      const blocks = Array.from(
-        editorRoot.querySelectorAll("p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th")
-      ) as HTMLElement[];
-      let matchedBlock: HTMLElement | null = null;
-      let bestScore = 0;
-      for (const block of blocks) {
-        const blockText = normalize(block.textContent ?? "");
-        if (!blockText) continue;
-        for (const target of targets) {
-          const hit =
-            blockText.includes(target) ||
-            target.includes(blockText) ||
-            (target.length >= 6 && blockText.includes(target.slice(0, Math.min(12, target.length))));
-          if (!hit) continue;
-          const score = Math.min(blockText.length, target.length) + (target.length > 18 ? 8 : 0);
-          if (score > bestScore) {
-            bestScore = score;
-            matchedBlock = block;
-          }
-        }
-      }
-      if (!matchedBlock) {
-        const rawSeed = (newText || oldText || "").trim().slice(0, 24);
-        if (rawSeed) {
-          matchedBlock =
-            blocks.find((block) => (block.textContent || "").includes(rawSeed)) ||
-            null;
-        }
-      }
-      if (!matchedBlock) {
-        matchedBlock = blocks[0] ?? null;
-      }
-      if (!matchedBlock) return false;
-      matchedBlock.classList.add("remark-highlight-paragraph");
-      activeRemarkHighlightRef.current = matchedBlock;
-      try {
-        matchedBlock.scrollIntoView({ block: "center", behavior: "smooth" });
-      } catch {
-        // ignore smooth scroll failure
-      }
-      return true;
+      if (!highlightId) return false;
+      const editor = markdownEditorRef.current?.editor as
+        | { commands?: { setActiveTokenizerHighlight?: (id: string) => boolean } }
+        | null;
+      const activateCommand = editor?.commands?.setActiveTokenizerHighlight;
+      if (!activateCommand) return false;
+      return activateCommand(highlightId);
     },
     [clearRemarkHighlight]
   );
@@ -1698,20 +1616,35 @@ const MarkdownEditorPage = () => {
       if (!target || target.status !== "pending") return;
       const list = fileChangesMap[fileKey] ?? [];
       let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
+      const cleanBefore = removeAllHighlightMarkers(baseContent);
+      // 统一接受逻辑：先移除 marker，再按 old->new 应用替换。
+      // 即使 markerTarget 判断偏差，也不会出现“只去高亮但不替换正文”。
       if (target.markerInfo) {
-        if (target.markerTarget === "old") {
-          baseContent = replaceContentAndRemoveMarkers(baseContent, target.markerInfo, target.newString);
-        } else {
-          baseContent = removeHighlightMarkersAt(baseContent, target.markerInfo);
-        }
-      } else {
-        const { applied, nextContent } = applyChangeToContent(baseContent, target.oldString, target.newString);
-        if (!applied) {
-          toast.warning("未找到可替换的原文片段，无法应用该修改");
-          return;
-        }
-        baseContent = nextContent;
+        baseContent = removeHighlightMarkersAt(baseContent, target.markerInfo);
       }
+      const { applied, nextContent } = applyChangeToContent(baseContent, target.oldString, target.newString);
+      let finalContent = nextContent;
+      let changed = finalContent !== baseContent;
+
+      // 兜底：常规匹配未生效时，按 marker 强制替换该段，避免“触发了但没替换”。
+      if ((!applied || !changed) && target.markerInfo) {
+        const forcedContent = replaceContentAndRemoveMarkers(
+          useEditorStore.getState().serverData[fileKey] ?? "",
+          target.markerInfo,
+          target.newString
+        );
+        const forcedClean = removeAllHighlightMarkers(forcedContent);
+        if (forcedClean !== cleanBefore) {
+          finalContent = forcedClean;
+          changed = true;
+        }
+      }
+
+      if (!applied && !changed) {
+        toast.warning("未找到可替换的原文片段，无法应用该修改");
+        return;
+      }
+      baseContent = finalContent;
       const statusUpdated: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
         item.index === changeIndex
           ? { ...item, status: "accepted" as const, markerInfo: undefined, markerTarget: undefined }
@@ -1737,6 +1670,7 @@ const MarkdownEditorPage = () => {
       relabelPendingChanges,
       removeAllHighlightMarkers,
       removeHighlightMarkersAt,
+      replaceContentAndRemoveMarkers,
       setServerDataFile,
     ]
   );
@@ -1793,18 +1727,34 @@ const MarkdownEditorPage = () => {
     let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
     let appliedCount = 0;
     pending.forEach((item) => {
+      const cleanBefore = removeAllHighlightMarkers(baseContent);
+      let contentForApply = baseContent;
       if (item.markerInfo) {
-        if (item.markerTarget === "old") {
-          baseContent = replaceContentAndRemoveMarkers(baseContent, item.markerInfo, item.newString);
-        } else {
-          baseContent = removeHighlightMarkersAt(baseContent, item.markerInfo);
+        contentForApply = removeHighlightMarkersAt(contentForApply, item.markerInfo);
+      }
+      const { applied, nextContent } = applyChangeToContent(contentForApply, item.oldString, item.newString);
+      let finalContent = nextContent;
+      let changed = finalContent !== contentForApply;
+
+      if ((!applied || !changed) && item.markerInfo) {
+        const forcedContent = replaceContentAndRemoveMarkers(
+          baseContent,
+          item.markerInfo,
+          item.newString
+        );
+        const forcedClean = removeAllHighlightMarkers(forcedContent);
+        if (forcedClean !== cleanBefore) {
+          finalContent = forcedClean;
+          changed = true;
         }
-        appliedCount += 1;
+      }
+
+      if (!applied) {
+        // 至少保留去 marker 后/兜底替换后的内容，避免高亮残留导致后续继续失配
+        baseContent = changed ? finalContent : contentForApply;
         return;
       }
-      const { applied, nextContent } = applyChangeToContent(baseContent, item.oldString, item.newString);
-      if (!applied) return;
-      baseContent = nextContent;
+      baseContent = finalContent;
       appliedCount += 1;
     });
     const settledItems: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
@@ -1824,6 +1774,7 @@ const MarkdownEditorPage = () => {
     fileKey,
     removeAllHighlightMarkers,
     removeHighlightMarkersAt,
+    replaceContentAndRemoveMarkers,
     setServerDataFile,
   ]);
 
@@ -1935,11 +1886,7 @@ const MarkdownEditorPage = () => {
     let timerId: number | null = null;
     const tryHighlight = (attempt = 0) => {
       if (cancelled) return;
-      const highlighted = highlightChangeInEditor(
-        activeChange.oldString,
-        activeChange.newString,
-        activeChange.markerInfo
-      );
+      const highlighted = highlightChangeInEditor(activeChange.markerInfo?.highlightId);
       if (highlighted || attempt >= 8) return;
       timerId = window.setTimeout(() => tryHighlight(attempt + 1), 120);
     };
@@ -2557,7 +2504,7 @@ const MarkdownEditorPage = () => {
                       </div>
                     </div>
                     {!isEditorEditable && (
-                      <div className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
+                      <div contentEditable={false} className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"/>
                     )}
                   </div>
                 </ScrollArea>
@@ -2609,7 +2556,7 @@ const MarkdownEditorPage = () => {
                         clearRemarkHighlight();
                         return;
                       }
-                      highlightChangeInEditor(change.oldString, change.newString, change.markerInfo);
+                      highlightChangeInEditor(change.markerInfo?.highlightId);
                     }}
                   />
                 </div>
