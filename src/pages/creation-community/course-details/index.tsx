@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { Button } from '@/components/ui/Button'
 import { ScrollArea } from '@/components/ui/ScrollArea'
+import RenderRichText from '@/components/RichTextRender'
 
 dayjs.extend(utc)
 
@@ -114,11 +115,9 @@ const CourseDetailsPage = () => {
                     <span className="read-count">点赞量:{courseData.likeCount}</span>
                   </div>
 
-                  <div
+                  <RenderRichText
+                    content={courseData.content || ''}
                     className="course-detail-content mt-4 w-200 bg-gray-200 p-4 rounded-lg mb-8 whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{
-                      __html: courseData.content || '',
-                    }}
                   />
                 </>
               ) : loading ? (

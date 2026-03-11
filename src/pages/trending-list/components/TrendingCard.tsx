@@ -4,6 +4,8 @@ import { createWorkReq } from '@/api/works'
 import { KeywordsDetailDialog } from './KeywordsDetailDialog'
 import { SocialDetailDialog } from './SocialDetailDialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
+import RenderRichText from '@/components/RichTextRender'
+import { Iconfont } from "@/components/Iconfont";
 
 export interface KeywordsDetailData {
   name: string
@@ -118,7 +120,7 @@ export const TrendingCard = ({ title, icon, updateRange, words, onLoadingChange 
     <div className="trending-card flex w-[382px] flex-col gap-5 rounded-[30px]">
       <div className="trending-card-header flex h-[34px] items-end justify-between">
         <div className="card-title flex items-center text-[26px] font-semibold leading-[26px] text-[#333333]">
-          <span className="iconfont mr-1 text-[32px]" dangerouslySetInnerHTML={{ __html: icon }} />
+          <Iconfont unicode={icon} className="iconfont mr-1 text-[32px]" />
           <span>{title}</span>
         </div>
         <div className="date-range text-xs leading-3 text-(--text-secondary)">

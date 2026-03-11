@@ -7,6 +7,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import type { MessageDetail } from '../types'
+import RenderRichText from '@/components/RichTextRender'
 
 export interface MessageDetailDialogProps {
   open: boolean
@@ -36,9 +37,9 @@ export const MessageDetailDialog = ({
               <ScrollArea className="max-h-[500px]">
                 <div className="min-h-[100px] py-2">
                   {message.content?.trim() ? (
-                    <div
+                    <RenderRichText
+                      content={message.content}
                       className="message-content-text whitespace-pre-wrap text-sm"
-                      dangerouslySetInnerHTML={{ __html: message.content }}
                     />
                   ) : (
                     <div className="text-gray-500">暂无内容</div>

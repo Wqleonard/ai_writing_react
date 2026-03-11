@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { Button } from '@/components/ui/Button'
 import { ScrollArea } from '@/components/ui/ScrollArea'
+import RenderRichText from '@/components/RichTextRender'
 
 dayjs.extend(utc)
 
@@ -83,11 +84,9 @@ const ShareDetailsPage = () => {
                     </span>
                   </div>
 
-                  <div
+                  <RenderRichText
+                    content={detailData.content || ''}
                     className="share-detail-content mt-4 mb-8 w-full max-w-[800px] whitespace-pre-wrap rounded-lg bg-gray-200 p-4"
-                    dangerouslySetInnerHTML={{
-                      __html: detailData.content || '',
-                    }}
                   />
                 </>
               ) : null}
