@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils"
 import { useLoginStore } from "@/stores/loginStore";
 import { trackEvent } from "@/matomo/trackingMatomoEvent"
 
-type Placement = "top" | "bottom" | "left" | "right" | "top-start" | "top-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end" | "right-start" | "right-end"
 
 interface WorkType {
   id: string
@@ -72,41 +71,40 @@ function useDebouncedCallback<T extends (...args: any[]) => any>(
   )
 }
 
-function getPopoverSideAndAlign(
-  placement: Placement
-): { side: "top" | "right" | "bottom" | "left"; align: "start" | "center" | "end" } {
-  const [side, align] = placement.split("-") as [string, string | undefined]
-  return {
-    side: (side as "top" | "right" | "bottom" | "left") || "bottom",
-    align: align === "start" ? "start" : align === "end" ? "end" : "center",
-  }
-}
+type Side = "top" | "right" | "bottom" | "left"
+type  Align = "start" | "center" | "end"
 
 export interface AddNewWorkPopoverProps {
   /** 来源：Sidebar | Workspace，可用于埋点 */
   from?: "Sidebar" | "Workspace"
   popperClass?: string
   offset?: number
-  placement?: Placement
+  side?: Side
+  align?: Align
+  isSidebar?: boolean
   /** 自定义触发区域，不传则使用默认「创建新作品 +」按钮 */
   children?: React.ReactNode
 }
 
-export const AddNewWorkPopover = ({
-  popperClass = "",
-  offset = 4,
-  children,
-}: AddNewWorkPopoverProps) => {
+export const AddNewWorkPopover = (
+  {
+    popperClass = "",
+    offset = 4,
+    children,
+    side = "top",
+    align = 'center',
+    isSidebar = false
+  }: AddNewWorkPopoverProps) => {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const requireLogin = useLoginStore(s=>s.requireLogin)
+  const requireLogin = useLoginStore(s => s.requireLogin)
 
   const addNewWork = useCallback(async () => {
     try {
       setLoading(true)
-      const req = await createWorkReq()
+      const req = await createWorkReq('editor')
       if (!req?.id) return
       navigate(`/editor/${req.id}`, { state: { isNew: true } })
     } catch {
@@ -119,9 +117,9 @@ export const AddNewWorkPopover = ({
   const addNewQuickWork = useCallback(async () => {
     try {
       setLoading(true)
-      const req = await createWorkReq("editor")
+      const req = await createWorkReq("doc")
       if (req?.id) {
-        navigate(`/quick-editor/${req.id}`, { state: { isNew: true } })
+        await navigate(`/quick-editor/${req.id}`, { state: { isNew: true } })
       }
     } catch {
       toast.error("创建作品失败，请稍后重试")
@@ -130,9 +128,19 @@ export const AddNewWorkPopover = ({
     }
   }, [navigate])
 
-  const addNewScript = useCallback(() => {
-    toast.info("功能开发中，敬请期待！")
-  }, [])
+  const addNewScript = useCallback(async () => {
+    try {
+      setLoading(true)
+      const req = await createWorkReq("script")
+      if (req?.id) {
+        navigate(`/script-editor/${req.id}`, { state: { isNew: true } })
+      }
+    } catch {
+      toast.error("创建作品失败，请稍后重试")
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
 
   const debouncedAddNewWork = useDebouncedCallback(
     () => requireLogin(addNewWork),
@@ -154,24 +162,41 @@ export const AddNewWorkPopover = ({
     (type: WorkType) => {
       switch (type.id) {
         case "short-story":
-          trackEvent('Story Creation', 'Click', 'Common New from Sidebar')
+          if (isSidebar){
+            trackEvent('Story Creation', 'Click', 'Common New from Sidebar')
+          } else {
+            trackEvent('Story Creation', 'Click', 'Common New from Workspace')
+          }
           debouncedAddNewWork()
           break
         case "short-story-quick":
-          // toast.info('敬请期待')
+          if (isSidebar){
+            trackEvent('Story Creation', 'Click', 'Quick New from Sidebar')
+          } else {
+            trackEvent('Story Creation', 'Click', 'Quick New from Workspace')
+          }
           debouncedAddNewQuickWork()
           break
         case "short-play-quick":
-          toast.info('敬请期待')
-          // debouncedAddNewScript()
+          if (isSidebar){
+            trackEvent('Story Creation', 'Click', 'Script New from Sidebar')
+          } else {
+            trackEvent('Story Creation', 'Click', 'Script New from Workspace')
+          }
+          debouncedAddNewScript()
           break
         default:
+          if (isSidebar){
+            trackEvent('Story Creation', 'Click', 'Common New from Sidebar')
+          } else {
+            trackEvent('Story Creation', 'Click', 'Common New from Workspace')
+          }
           debouncedAddNewWork()
           break
       }
       setOpen(false)
     },
-    [debouncedAddNewWork]
+    [debouncedAddNewQuickWork, debouncedAddNewScript, debouncedAddNewWork, isSidebar]
   )
 
   const triggerButton = children ?? (
@@ -200,8 +225,8 @@ export const AddNewWorkPopover = ({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
         <PopoverContent
-          align="start"
-          side="right"
+          align={align}
+          side={side}
           sideOffset={offset}
           className={cn(
             "w-[160px] rounded-xl p-0 shadow-[0_4px_12px_rgba(0,0,0,0.15)]",

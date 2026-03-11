@@ -276,9 +276,11 @@ export function WorkspaceSidebar() {
 
         {/* 创建新作品按钮（与 Vue MainSidebar 用法一致） */}
         <AddNewWorkPopover
+          isSidebar
           popperClass="add-new-work-popover-sidebar"
           offset={-4}
-          placement="bottom-end"
+          side='right'
+          align='start'
         >
           <div
             className="mt-3 flex h-10 w-full bg-[#EFAF00] cursor-pointer items-center justify-center gap-2 rounded-lg text-base font-semibold text-black">

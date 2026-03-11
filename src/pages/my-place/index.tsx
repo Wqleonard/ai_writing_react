@@ -29,7 +29,7 @@ import { Input } from '@/components/ui/Input'
 import { useLLM } from '@/hooks/useLLM'
 import { useChatInputStore } from '@/stores/chatInputStore'
 import { MyWorks } from './components/MyWorks'
-import { AddNewWorkPopover } from './components/AddNewWorkPopover'
+import { AddNewWorkPopover } from '@/components/AddNewWorkPopover'
 import { MessageDetailDialog } from './components/MessageDetailDialog'
 import { ProChatContainer } from '@/components/ProChatContainer'
 import { CreationInput, type CreationInputProps } from './components/CreationInput'
@@ -509,7 +509,7 @@ export default function MyPlacePage() {
               </div>
 
               <div className="works-grid grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-4 pt-2">
-                <AddNewWorkPopover placement="top" offset={-50}>
+                <AddNewWorkPopover side="top" align='end' offset={-50}>
                   <div
                     className="add-work flex h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-[#d9d9d9] text-[#c2c2c2] hover:shadow-md">
                     <span className="iconfont text-xl">&#xe60d;</span>

@@ -12,6 +12,8 @@ export type MatomoEventSpec =
         | 'Quick New from Workspace'
         | 'Common New from Workspace'
         | 'Common New from Chat'
+        | 'Script New from Sidebar'
+        | 'Script New from Workspace'
     }
   | { category: 'Drama Creation'; action: 'Click'; name: 'New' }
   | { category: 'AI Chat'; action: 'Generate'; name: 'Message Send' }

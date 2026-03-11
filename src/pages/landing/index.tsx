@@ -55,6 +55,20 @@ export default function LandingPage() {
       setIsCreatingWork(false)
     }
   }, [isCreatingWork, navigate])
+  
+  const addScript = useCallback(async () => {
+    if (isCreatingWork) return
+    try {
+      const req = await createWorkReq("script")
+      if (req?.id) {
+        navigate(`/script-editor/${req.id}`, { state: { isNew: true } })
+      }
+    } catch {
+      toast.error("创建作品失败，请稍后重试")
+    } finally {
+      setLoading(false)
+    }
+  },[isCreatingWork, navigate])
 
   const addWorkEditor = useCallback(async () => {
     if (isCreatingWork) return
@@ -71,18 +85,19 @@ export default function LandingPage() {
     }
   }, [isCreatingWork, navigate])
 
-  const handleShortStoryClick = () => {
-    toast.info('暂未开放')
-    // requireLogin(addWork)
+  const handleShortStoryClick = async () => {
+    trackEvent('Story Creation', 'Click', 'Quick New From Landing')
+    await requireLogin(addWork)
   }
 
-  const handleScriptClick = () => {
-    toast.info('暂未开放')
+  const handleScriptClick = async () => {
+    trackEvent('Story Creation', 'Click', 'Script New From Landing')
+    await requireLogin(addScript)
   }
 
-  const handleProfessionalClick = () => {
+  const handleProfessionalClick = async () => {
     trackEvent('Story Creation', 'Click', "Common New from Landing")
-    requireLogin(addWorkEditor)
+    await requireLogin(addWorkEditor)
   }
 
   return (
