@@ -747,7 +747,7 @@ const MarkdownEditorPage = () => {
   }, []);
 
   const sendChatText = useCallback(
-    (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
+    async (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
       const message = text.trim();
       if (!message && !options?.command) return;
       let sessionId = chatCurrentSession?.id ?? "";
@@ -768,6 +768,10 @@ const MarkdownEditorPage = () => {
           selectedTexts: selectedTexts.length > 0 ? [...selectedTexts] : undefined,
         };
         addMessageToDualTab("chat", userMessage as DualTabChatMessage);
+        // 与 Vue 行为对齐：用户消息发送前落一次版本（saveStatus: "2"）
+        if (workId) {
+          await useEditorStore.getState().saveEditorData("2");
+        }
       }
 
       if (workId && sessionId) {
@@ -844,6 +848,7 @@ const MarkdownEditorPage = () => {
   // editor 相关
   const workInfo = useEditorStore((s) => s.workInfo);
   const serverData = useEditorStore((s) => s.serverData);
+  const editorTreeData = useEditorStore((s) => s.treeData);
   const currentContent = useEditorStore((s) => s.currentContent);
   const currentEditingId = useEditorStore((s) => s.currentEditingId);
   const currentEditingNode = useEditorStore((s) => s.currentEditingNode);
@@ -894,6 +899,7 @@ const MarkdownEditorPage = () => {
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
   const lastAutoLoadSessionKeyRef = useRef<string>("");
+  const skipTreeAutoSaveRef = useRef(true);
 
   // 标题（当前文件名）编辑：与 Vue startEditingLabel / saveLabelEdit / cancelLabelEdit 对齐
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -930,6 +936,36 @@ const MarkdownEditorPage = () => {
     faqCurrentSession,
     loadLatestSession,
   ]);
+
+  useEffect(() => {
+    // 切换作品或首次加载后，跳过第一次 tree 变化引发的自动保存
+    skipTreeAutoSaveRef.current = true;
+  }, [workId]);
+
+  // 与 Vue 编辑器行为对齐：文件树/内容有变更时触发自动保存
+  useEffect(() => {
+    if (skipTreeAutoSaveRef.current) {
+      skipTreeAutoSaveRef.current = false;
+      return;
+    }
+    if (workInfo?.stage === "blank") return;
+    void saveEditorData("1", false);
+  }, [editorTreeData, workInfo?.stage, saveEditorData]);
+
+  // 与 Vue 对齐：生产环境每 5 分钟自动保存一次
+  useEffect(() => {
+    if (import.meta?.env?.DEV) return;
+    const timer = window.setInterval(() => {
+      const { workInfo: latestWorkInfo, saveEditorData: saveLatestEditorData } = useEditorStore.getState();
+      if (latestWorkInfo?.stage !== "blank") {
+        void saveLatestEditorData("1");
+      }
+    }, 1000 * 60 * 5);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   // 页面卸载时再重置 editor store
   useEffect(() => {
@@ -1138,6 +1174,8 @@ const MarkdownEditorPage = () => {
   ]);
 
   const handleSaveClick = useCallback(async () => {
+    const canProceed = await checkStreamingStatusAndConfirm(true);
+    if (!canProceed) return;
     await saveEditorData("0", true);
   }, [saveEditorData]);
 
@@ -1482,6 +1520,33 @@ const MarkdownEditorPage = () => {
     },
     [streamingTaskStatus, handleStopStreaming, clearRemarkHighlight, confirm]
   );
+
+  // 浏览器关闭/刷新前的同步拦截（beforeunload 仅支持同步逻辑）
+  const handleBeforeUnload = useCallback((event: BeforeUnloadEvent) => {
+    if (streamingTaskStatus === "streaming") {
+      event.preventDefault();
+      event.returnValue = "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？";
+      return event.returnValue;
+    }
+    if (streamingTaskStatus === "hilt_pending") {
+      event.preventDefault();
+      event.returnValue = "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？";
+      return event.returnValue;
+    }
+    if (streamingTaskStatus === "edit_pending") {
+      event.preventDefault();
+      event.returnValue = "检测到当前内容仍有未确认变更，会默认帮您接受，是否继续？";
+      return event.returnValue;
+    }
+    return undefined;
+  }, [streamingTaskStatus]);
+
+  useEffect(() => {
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [handleBeforeUnload]);
 
   const highlightChangeInEditor = useCallback(
     (oldText: string, newText?: string) => {
@@ -2205,7 +2270,7 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={!isEditorEditable}
+                              readonly={false}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
@@ -2345,9 +2410,9 @@ const MarkdownEditorPage = () => {
                       : chatMessages
                   }
                   sessionId={chatCurrentSession?.id ?? ""}
-                  onSendMessage={(msg: ChatMessage) => {
-                    sendChatText(msg.content ?? "", { addUserMessage: true });
-                  }}
+                  onSendMessage={(msg: ChatMessage) =>
+                    sendChatText(msg.content ?? "", { addUserMessage: true })
+                  }
                   onSaveCurrentSession={() => saveCurrentSession("chat")}
                   checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
                   isHomePage={false}
@@ -2458,9 +2523,9 @@ const MarkdownEditorPage = () => {
                                   });
                                   sendChatText("", { command: "approve", addUserMessage: false });
                                 }}
-                                onSendMessage={(text, reload = false) => {
-                                  sendChatText(text, { reload, addUserMessage: !reload });
-                                }}
+                                onSendMessage={(text, reload = false) =>
+                                  sendChatText(text, { reload, addUserMessage: !reload })
+                                }
                               />
                             ) : (
                               <>
