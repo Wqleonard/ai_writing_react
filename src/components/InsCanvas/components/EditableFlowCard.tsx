@@ -4,8 +4,7 @@ import { RefreshCw, Trash2, Pencil, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { AutoScrollArea } from "@/components/AutoScrollArea/AutoScrollArea";
-import MarkdownEditor from "@/components/MarkdownEditor";
-import type { MarkdownEditorRef } from "@/components/MarkdownEditor";
+import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import type { CustomNodeData } from "@/components/InsCanvas/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
@@ -57,11 +56,22 @@ export default function EditableFlowCard({
   const editContentRef = useRef(editContent);
   /** 编辑态下由 onChange 写入，仅作缓存不触发重渲染；onBlur 时以 getMarkdown() 为准，此 ref 作兜底 */
   const editingContentRef = useRef("");
+  /** 编辑态实时写回（debounce），避免“保存按钮读取到旧 content” */
+  const realtimeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 进入编辑后，若接口回写 data.content，且用户未改动（dirty=false），允许同步到输入框
   const editDirtyRef = useRef(false);
   useEffect(() => {
     editContentRef.current = editContent;
   }, [editContent]);
+
+  useEffect(() => {
+    return () => {
+      if (realtimeSaveTimerRef.current) {
+        clearTimeout(realtimeSaveTimerRef.current);
+        realtimeSaveTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 流式结束时我们会先 setEditContent 再写回节点数据；在父层回写前避免被旧 props 覆盖
   const pendingCommitRef = useRef<string | null>(null);
@@ -227,6 +237,10 @@ export default function EditableFlowCard({
 
   const handleBlur = () => {
     if (isEditing) {
+      if (realtimeSaveTimerRef.current) {
+        clearTimeout(realtimeSaveTimerRef.current);
+        realtimeSaveTimerRef.current = null;
+      }
       // 以编辑器实例为准；ref 可能在 IME 组合时未更新，仅作兜底
       const finalContent =
         editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent);
@@ -290,6 +304,10 @@ export default function EditableFlowCard({
   }, [isEditing, handleBlur]);
 
   const handleCancel = () => {
+    if (realtimeSaveTimerRef.current) {
+      clearTimeout(realtimeSaveTimerRef.current);
+      realtimeSaveTimerRef.current = null;
+    }
     editDirtyRef.current = false;
     setEditContent(data.content || "");
     setIsEditing(false);
@@ -441,7 +459,7 @@ export default function EditableFlowCard({
         "bg-card shadow-sm border border-border",
         "group transition-all duration-200 ease-out",
         // 展开时加宽并适度增高，方便阅读更多内容
-        isExpanded ? "w-[1120px] h-[500px]" : "w-[250px] min-h-[200px]",
+        isExpanded ? "w-[750px] h-[500px]" : "w-[250px] min-h-[200px]",
         "min-h-[200px]",
         isEditing && "nodrag nopan"
       )}
@@ -519,7 +537,6 @@ export default function EditableFlowCard({
                   readonly={!isEditing}
                   value={isEditing ? editContent : bodyContent}
                   placeholder=""
-                  loading={isStreaming && !isEditing}
                   minHeight={0}
                   onChange={
                     isEditing
@@ -527,13 +544,22 @@ export default function EditableFlowCard({
                         editDirtyRef.current = true;
                         editingContentRef.current = md;
                         // 不 setEditContent，避免重渲染导致光标/IME 问题；失焦时用 getMarkdown() 回写
+                        if (realtimeSaveTimerRef.current) {
+                          clearTimeout(realtimeSaveTimerRef.current);
+                        }
+                        realtimeSaveTimerRef.current = setTimeout(() => {
+                          realtimeSaveTimerRef.current = null;
+                          const latest = editingContentRef.current || editContentRef.current || "";
+                          updateNodeData(id, { content: latest });
+                          onUpdate(id, latest);
+                        }, 300);
                       }
                       : undefined
                   }
                   onBlur={isEditing ? handleBlur : undefined}
                   onKeyDown={
                     isEditing
-                      ? (e) => {
+                      ? (e: KeyboardEvent) => {
                         if (e.key === "Escape") {
                           e.preventDefault();
                           handleCancel();
