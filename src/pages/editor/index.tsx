@@ -2553,6 +2553,7 @@ const MarkdownEditorPage = () => {
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
                               needSelectionToolbar
+                              minHeight={400}
                             />
                           </div>
                         </div>
