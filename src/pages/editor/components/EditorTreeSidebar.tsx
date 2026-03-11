@@ -179,22 +179,22 @@ interface TreeNodeRowProps {
 }
 
 const TreeNodeRow = React.memo(({
-  node,
-  newNodeIdMap,
-  level,
-  currentKey,
-  onMarkNodeAsRead,
-  onAddFile,
-  onContextMenu,
-  expandedIds,
-  onToggleExpand,
-  dragState,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onDragEnd,
-}: TreeNodeRowProps) => {
+                                  node,
+                                  newNodeIdMap,
+                                  level,
+                                  currentKey,
+                                  onMarkNodeAsRead,
+                                  onAddFile,
+                                  onContextMenu,
+                                  expandedIds,
+                                  onToggleExpand,
+                                  dragState,
+                                  onDragStart,
+                                  onDragOver,
+                                  onDragLeave,
+                                  onDrop,
+                                  onDragEnd,
+                                }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
   const showNewBadge = newNodeIdMap[node.id]
   const isSelected = currentKey === node.id
@@ -232,11 +232,11 @@ const TreeNodeRow = React.memo(({
           isDir && "cursor-pointer",
           isDragged && "opacity-50 scale-[0.98]",
           showDropLine &&
-            dragState.dropPosition === "above" &&
-            "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-(--theme-color) before:content-['']",
+          dragState.dropPosition === "above" &&
+          "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-(--theme-color) before:content-['']",
           showDropLine &&
-            dragState.dropPosition === "below" &&
-            "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-(--theme-color) after:content-['']"
+          dragState.dropPosition === "below" &&
+          "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-(--theme-color) after:content-['']"
         )}
         style={{ paddingLeft: 8 + level * 16 }}
         onClick={(e) => {
@@ -265,10 +265,11 @@ const TreeNodeRow = React.memo(({
         >
           {isDir ? (
             <div className="flex size-3.5 items-center justify-center">
-              <IconFont unicode="&#xeaa5;" className="select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90" />
+              <IconFont unicode="&#xeaa5;"
+                        className="select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90"/>
             </div>
           ) : (
-            <span className="w-2" />
+            <span className="w-2"/>
           )}
         </div>
         <IconFont
@@ -280,7 +281,8 @@ const TreeNodeRow = React.memo(({
             {node.label}
           </div>
           {showNewBadge && (
-            <span className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
+            <span
+              className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
               new
             </span>
           )}
@@ -312,26 +314,26 @@ const TreeNodeRow = React.memo(({
       {isDir && (
         <Collapsible open={expanded} className="w-full">
           <CollapsibleContent className="w-full">
-          {node.children.map((child) => (
-            <TreeNodeRow
-              key={child.id}
-              node={child}
-              newNodeIdMap={newNodeIdMap}
-              level={level + 1}
-              currentKey={currentKey}
-              onMarkNodeAsRead={onMarkNodeAsRead}
-              onAddFile={onAddFile}
-              onContextMenu={onContextMenu}
-              expandedIds={expandedIds}
-              onToggleExpand={onToggleExpand}
-              dragState={dragState}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              onDragEnd={onDragEnd}
-            />
-          ))}
+            {node.children.map((child) => (
+              <TreeNodeRow
+                key={child.id}
+                node={child}
+                newNodeIdMap={newNodeIdMap}
+                level={level + 1}
+                currentKey={currentKey}
+                onMarkNodeAsRead={onMarkNodeAsRead}
+                onAddFile={onAddFile}
+                onContextMenu={onContextMenu}
+                expandedIds={expandedIds}
+                onToggleExpand={onToggleExpand}
+                dragState={dragState}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onDragEnd={onDragEnd}
+              />
+            ))}
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -374,8 +376,8 @@ export interface EditorTreeSidebarProps {
 }
 
 export const EditorTreeSidebar = ({
-  className,
-}: EditorTreeSidebarProps) => {
+                                    className,
+                                  }: EditorTreeSidebarProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
   const treeData = useEditorStore((s) => s.treeData)
@@ -387,6 +389,7 @@ export const EditorTreeSidebar = ({
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setTreeData = useEditorStore((s) => s.setTreeData)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
+  const updateWorkInfo = useEditorStore((s) => s.updateWorkInfo)
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitleValue, setEditingTitleValue] = useState(workInfo.title)
@@ -457,14 +460,14 @@ export const EditorTreeSidebar = ({
         max: Number(group?.max ?? 0),
         tags: Array.isArray(group?.tags)
           ? group.tags.map((tag: any) => ({
-              id: tag?.id,
-              name: String(tag?.name ?? ""),
-              isOfficial: String(tag?.userId ?? "") === "1",
-              category: String(group?.category ?? ""),
-              categoryId: String(group?.categoryId ?? ""),
-              max: Number(group?.max ?? 0),
-              userId: tag?.userId,
-            }))
+            id: tag?.id,
+            name: String(tag?.name ?? ""),
+            isOfficial: String(tag?.userId ?? "") === "1",
+            category: String(group?.category ?? ""),
+            categoryId: String(group?.categoryId ?? ""),
+            max: Number(group?.max ?? 0),
+            userId: tag?.userId,
+          }))
           : [],
       }))
       setTagCategories(next)
@@ -500,30 +503,16 @@ export const EditorTreeSidebar = ({
       const selectedTagIds = selectedTags
         .map((tag) => Number(tag.id))
         .filter((id) => Number.isFinite(id))
-      setWorkInfo({ workTags: selectedTags.map((tag) => ({
-        id: Number(tag.id),
-        name: tag.name,
-        userId: String(tag.userId ?? ""),
-        categoryId: tag.categoryId,
-      })) })
-      setWorkInfo({
-        workTags: selectedTags
-          .map((tag) => ({
-            id: Number(tag.id),
-            name: tag.name,
-            userId: String(tag.userId ?? ""),
-            categoryId: tag.categoryId,
-          }))
-          .filter((tag) => Number.isFinite(tag.id)),
-      })
+      await updateWorkInfoReq(workId, { tagIds: selectedTagIds })
       setTagSelectDialogOpen(false)
+      await updateWorkInfo()
     } catch (error) {
       console.error(error)
       toast.error("保存失败,请稍后重试")
     } finally {
       setTagSaving(false)
     }
-  }, [selectedTags, setWorkInfo, tagSaving, workId])
+  }, [selectedTags, tagSaving, updateWorkInfo, workId])
 
   const handleFinishTitle = useCallback(() => {
     const v = editingTitleValue.trim()
@@ -720,7 +709,7 @@ export const EditorTreeSidebar = ({
     }
     toast.success(`已重命名为: ${newName}`)
     setRenameOpen(false)
-    setRenameTarget(null) 
+    setRenameTarget(null)
     setRenameValue("")
   }, [renameTarget, renameValue, getSiblings, saveEditorData, setTreeData, treeData, currentEditingId, setCurrentEditingId])
 
@@ -942,7 +931,8 @@ export const EditorTreeSidebar = ({
             {workInfo.title || "未命名作品"}
           </div>
         )}
-        <div className="mt-1 max-h-8 overflow-x-auto overflow-y-hidden scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className="mt-1 max-h-8 overflow-x-auto overflow-y-hidden scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div
             ref={tagsGroupRef}
             className={clsx(
@@ -1035,7 +1025,7 @@ export const EditorTreeSidebar = ({
               title="添加文件夹"
               onClick={addFolderAtRoot}
             >
-              <IconFont unicode="\ue62d" className="text-2xl" />
+              <IconFont unicode="\ue62d" className="text-2xl"/>
             </div>
           </TooltipTrigger>
           <TooltipContent side='top' align='center'>
@@ -1051,7 +1041,7 @@ export const EditorTreeSidebar = ({
               title="添加文件"
               onClick={addFileAtRoot}
             >
-              <IconFont unicode="\ue62c" className="text-2xl" />
+              <IconFont unicode="\ue62c" className="text-2xl"/>
             </div>
           </TooltipTrigger>
           <TooltipContent side='top' align='center'>
@@ -1068,18 +1058,19 @@ export const EditorTreeSidebar = ({
                   tabIndex={0}
                   className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
                   title="导出作品"
-                  onClick={()=>{
+                  onClick={() => {
                     setExportPopoverOpen(true)
                   }}
                 >
-                  <IconFont unicode="\ue62e" className="text-2xl" />
+                  <IconFont unicode="\ue62e" className="text-2xl"/>
                 </div>
               </TooltipTrigger>
             </PopoverAnchor>
             <TooltipContent side="top">导出作品</TooltipContent>
           </Tooltip>
-          <PopoverContent side="top" align='center' className="rounded-md w-auto p-0 border border-(--border-color) shadow-lg editor-sidebar-export-popover">
-            <ExportWorkMenu onClose={() => setExportPopoverOpen(false)} />
+          <PopoverContent side="top" align='center'
+                          className="rounded-md w-auto p-0 border border-(--border-color) shadow-lg editor-sidebar-export-popover">
+            <ExportWorkMenu onClose={() => setExportPopoverOpen(false)}/>
           </PopoverContent>
         </Popover>
       </div>
@@ -1103,7 +1094,7 @@ export const EditorTreeSidebar = ({
               >
                 添加文件夹
               </div>
-              <div        
+              <div
                 role="button"
                 tabIndex={0}
                 className="cursor-pointer rounded-xs px-4 py-1 text-sm text-[#606266] hover:bg-(--bg-hover)"
@@ -1114,7 +1105,7 @@ export const EditorTreeSidebar = ({
               >
                 添加文件
               </div>
-              <div className="my-1 h-px bg-[#e4e7ed]" />
+              <div className="my-1 h-px bg-[#e4e7ed]"/>
             </>
           )}
           <div
@@ -1195,7 +1186,7 @@ export const EditorTreeSidebar = ({
           </DialogHeader>
           <div className="delete-dialog-content flex items-start gap-3">
             <div className="warning-icon mt-0.5 shrink-0">
-              <TriangleAlert className="size-6 text-[#f56c6c]" />
+              <TriangleAlert className="size-6 text-[#f56c6c]"/>
             </div>
             <div className="warning-text flex-1">
               <p className="mb-2 text-sm text-foreground last:mb-0">
