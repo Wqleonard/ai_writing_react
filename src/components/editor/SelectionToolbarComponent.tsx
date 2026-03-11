@@ -6,7 +6,9 @@ import IconFont from "@/components/Iconfont/Iconfont";
 import { StreamIndicator } from "@/components/StreamIndicator";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-export type SelectionToolbarAction = "edit" | "expand" |  "add" | "note" | "image";
+import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
+
+export type SelectionToolbarAction = "edit" | "expand" | "add" | "note" | "image";
 
 type ChatItem = {
   role: "ai" | "human";
@@ -234,6 +236,18 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
   };
 
   const handleAccept = () => {
+    switch (chatType) {
+      case "edit":
+        trackEvent('Editor Tool', 'Use', 'Rewrite')
+        break;
+      case 'expand':
+        trackEvent('Editor Tool', 'Use', 'Expand')
+        break;
+      case 'image':
+        trackEvent('Editor Tool', 'Use', 'Picture')
+        break;
+    }
+
     const snapshot = selectionRef.current;
     const aiMessage = chatArr.find((item) => item.role === "ai");
     const content = aiMessage?.content?.trim();
@@ -292,6 +306,20 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
   };
 
   const handleBtnClick = (action: SelectionToolbarAction) => {
+    switch (action) {
+      case "edit":
+        trackEvent('Editor Tool', 'Generate', 'Rewrite')
+        break;
+      case 'expand':
+        trackEvent('Editor Tool', 'Generate', 'Expand')
+        break;
+      case 'image':
+        trackEvent('Editor Tool', 'Generate', 'Picture')
+        break
+      case 'add':
+        trackEvent('Editor Tool', 'Use', 'Add to Chat')
+        break;
+    }
     const selection = getSelection();
     if (!selection) return;
     selectionRef.current = selection;
@@ -318,7 +346,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
     return () => {
       closePanel(false);
     }
-  },[])
+  }, [])
 
   return (
     <div
@@ -335,7 +363,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
               onClick={() => handleBtnClick(btn)}
               className="flex h-7 cursor-pointer items-center rounded-[6px] px-2 text-[#61615f] hover:bg-[#e8e8e8]"
             >
-              <IconFont unicode={actionIconMap[btn] || ""} className="h-5 w-5 text-center leading-5" />
+              <IconFont unicode={actionIconMap[btn] || ""} className="h-5 w-5 text-center leading-5"/>
               <span className="ml-1 text-base">{actionLabelMap[btn]}</span>
             </button>
           ))}
@@ -351,7 +379,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleBack}
                 >
-                  <IconFont unicode="&#xeaa2;" className="h-6 w-6 text-center text-2xl leading-6" />
+                  <IconFont unicode="&#xeaa2;" className="h-6 w-6 text-center text-2xl leading-6"/>
                 </button>
                 <span className="ml-2">{actionLabelMap[chatType]}</span>
               </div>
@@ -362,7 +390,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => closePanel()}
               >
-                <IconFont unicode="&#xe633;" className="h-6 w-6 text-center text-base " />
+                <IconFont unicode="&#xe633;" className="h-6 w-6 text-center text-base "/>
               </Button>
             </div>
           </div>
@@ -378,7 +406,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 </div>
               ) : chat.contentType === "image" ? (
                 <div key={`ai-image-${idx}`} className="flex flex-col gap-1">
-                  <img src={chat.content} alt="生成图片" className="w-[150px] object-cover" />
+                  <img src={chat.content} alt="生成图片" className="w-[150px] object-cover"/>
                   {chat.end && (
                     <div className="flex flex-row gap-1">
                       <button
@@ -397,7 +425,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 </div>
               )
             )}
-            {chatLoading && <StreamIndicator className="ml-2.5 h-9!" />}
+            {chatLoading && <StreamIndicator className="ml-2.5 h-9!"/>}
           </div>
 
           {(chatType === "edit" || chatType === "expand") && chatArr.length === 0 && (
@@ -420,7 +448,7 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 className="h-9 w-9 shrink-0 cursor-pointer rounded-full bg-[#fa9e00] text-white hover:opacity-80"
                 onClick={() => void handleInputSend()}
               >
-                <IconFont unicode="&#xe63a;" className="inline-block -scale-x-100 text-xl leading-9" />
+                <IconFont unicode="&#xe63a;" className="inline-block -scale-x-100 text-xl leading-9"/>
               </button>
             </div>
           )}
@@ -432,14 +460,14 @@ export default function SelectionToolbarComponent(props: SelectionToolbarCompone
                 className="h-9 w-9 cursor-pointer rounded-full bg-[#fa9e00] text-white hover:opacity-80"
                 onClick={handleAccept}
               >
-                <IconFont unicode="&#xe610;" className="text-xl leading-9" />
+                <IconFont unicode="&#xe610;" className="text-xl leading-9"/>
               </button>
               <button
                 type="button"
                 className="h-9 w-9 cursor-pointer rounded-full bg-[#e8e8e8] text-white hover:opacity-80"
                 onClick={handleResetChat}
               >
-                <IconFont unicode="&#xe66f;" className="text-xl leading-9" />
+                <IconFont unicode="&#xe66f;" className="text-xl leading-9"/>
               </button>
             </div>
           )}
