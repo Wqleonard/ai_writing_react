@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
 import { resetLLMState, useLLM } from "@/hooks/useLLM";
+import useMarkdownEditor, { type HighlightMarkerInfo } from "@/hooks/useMarkdownEditor";
 import type {
   ChatMessage,
   FileItem as FileItemType,
@@ -184,7 +185,10 @@ const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate
   };
 };
 
-type FileChangesMap = Record<string, EditorChangeItem[]>;
+type EditorFileChangeItem = EditorChangeItem & {
+  markerInfo?: HighlightMarkerInfo;
+};
+type FileChangesMap = Record<string, EditorFileChangeItem[]>;
 
 const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   fontSize: 22,
@@ -258,6 +262,9 @@ const findRangeIgnoringWhitespace = (source: string, target: string) => {
   if (start === undefined || end === undefined) return null;
   return { start, endExclusive: end + 1 };
 };
+
+const normalizeFilePath = (value: string) =>
+  (value || "").replace(/^\.?\//, "").trim();
 
 const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string, string> => {
   const normalized: Record<string, string> = { ...files };
@@ -370,6 +377,53 @@ const MarkdownEditorPage = () => {
   const stoppedByUserRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [todosExpanded, setTodosExpanded] = useState(true);
+  const {
+    findTextInMarkdown,
+    insertHighlightMarkers,
+    removeHighlightMarkersAt,
+    removeAllHighlightMarkers,
+    replaceContentAndRemoveMarkers,
+    removeHtmlTags,
+  } = useMarkdownEditor();
+
+  const relabelPendingChanges = useCallback(
+    (rawContent: string, pendingItems: EditorFileChangeItem[]) => {
+      let contentWithMarkers = removeAllHighlightMarkers(rawContent ?? "");
+      const insertedMarkers: HighlightMarkerInfo[] = [];
+      const relabeledPending = pendingItems.map((item) => {
+        const nextItem: EditorFileChangeItem = {
+          ...item,
+          markerInfo: undefined,
+          markerTarget: undefined,
+        };
+        const candidateTexts: Array<{ text: string; target: "new" | "old" }> = [
+          { text: item.newString ?? "", target: "new" },
+          { text: item.oldString ?? "", target: "old" },
+        ];
+        let applied = false;
+        for (const candidate of candidateTexts) {
+          if (!candidate.text) continue;
+          const targetIndex = findTextInMarkdown(contentWithMarkers, candidate.text, insertedMarkers);
+          if (targetIndex === -1) continue;
+          const insertResult = insertHighlightMarkers(contentWithMarkers, candidate.text, targetIndex);
+          if (!insertResult) continue;
+          contentWithMarkers = insertResult.newContent;
+          insertedMarkers.push(insertResult.markerInfo);
+          nextItem.markerInfo = insertResult.markerInfo;
+          nextItem.markerTarget = candidate.target;
+          applied = true;
+          break;
+        }
+        if (!applied) {
+          nextItem.markerInfo = undefined;
+          nextItem.markerTarget = undefined;
+        }
+        return nextItem;
+      });
+      return { contentWithMarkers, relabeledPending };
+    },
+    [findTextInMarkdown, insertHighlightMarkers, removeAllHighlightMarkers]
+  );
 
   const langGraphStream = useLangGraphStream({
     onMessagesUpdate: (messages) => {
@@ -390,38 +444,104 @@ const MarkdownEditorPage = () => {
       });
     },
     onUpdateFiles: (files, fileId, editInfoList) => {
-      const mergedFiles = { ...useEditorStore.getState().serverData, ...files };
+      const currentServerData = useEditorStore.getState().serverData;
+      let targetFileId = normalizeFilePath(fileId || "");
+      if (!targetFileId && currentEditingId && files[currentEditingId] !== undefined) {
+        targetFileId = currentEditingId;
+      }
+      if (!targetFileId && Array.isArray(editInfoList) && editInfoList.length > 0) {
+        const fromEditInfo = editInfoList.find((item) => item?.file_path)?.file_path;
+        if (fromEditInfo) {
+          targetFileId = normalizeFilePath(fromEditInfo);
+        }
+      }
+
+      const hasOldPendingEdits =
+        !!targetFileId &&
+        (fileChangesMap[targetFileId] ?? []).some((item) => item.status === "pending");
+
+      // edit_file 场景：先保留旧正文用于高亮与人工确认，避免后端 files 直接覆盖 oldString。
+      // 只有在点击“接受”后，才通过 handleAcceptChange 真正替换文本。
+      const pendingEditPaths = new Set<string>();
+      if (Array.isArray(editInfoList)) {
+        editInfoList.forEach((item) => {
+          if (item?.file_path) pendingEditPaths.add(normalizeFilePath(item.file_path));
+        });
+      }
+      // 与 Vue 行为对齐：即使本次没有新的 editInfoList，只要该文件仍有 pending，
+      // 也不能让后端 files 直接覆盖，避免 old_string 先被替换导致无法确认与高亮。
+      if (hasOldPendingEdits && targetFileId) {
+        pendingEditPaths.add(targetFileId);
+      }
+
+      const safeIncomingFiles = { ...files };
+      if (pendingEditPaths.size > 0) {
+        pendingEditPaths.forEach((path) => {
+          if (path in safeIncomingFiles) {
+            delete safeIncomingFiles[path];
+          }
+          const slashPath = `/${path}`;
+          if (slashPath in safeIncomingFiles) {
+            delete safeIncomingFiles[slashPath];
+          }
+        });
+      }
+
+      const mergedFiles = { ...currentServerData, ...safeIncomingFiles };
       setServerData(mergedFiles);
-      const targetFileId =
-        fileId && mergedFiles[fileId] !== undefined
-          ? fileId
-          : currentEditingId && mergedFiles[currentEditingId] !== undefined
-            ? currentEditingId
-            : "";
-      if (targetFileId) {
+
+      if (targetFileId && !pendingEditPaths.has(targetFileId)) {
         setServerDataFile(targetFileId, mergedFiles[targetFileId] ?? "");
       }
       if (Array.isArray(editInfoList) && editInfoList.length > 0) {
         const grouped = editInfoList.reduce<Record<string, EditFileArgsType[]>>((acc, item) => {
-          const path = item.file_path;
+          const path = normalizeFilePath(item.file_path ?? "");
           if (!path) return acc;
+          if (targetFileId && path !== targetFileId) return acc;
           if (!acc[path]) acc[path] = [];
           acc[path].push(item);
           return acc;
         }, {});
+        const pendingMarkedContents: Record<string, string> = {};
         setFileChangesMap((prev) => {
           const next = { ...prev };
           Object.keys(grouped).forEach((path) => {
             const existing = next[path] ?? [];
-            const appended: EditorChangeItem[] = grouped[path].map((item, idx) => ({
+            const appended: EditorFileChangeItem[] = grouped[path].map((item, idx) => ({
               index: Date.now() + idx + Math.floor(Math.random() * 1000),
               oldString: item.old_string ?? "",
               newString: item.new_string ?? "",
               status: "pending",
             }));
-            next[path] = [...existing, ...appended];
+            // 去重：避免流式多次返回同一条 edit_file 造成重复待确认项
+            const dedup = [...existing];
+            appended.forEach((candidate) => {
+              const exists = dedup.some(
+                (x) =>
+                  x.status === "pending" &&
+                  x.oldString === candidate.oldString &&
+                  x.newString === candidate.newString,
+              );
+              if (!exists) dedup.push(candidate);
+            });
+            const pendingItems = dedup.filter((item) => item.status === "pending");
+            const nonPendingItems = dedup
+              .filter((item) => item.status !== "pending")
+              .map((item) => ({ ...item, markerInfo: undefined }));
+            const baseContent = mergedFiles[path] ?? currentServerData[path] ?? "";
+            console.log(baseContent, 'baseContent',pendingItems, 'pendingItems')
+            const { contentWithMarkers, relabeledPending } = relabelPendingChanges(
+              baseContent,
+              pendingItems
+            );
+            pendingMarkedContents[path] = contentWithMarkers;
+            next[path] = [...nonPendingItems, ...relabeledPending];
           });
           return next;
+        });
+        console.log(pendingMarkedContents, 'pendingMarkedContents')
+        Object.keys(pendingMarkedContents).forEach((path) => {
+          setServerDataFile(path, pendingMarkedContents[path] ?? "");
         });
       }
     },
@@ -650,7 +770,7 @@ const MarkdownEditorPage = () => {
   }, []);
 
   const sendChatText = useCallback(
-    (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
+    async (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
       const message = text.trim();
       if (!message && !options?.command) return;
       let sessionId = chatCurrentSession?.id ?? "";
@@ -671,6 +791,10 @@ const MarkdownEditorPage = () => {
           selectedTexts: selectedTexts.length > 0 ? [...selectedTexts] : undefined,
         };
         addMessageToDualTab("chat", userMessage as DualTabChatMessage);
+        // 与 Vue 行为对齐：用户消息发送前落一次版本（saveStatus: "2"）
+        if (workId) {
+          await useEditorStore.getState().saveEditorData("2");
+        }
       }
 
       if (workId && sessionId) {
@@ -812,6 +936,7 @@ const MarkdownEditorPage = () => {
   // 避免在 React StrictMode 下重复请求作品详情
   const lastInitWorkIdRef = useRef<string | null>(null);
   const lastAutoLoadSessionKeyRef = useRef<string>("");
+  const skipTreeAutoSaveRef = useRef(true);
 
   // 标题（当前文件名）编辑：与 Vue startEditingLabel / saveLabelEdit / cancelLabelEdit 对齐
   const [isEditingLabel, setIsEditingLabel] = useState(false);
@@ -860,6 +985,37 @@ const MarkdownEditorPage = () => {
     loadLatestSession,
   ]);
 
+  useEffect(() => {
+    // 切换作品或首次加载后，跳过第一次 tree 变化引发的自动保存
+    skipTreeAutoSaveRef.current = true;
+  }, [workId]);
+
+  // 与 Vue 编辑器行为对齐：文件树/内容有变更时触发自动保存
+  useEffect(() => {
+    if (skipTreeAutoSaveRef.current) {
+      skipTreeAutoSaveRef.current = false;
+      return;
+    }
+    if (workInfo?.stage === "blank") return;
+    void saveEditorData("1", false);
+  }, [treeData, workInfo?.stage, saveEditorData]);
+
+  // 与 Vue 对齐：生产环境每 5 分钟自动保存一次
+  useEffect(() => {
+    if (import.meta?.env?.DEV) return;
+    const timer = window.setInterval(() => {
+      const { workInfo: latestWorkInfo, saveEditorData: saveLatestEditorData } = useEditorStore.getState();
+      if (latestWorkInfo?.stage !== "blank") {
+        void saveLatestEditorData("1");
+      }
+    }, 1000 * 60 * 5);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // 页面卸载时再重置 editor store
   useEffect(() => {
     const applyKey = `${workId ?? ""}:${location.key ?? "default"}`;
     if (initialParamsApplyKeyRef.current === applyKey) return;
@@ -1042,6 +1198,8 @@ const MarkdownEditorPage = () => {
   ]);
 
   const handleSaveClick = useCallback(async () => {
+    const canProceed = await checkStreamingStatusAndConfirm(true);
+    if (!canProceed) return;
     await saveEditorData("0", true);
   }, [saveEditorData]);
 
@@ -1277,6 +1435,7 @@ const MarkdownEditorPage = () => {
   );
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
+  // ================== EDIT_FILE START ==================
   const currentFileChanges = useMemo(
     () => fileChangesMap[fileKey] ?? [],
     [fileChangesMap, fileKey]
@@ -1291,11 +1450,12 @@ const MarkdownEditorPage = () => {
   );
   const shouldShowRemarkOverlay = currentFilePendingCount > 0;
   const isEditorEditable = chatInputStatus !== "streaming" && !shouldShowRemarkOverlay;
-
+  // ================== EDIT_FILE_END ==================
   const clearRemarkHighlight = useCallback(() => {
     const active = activeRemarkHighlightRef.current;
     if (!active) return;
     active.classList.remove("remark-highlight-paragraph");
+    active.classList.remove("streamed-content-active");
     activeRemarkHighlightRef.current = null;
   }, []);
 
@@ -1387,29 +1547,78 @@ const MarkdownEditorPage = () => {
     [streamingTaskStatus, handleStopStreaming, clearRemarkHighlight, confirm]
   );
 
+  // 浏览器关闭/刷新前的同步拦截（beforeunload 仅支持同步逻辑）
+  const handleBeforeUnload = useCallback((event: BeforeUnloadEvent) => {
+    if (streamingTaskStatus === "streaming") {
+      event.preventDefault();
+      event.returnValue = "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？";
+      return event.returnValue;
+    }
+    if (streamingTaskStatus === "hilt_pending") {
+      event.preventDefault();
+      event.returnValue = "检测到对话中有待您确认的操作，会默认帮您拒绝，是否继续？";
+      return event.returnValue;
+    }
+    if (streamingTaskStatus === "edit_pending") {
+      event.preventDefault();
+      event.returnValue = "检测到当前内容仍有未确认变更，会默认帮您接受，是否继续？";
+      return event.returnValue;
+    }
+    return undefined;
+  }, [streamingTaskStatus]);
+
+  useEffect(() => {
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [handleBeforeUnload]);
+
   const highlightChangeInEditor = useCallback(
-    (oldText: string, newText?: string) => {
+    (oldText: string, newText?: string, markerInfo?: HighlightMarkerInfo): boolean => {
       clearRemarkHighlight();
       const editorRoot = (markdownEditorRef.current?.editor as { view?: { dom?: HTMLElement } } | null)?.view?.dom;
-      if (!editorRoot) return;
+      if (!editorRoot) return false;
+      if (markerInfo?.highlightId) {
+        const markerEl = editorRoot.querySelector(
+          `[data-highlight-id="${markerInfo.highlightId.replace(/"/g, '\\"')}"]`
+        ) as HTMLElement | null;
+        if (markerEl) {
+          markerEl.classList.add("streamed-content-active");
+          activeRemarkHighlightRef.current = markerEl;
+          try {
+            markerEl.scrollIntoView({ block: "center", behavior: "smooth" });
+          } catch {
+            // ignore smooth scroll failure
+          }
+          return true;
+        }
+      }
       const normalize = (input: string) =>
-        input
-          .replace(/[`*_#>\-()!~]|\[|\]/g, " ")
-          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】{}]|\[|\]/g, " ")
+        (input || "")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/[`*_#>\-()!~\[\]{}]/g, " ")
+          .replace(/[，。！？；：“”‘’、,.!?;:'"()（）【】]/g, " ")
           .replace(/\s+/g, "")
+          .toLowerCase()
           .trim();
       const buildTargets = (input: string) => {
         const normalized = normalize(input);
-        const lines = input
+        const lines = (input || "")
           .split("\n")
           .map((line) => normalize(line))
-          .filter((line) => line.length >= 4);
-        return [normalized, ...lines].filter(Boolean);
+          .filter((line) => line.length >= 2);
+        const segments = (input || "")
+          .split(/[，。！？；：“”‘’、,.!?;:'"()（）【】\n]/)
+          .map((seg) => normalize(seg))
+          .filter((seg) => seg.length >= 2);
+        const seed = normalize((input || "").slice(0, 40));
+        return [normalized, seed, ...lines, ...segments].filter(Boolean);
       };
       const targets = [...buildTargets(newText ?? ""), ...buildTargets(oldText)]
         .sort((a, b) => b.length - a.length)
-        .slice(0, 14);
-      if (targets.length === 0) return;
+        .slice(0, 24);
+      if (targets.length === 0) return false;
       const blocks = Array.from(
         editorRoot.querySelectorAll("p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th")
       ) as HTMLElement[];
@@ -1419,7 +1628,10 @@ const MarkdownEditorPage = () => {
         const blockText = normalize(block.textContent ?? "");
         if (!blockText) continue;
         for (const target of targets) {
-          const hit = blockText.includes(target) || target.includes(blockText);
+          const hit =
+            blockText.includes(target) ||
+            target.includes(blockText) ||
+            (target.length >= 6 && blockText.includes(target.slice(0, Math.min(12, target.length))));
           if (!hit) continue;
           const score = Math.min(blockText.length, target.length) + (target.length > 18 ? 8 : 0);
           if (score > bestScore) {
@@ -1428,7 +1640,18 @@ const MarkdownEditorPage = () => {
           }
         }
       }
-      if (!matchedBlock) return;
+      if (!matchedBlock) {
+        const rawSeed = (newText || oldText || "").trim().slice(0, 24);
+        if (rawSeed) {
+          matchedBlock =
+            blocks.find((block) => (block.textContent || "").includes(rawSeed)) ||
+            null;
+        }
+      }
+      if (!matchedBlock) {
+        matchedBlock = blocks[0] ?? null;
+      }
+      if (!matchedBlock) return false;
       matchedBlock.classList.add("remark-highlight-paragraph");
       activeRemarkHighlightRef.current = matchedBlock;
       try {
@@ -1436,52 +1659,35 @@ const MarkdownEditorPage = () => {
       } catch {
         // ignore smooth scroll failure
       }
+      return true;
     },
     [clearRemarkHighlight]
   );
 
-  const applyChangeToFile = useCallback(
-    (targetFileKey: string, oldString: string, newString: string): boolean => {
-      const current = useEditorStore.getState().serverData[targetFileKey] ?? "";
-      if (!oldString) return false;
-      const exactIndex = current.indexOf(oldString);
+  const applyChangeToContent = useCallback(
+    (content: string, oldString: string, newString: string): { applied: boolean; nextContent: string } => {
+      if (!oldString) return { applied: false, nextContent: content };
+      const exactIndex = content.indexOf(oldString);
       if (exactIndex >= 0) {
         const updated =
-          current.slice(0, exactIndex) +
+          content.slice(0, exactIndex) +
           newString +
-          current.slice(exactIndex + oldString.length);
-        setServerDataFile(targetFileKey, updated);
-        return true;
+          content.slice(exactIndex + oldString.length);
+        return { applied: true, nextContent: updated };
       }
-
-      const looseRange = findRangeIgnoringWhitespace(current, oldString);
+      const looseRange = findRangeIgnoringWhitespace(content, oldString);
       if (looseRange) {
         const updated =
-          current.slice(0, looseRange.start) +
+          content.slice(0, looseRange.start) +
           newString +
-          current.slice(looseRange.endExclusive);
-        setServerDataFile(targetFileKey, updated);
-        return true;
+          content.slice(looseRange.endExclusive);
+        return { applied: true, nextContent: updated };
       }
-
       // 当后端已先行写入新内容时，不再误报“找不到原文片段”
-      if (!newString) return false;
-      if (current.includes(newString)) return true;
-      const alreadyApplied = findRangeIgnoringWhitespace(current, newString);
-      return alreadyApplied !== null;
-    },
-    [setServerDataFile]
-  );
-
-  const updateChangeStatus = useCallback(
-    (targetFileKey: string, changeIndex: number, status: "accepted" | "rejected") => {
-      setFileChangesMap((prev) => {
-        const list = prev[targetFileKey] ?? [];
-        const nextList = list.map((item) =>
-          item.index === changeIndex ? { ...item, status } : item
-        );
-        return { ...prev, [targetFileKey]: nextList };
-      });
+      if (!newString) return { applied: false, nextContent: content };
+      if (content.includes(newString)) return { applied: true, nextContent: content };
+      const alreadyApplied = findRangeIgnoringWhitespace(content, newString);
+      return { applied: alreadyApplied !== null, nextContent: content };
     },
     []
   );
@@ -1490,48 +1696,171 @@ const MarkdownEditorPage = () => {
     (changeIndex: number) => {
       const target = (fileChangesMap[fileKey] ?? []).find((c) => c.index === changeIndex);
       if (!target || target.status !== "pending") return;
-      const applied = applyChangeToFile(fileKey, target.oldString, target.newString);
-      if (!applied) {
-        toast.warning("未找到可替换的原文片段，无法应用该修改");
-        return;
+      const list = fileChangesMap[fileKey] ?? [];
+      let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
+      if (target.markerInfo) {
+        if (target.markerTarget === "old") {
+          baseContent = replaceContentAndRemoveMarkers(baseContent, target.markerInfo, target.newString);
+        } else {
+          baseContent = removeHighlightMarkersAt(baseContent, target.markerInfo);
+        }
+      } else {
+        const { applied, nextContent } = applyChangeToContent(baseContent, target.oldString, target.newString);
+        if (!applied) {
+          toast.warning("未找到可替换的原文片段，无法应用该修改");
+          return;
+        }
+        baseContent = nextContent;
       }
-      updateChangeStatus(fileKey, changeIndex, "accepted");
+      const statusUpdated: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
+        item.index === changeIndex
+          ? { ...item, status: "accepted" as const, markerInfo: undefined, markerTarget: undefined }
+          : item
+      );
+      const pendingItems = statusUpdated.filter((item) => item.status === "pending");
+      const settledItems: EditorFileChangeItem[] = statusUpdated
+        .filter((item) => item.status !== "pending")
+        .map((item) => ({ ...item, markerInfo: undefined, markerTarget: undefined }));
+      if (pendingItems.length > 0) {
+        const { contentWithMarkers, relabeledPending } = relabelPendingChanges(baseContent, pendingItems);
+        setServerDataFile(fileKey, contentWithMarkers);
+        setFileChangesMap((prev) => ({ ...prev, [fileKey]: [...settledItems, ...relabeledPending] }));
+      } else {
+        setServerDataFile(fileKey, removeAllHighlightMarkers(baseContent));
+        setFileChangesMap((prev) => ({ ...prev, [fileKey]: settledItems }));
+      }
     },
-    [applyChangeToFile, fileChangesMap, fileKey, updateChangeStatus]
+    [
+      applyChangeToContent,
+      fileChangesMap,
+      fileKey,
+      relabelPendingChanges,
+      removeAllHighlightMarkers,
+      removeHighlightMarkersAt,
+      setServerDataFile,
+    ]
   );
 
   const handleRejectChange = useCallback(
     (changeIndex: number) => {
       const target = (fileChangesMap[fileKey] ?? []).find((c) => c.index === changeIndex);
       if (!target || target.status !== "pending") return;
-      updateChangeStatus(fileKey, changeIndex, "rejected");
+      const list = fileChangesMap[fileKey] ?? [];
+      let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
+      if (target.markerInfo) {
+        if (target.markerTarget === "old") {
+          baseContent = removeHighlightMarkersAt(baseContent, target.markerInfo);
+        } else {
+          baseContent = replaceContentAndRemoveMarkers(baseContent, target.markerInfo, target.oldString);
+        }
+      }
+      const statusUpdated: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
+        item.index === changeIndex
+          ? { ...item, status: "rejected" as const, markerInfo: undefined, markerTarget: undefined }
+          : item
+      );
+      const pendingItems = statusUpdated.filter((item) => item.status === "pending");
+      const settledItems: EditorFileChangeItem[] = statusUpdated
+        .filter((item) => item.status !== "pending")
+        .map((item) => ({ ...item, markerInfo: undefined, markerTarget: undefined }));
+      if (pendingItems.length > 0) {
+        const { contentWithMarkers, relabeledPending } = relabelPendingChanges(baseContent, pendingItems);
+        setServerDataFile(fileKey, contentWithMarkers);
+        setFileChangesMap((prev) => ({ ...prev, [fileKey]: [...settledItems, ...relabeledPending] }));
+      } else {
+        setServerDataFile(fileKey, removeAllHighlightMarkers(baseContent));
+        setFileChangesMap((prev) => ({ ...prev, [fileKey]: settledItems }));
+      }
     },
-    [fileChangesMap, fileKey, updateChangeStatus]
+    [
+      fileChangesMap,
+      fileKey,
+      relabelPendingChanges,
+      removeAllHighlightMarkers,
+      replaceContentAndRemoveMarkers,
+      setServerDataFile,
+    ]
   );
 
   const handleCurrentPageAcceptAll = useCallback(() => {
     const list = fileChangesMap[fileKey] ?? [];
-    let appliedCount = 0;
-    for (const item of list) {
-      if (item.status !== "pending") continue;
-      const applied = applyChangeToFile(fileKey, item.oldString, item.newString);
-      if (!applied) continue;
-      updateChangeStatus(fileKey, item.index, "accepted");
-      appliedCount += 1;
+    const pending = list.filter((item) => item.status === "pending");
+    if (pending.length === 0) {
+      toast.warning("当前页面没有可接受的修改");
+      clearRemarkHighlight();
+      return;
     }
+    let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
+    let appliedCount = 0;
+    pending.forEach((item) => {
+      if (item.markerInfo) {
+        if (item.markerTarget === "old") {
+          baseContent = replaceContentAndRemoveMarkers(baseContent, item.markerInfo, item.newString);
+        } else {
+          baseContent = removeHighlightMarkersAt(baseContent, item.markerInfo);
+        }
+        appliedCount += 1;
+        return;
+      }
+      const { applied, nextContent } = applyChangeToContent(baseContent, item.oldString, item.newString);
+      if (!applied) return;
+      baseContent = nextContent;
+      appliedCount += 1;
+    });
+    const settledItems: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
+      item.status === "pending"
+        ? { ...item, status: "accepted" as const, markerInfo: undefined, markerTarget: undefined }
+        : item
+    );
+    setServerDataFile(fileKey, removeAllHighlightMarkers(baseContent));
+    setFileChangesMap((prev) => ({ ...prev, [fileKey]: settledItems }));
     if (appliedCount > 0) toast.success(`已接受 ${appliedCount} 处修改`);
     else toast.warning("当前页面没有可接受的修改");
     clearRemarkHighlight();
-  }, [applyChangeToFile, fileChangesMap, fileKey, updateChangeStatus, clearRemarkHighlight]);
+  }, [
+    applyChangeToContent,
+    clearRemarkHighlight,
+    fileChangesMap,
+    fileKey,
+    removeAllHighlightMarkers,
+    removeHighlightMarkersAt,
+    setServerDataFile,
+  ]);
 
   const handleCurrentPageRejectAll = useCallback(() => {
     const list = fileChangesMap[fileKey] ?? [];
     const pending = list.filter((item) => item.status === "pending");
-    pending.forEach((item) => updateChangeStatus(fileKey, item.index, "rejected"));
+    if (pending.length === 0) {
+      toast.warning("当前页面没有可撤销的修改");
+      clearRemarkHighlight();
+      return;
+    }
+    let baseContent = useEditorStore.getState().serverData[fileKey] ?? "";
+    pending.forEach((item) => {
+      if (!item.markerInfo) return;
+      if (item.markerTarget === "old") {
+        baseContent = removeHighlightMarkersAt(baseContent, item.markerInfo);
+      } else {
+        baseContent = replaceContentAndRemoveMarkers(baseContent, item.markerInfo, item.oldString);
+      }
+    });
+    const settledItems: EditorFileChangeItem[] = list.map((item): EditorFileChangeItem =>
+      item.status === "pending"
+        ? { ...item, status: "rejected" as const, markerInfo: undefined, markerTarget: undefined }
+        : item
+    );
+    setServerDataFile(fileKey, removeAllHighlightMarkers(baseContent));
+    setFileChangesMap((prev) => ({ ...prev, [fileKey]: settledItems }));
     if (pending.length > 0) toast.success(`已撤销 ${pending.length} 处修改`);
-    else toast.warning("当前页面没有可撤销的修改");
     clearRemarkHighlight();
-  }, [fileChangesMap, fileKey, updateChangeStatus, clearRemarkHighlight]);
+  }, [
+    clearRemarkHighlight,
+    fileChangesMap,
+    fileKey,
+    removeAllHighlightMarkers,
+    replaceContentAndRemoveMarkers,
+    setServerDataFile,
+  ]);
 
   useEffect(() => {
     setIsChangesPanelVisible(currentFilePendingCount > 0);
@@ -1590,10 +1919,10 @@ const MarkdownEditorPage = () => {
   }, [fileKey, relationViewMode, currentFilePendingCount]);
 
   useEffect(() => {
-    if (!shouldShowRemarkOverlay) {
-      clearRemarkHighlight();
-      return;
-    }
+    // if (!shouldShowRemarkOverlay) {
+    //   clearRemarkHighlight();
+    //   return;
+    // }
     const activeChange =
       currentFilePendingChanges.find((item) => item.index === activeChangeIndex) ??
       currentFilePendingChanges[0];
@@ -1601,11 +1930,32 @@ const MarkdownEditorPage = () => {
       clearRemarkHighlight();
       return;
     }
-    highlightChangeInEditor(activeChange.oldString, activeChange.newString);
+    // 编辑器与 DOM 在流式切换后可能延迟就绪，增加重试确保最终能高亮到位
+    let cancelled = false;
+    let timerId: number | null = null;
+    const tryHighlight = (attempt = 0) => {
+      if (cancelled) return;
+      const highlighted = highlightChangeInEditor(
+        activeChange.oldString,
+        activeChange.newString,
+        activeChange.markerInfo
+      );
+      if (highlighted || attempt >= 8) return;
+      timerId = window.setTimeout(() => tryHighlight(attempt + 1), 120);
+    };
+    const rafId = window.requestAnimationFrame(() => {
+      tryHighlight(0);
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
   }, [
     shouldShowRemarkOverlay,
     currentFilePendingChanges,
     activeChangeIndex,
+    currentContent,
     clearRemarkHighlight,
     highlightChangeInEditor,
   ]);
@@ -1874,6 +2224,53 @@ const MarkdownEditorPage = () => {
     },
     [setServerData, setServerDataFile, workId, workInfo.stage, setWorkInfo]
   );
+
+  const handleFileNameClick = useCallback((rawFileName: string) => {
+    const fileName = (rawFileName || "").trim();
+    if (!fileName) return;
+
+    const normalizedFileName = fileName
+      .replace(/^\.?\//, "")
+      .replace(/[?#].*$/, "")
+      .trim();
+    if (!normalizedFileName) return;
+
+    const candidates = Array.from(
+      new Set([
+        normalizedFileName,
+        normalizedFileName.replace(/^\/+/, ""),
+        normalizedFileName.split("/").filter(Boolean).pop() ?? normalizedFileName,
+      ]),
+    );
+
+    const findNodeRecursive = (
+      nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
+      include: boolean,
+    ): { id: string; content?: string } | null => {
+      for (const node of nodes) {
+        const matched = candidates.some((name) =>
+          include
+            ? node.id.includes(`/${name}`) || node.id.endsWith(name)
+            : node.id === name,
+        );
+        if (matched) return node as { id: string; content?: string };
+        if (node.children && node.children.length > 0) {
+          const found = findNodeRecursive(node.children as any, include);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const tree = useEditorStore.getState().treeData;
+    const targetNode =
+      findNodeRecursive(tree as any, true) ??
+      findNodeRecursive(tree as any, false);
+
+    if (!targetNode) return;
+    useEditorStore.getState().setCurrentEditingId(targetNode.id);
+    setServerDataFile(targetNode.id, targetNode.content ?? "");
+  }, [setServerDataFile]);
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {
@@ -2148,7 +2545,7 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={!isEditorEditable}
+                              readonly={false}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
@@ -2212,7 +2609,7 @@ const MarkdownEditorPage = () => {
                         clearRemarkHighlight();
                         return;
                       }
-                      highlightChangeInEditor(change.oldString, change.newString);
+                      highlightChangeInEditor(change.oldString, change.newString, change.markerInfo);
                     }}
                   />
                 </div>
@@ -2288,9 +2685,9 @@ const MarkdownEditorPage = () => {
                       : chatMessages
                   }
                   sessionId={chatCurrentSession?.id ?? ""}
-                  onSendMessage={(msg: ChatMessage) => {
-                    sendChatText(msg.content ?? "", { addUserMessage: true });
-                  }}
+                  onSendMessage={(msg: ChatMessage) =>
+                    sendChatText(msg.content ?? "", { addUserMessage: true })
+                  }
                   onSaveCurrentSession={() => saveCurrentSession("chat")}
                   checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
                   isHomePage={false}
@@ -2342,9 +2739,8 @@ const MarkdownEditorPage = () => {
                                 streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
                                 currentMessageId={msg.id}
                                 streamingMessageId={streamingMessageIdRef.current}
-                                onFileNameClick={(_fileName: string) => {
-                                  // TODO: 与编辑器联动定位到文件
-                                }}
+                                onSendToKnowledgeBase={handleKnowledgeBaseUpdate}
+                                onFileNameClick={handleFileNameClick}
                                 onHiltReject={async (rejectedMsg) => {
                                   const sessionId = chatCurrentSession?.id ?? "";
                                   if (!sessionId || !workId) return;
@@ -2401,9 +2797,9 @@ const MarkdownEditorPage = () => {
                                   });
                                   sendChatText("", { command: "approve", addUserMessage: false });
                                 }}
-                                onSendMessage={(text, reload = false) => {
-                                  sendChatText(text, { reload, addUserMessage: !reload });
-                                }}
+                                onSendMessage={(text, reload = false) =>
+                                  sendChatText(text, { reload, addUserMessage: !reload })
+                                }
                               />
                             ) : (
                               <>
@@ -2423,8 +2819,7 @@ const MarkdownEditorPage = () => {
                                     <div className="message-content-wrapper text-right">
                                       <MarkdownRenderer
                                         content={msg.content || ""}
-                                        onFileNameClick={() => {
-                                        }}
+                                        onFileNameClick={handleFileNameClick}
                                       />
                                     </div>
                                   </div>
@@ -2433,8 +2828,7 @@ const MarkdownEditorPage = () => {
                                   <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
                                     <MarkdownRenderer
                                       content={msg.content || ""}
-                                      onFileNameClick={() => {
-                                      }}
+                                      onFileNameClick={handleFileNameClick}
                                     />
                                   </div>
                                 )}

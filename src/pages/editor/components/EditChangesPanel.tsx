@@ -9,6 +9,16 @@ export interface EditorChangeItem {
   oldString: string;
   newString: string;
   status: ChangeStatus;
+  markerTarget?: "old" | "new";
+  markerInfo?: {
+    markerStartIndex: number;
+    markerEndIndex: number;
+    newStringStartIndex: number;
+    newStringEndIndex: number;
+    newStringLength: number;
+    actualStartMarkerLength: number;
+    highlightId?: string;
+  };
 }
 
 export interface EditChangesPanelProps {
