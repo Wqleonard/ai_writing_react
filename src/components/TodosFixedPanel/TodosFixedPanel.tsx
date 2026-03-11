@@ -26,6 +26,9 @@ export function TodosFixedPanel({
   if (!todos.length) return null;
 
   const completedCount = todos.filter((t) => t.status === "completed").length;
+  // 全部执行完后，不再展示todopanel
+  const allCompleted = completedCount === todos.length;
+  if (allCompleted) return null;
   const inProgressTodo = todos.find((t) => t.status === "in_progress");
   const showDefaultTitle = expanded || !inProgressTodo;
 
