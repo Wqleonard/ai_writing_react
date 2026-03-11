@@ -2464,6 +2464,7 @@ const MarkdownEditorPage = () => {
                                 streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
                                 currentMessageId={msg.id}
                                 streamingMessageId={streamingMessageIdRef.current}
+                                onSendToKnowledgeBase={handleKnowledgeBaseUpdate}
                                 onFileNameClick={(_fileName: string) => {
                                   // TODO: 与编辑器联动定位到文件
                                 }}
