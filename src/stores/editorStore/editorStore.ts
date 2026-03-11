@@ -256,9 +256,13 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
       const performSaveEditorData = async (saveStatus: EditorSaveStatus) => {
         const { workId, workInfo, treeData, serverData } = get();
-        if (!workId) {
-          console.error("无作品 ID，无法保存");
+        const targetWorkId = workId || workInfo.workId;
+        if (!targetWorkId) {
+          console.warn("[editorStore] no workId, skip save");
           return;
+        }
+        if (!workId && workInfo.workId) {
+          set({ workId: workInfo.workId });
         }
         try {
           const saveData: FileTreeNode = {
@@ -278,7 +282,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           const payloadToSave =
             hasTreePayload || !hasServerPayload ? saveParseServerData : serverData;
           await updateWorkVersionReq(
-            workId,
+            targetWorkId,
             JSON.stringify(payloadToSave),
             saveStatus,
           );
@@ -326,9 +330,13 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           });
 
           const { workId, workInfo } = get();
-          if (!workId || !prevWorkInfo || !nextWorkInfo) return;
+          const targetWorkId = workId || workInfo.workId;
+          if (!targetWorkId || !prevWorkInfo || !nextWorkInfo) return;
+          if (!workId && workInfo.workId) {
+            set({ workId: workInfo.workId });
+          }
 
-          updateWorkInfoReq(workId, workInfo).catch((error) => {
+          updateWorkInfoReq(targetWorkId, workInfo).catch((error) => {
             console.error("[editorStore] setWorkInfo sync failed:", error);
           });
         },
