@@ -385,6 +385,7 @@ export const EditorTreeSidebar = ({
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setTreeData = useEditorStore((s) => s.setTreeData)
+  const saveEditorData = useEditorStore((s) => s.saveEditorData)
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitleValue, setEditingTitleValue] = useState(workInfo.title)
@@ -600,11 +601,12 @@ export const EditorTreeSidebar = ({
 
       targetNode.children.push(nextNode)
       setTreeData([...nextTreeData])
+      void saveEditorData("1")
       markNewNodeId(newNodeId)
       setCurrentEditingId(newNodeId)
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [markNewNodeId, setCurrentEditingId, setTreeData, treeData]
+    [markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData, treeData]
   )
 
   const handleAddFolderUnder = useCallback(
@@ -647,10 +649,11 @@ export const EditorTreeSidebar = ({
 
       targetNode.children.push(nextNode)
       setTreeData([...nextTreeData])
+      void saveEditorData("1")
       markNewNodeId(newNodeId)
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [markNewNodeId, setTreeData, treeData]
+    [markNewNodeId, saveEditorData, setTreeData, treeData]
   )
 
   const handleRename = useCallback(() => {
@@ -688,6 +691,7 @@ export const EditorTreeSidebar = ({
     const nextPathId = newPath.replace(/\/$/, "")
     const renamedTree = renameNodeById(treeData, oldPath, nextPathId.split("/").filter(Boolean), newName)
     setTreeData(renamedTree)
+    void saveEditorData("1")
     if (renameTarget.isDirectory) {
       setExpandedIds((prev) => {
         const next = new Set<string>()
@@ -715,7 +719,7 @@ export const EditorTreeSidebar = ({
     setRenameOpen(false)
     setRenameTarget(null)
     setRenameValue("")
-  }, [renameTarget, renameValue, getSiblings, setTreeData, treeData, currentEditingId, setCurrentEditingId])
+  }, [renameTarget, renameValue, getSiblings, saveEditorData, setTreeData, treeData, currentEditingId, setCurrentEditingId])
 
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) {
@@ -723,6 +727,7 @@ export const EditorTreeSidebar = ({
       return
     }
     setTreeData(removeNodeById(treeData, deleteTarget.id))
+    void saveEditorData("1")
     const prefix = deleteTarget.id + (deleteTarget.isDirectory ? "/" : "")
     if (
       currentEditingId === deleteTarget.id ||
@@ -733,7 +738,7 @@ export const EditorTreeSidebar = ({
     setDeleteOpen(false)
     setDeleteTarget(null)
     toast.success("已删除")
-  }, [deleteTarget, currentEditingId, setCurrentEditingId, setTreeData, treeData])
+  }, [deleteTarget, currentEditingId, saveEditorData, setCurrentEditingId, setTreeData, treeData])
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -763,9 +768,10 @@ export const EditorTreeSidebar = ({
 
     nextTreeData.push(nextNode)
     setTreeData([...nextTreeData])
+    void saveEditorData("1")
     markNewNodeId(newNodeId)
     setCurrentEditingId(newNodeId)
-  }, [treeData, markNewNodeId, setCurrentEditingId, setTreeData])
+  }, [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData])
 
   const addFolderAtRoot = useCallback(() => {
     const nextTreeData = structuredClone(treeData) as FileTreeNode[]
@@ -786,9 +792,10 @@ export const EditorTreeSidebar = ({
 
     nextTreeData.push(nextNode)
     setTreeData([...nextTreeData])
+    void saveEditorData("1")
     markNewNodeId(newNodeId)
     setExpandedIds((prev) => new Set(prev))
-  }, [treeData, markNewNodeId, setTreeData])
+  }, [treeData, markNewNodeId, saveEditorData, setTreeData])
 
   const resetDragState = useCallback(() => {
     setDragState({
