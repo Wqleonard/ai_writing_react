@@ -717,7 +717,7 @@ export const EditorTreeSidebar = ({
     }
     toast.success(`已重命名为: ${newName}`)
     setRenameOpen(false)
-    setRenameTarget(null)
+    setRenameTarget(null) 
     setRenameValue("")
   }, [renameTarget, renameValue, getSiblings, saveEditorData, setTreeData, treeData, currentEditingId, setCurrentEditingId])
 

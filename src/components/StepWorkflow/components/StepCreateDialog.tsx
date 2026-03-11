@@ -63,6 +63,8 @@ import { AutoScrollArea } from "@/components/AutoScrollArea";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import FEMALE from "@/assets/images/character_card/female.png";
 import MALE from "@/assets/images/character_card/male.png";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 const CUSTOM_COVER = customCoverImg as string;
 const TEMPLATE_COVER = templateCoverImg as string;
@@ -1390,17 +1392,18 @@ export const StepCreateDialog = React.forwardRef<
             )}
 
             {stepActive === 1 && selectedMode === "custom" && (
-              <div className="step-content step-custom min-h-[540px] w-full px-8 py-4">
+              <div className="step-content step-custom min-h-[540px] w-full">
+                <ScrollArea className="h-[540px] px-8">
                 <form
-                  className="space-y-6"
+                  className="flex flex-col gap-6 pb-4 px-4"
                   onSubmit={(e) => e.preventDefault()}
                 >
                   <div>
                     <label className="mb-2 block text-xl text-gray-800">
                       提示词
                     </label>
-                    <input
-                      className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-gray-500"
+                    <Input
+                      className="w-full px-3 py-2 text-gray-500"
                       value={formModel.prompt}
                       disabled
                       readOnly
@@ -1414,7 +1417,7 @@ export const StepCreateDialog = React.forwardRef<
                       fieldKey="coreMeme"
                       onSelect={handleSelectRecommend}
                     />
-                    <textarea
+                    <Textarea
                       className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
                       rows={2}
                       maxLength={200}
@@ -1438,7 +1441,7 @@ export const StepCreateDialog = React.forwardRef<
                       fieldKey="background"
                       onSelect={handleSelectRecommend}
                     />
-                    <textarea
+                    <Textarea
                       className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
                       rows={2}
                       maxLength={200}
@@ -1460,7 +1463,7 @@ export const StepCreateDialog = React.forwardRef<
                       fieldKey="persona"
                       onSelect={handleSelectRecommend}
                     />
-                    <input
+                    <Input
                       className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
                       maxLength={200}
                       placeholder="请填写男女主角年龄、性别、性格、目标和规划等信息"
@@ -1477,7 +1480,7 @@ export const StepCreateDialog = React.forwardRef<
                       fieldKey="wordCount"
                       onSelect={handleSelectRecommend}
                     />
-                    <input
+                    <Input
                       className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
                       maxLength={10}
                       placeholder="选填，默认10000字左右短篇"
@@ -1497,7 +1500,7 @@ export const StepCreateDialog = React.forwardRef<
                       fieldKey="perspective"
                       onSelect={handleSelectRecommend}
                     />
-                    <input
+                    <Input
                       className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
                       maxLength={10}
                       placeholder="选填，默认第一人称"
@@ -1511,6 +1514,7 @@ export const StepCreateDialog = React.forwardRef<
                     />
                   </div>
                 </form>
+                </ScrollArea>
               </div>
             )}
 

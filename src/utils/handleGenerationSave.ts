@@ -13,14 +13,10 @@ export const handleGenerationSave = async (
   currentWorkId?: string
 ): Promise<string | false> => {
   try {
-    console.log('handleGenerationSave')
     const result = await showGenerationSaveDialog({
       fileNameDefault: fileName,
       currentWorkId,
     });
-
-
-    console.log('result', result)
 
     if (!result.selectedPath) {
       return false;
@@ -48,6 +44,7 @@ export const handleGenerationSave = async (
 
       if (currentWorkId && currentWorkId === workId) {
         await useEditorStore.getState().saveEditorData("1");
+        useEditorStore.getState().setNewNodeIds([savePath])
       }
 
       const work: any = await getWorksByIdReq(workId);
