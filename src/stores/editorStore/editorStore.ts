@@ -125,6 +125,14 @@ const normalizeServerData = (data: ServerData): ServerData => {
   return next;
 };
 
+const getDefaultEditorServerData = (): ServerData => ({
+  "大纲.md": "",
+  "知识库/": "",
+  "设定/角色设定.md": "",
+  "设定/故事设定.md": "",
+  "正文/第一章.md": "",
+});
+
 const updateTreeNodeContent = (
   nodes: FileTreeNode[],
   nodeId: string,
@@ -159,7 +167,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       };
 
       const performSaveEditorData = async (saveStatus: EditorSaveStatus) => {
-        const { workId, workInfo, treeData } = get();
+        const { workId, workInfo, treeData, serverData } = get();
         if (!workId) {
           console.error("无作品 ID，无法保存");
           return;
@@ -175,9 +183,15 @@ export const useEditorStore = create<EditorState & EditorActions>()(
             children: treeData,
           };
           const saveParseServerData = fileTreeData2ServerData(saveData);
+          // 某些链路（如流式文件更新兜底）可能导致 treeData 尚未完整，
+          // 这里以 serverData 兜底，避免错误提交 "{}" 覆盖作品内容。
+          const hasTreePayload = Object.keys(saveParseServerData).length > 0;
+          const hasServerPayload = Object.keys(serverData ?? {}).length > 0;
+          const payloadToSave =
+            hasTreePayload || !hasServerPayload ? saveParseServerData : serverData;
           await updateWorkVersionReq(
             workId,
-            JSON.stringify(saveParseServerData),
+            JSON.stringify(payloadToSave),
             saveStatus,
           );
           set({
@@ -454,7 +468,11 @@ export const useEditorStore = create<EditorState & EditorActions>()(
                 serverData = {};
               }
             }
-            const normalizedServerData = normalizeServerData(serverData);
+            let normalizedServerData = normalizeServerData(serverData);
+            // 新建作品后端可能返回空对象，补默认目录骨架，避免侧边栏 treeData 为空
+            if (Object.keys(normalizedServerData).length === 0) {
+              normalizedServerData = getDefaultEditorServerData();
+            }
             const treeData = serverDataToTree(normalizedServerData);
             set({
               serverData: normalizedServerData,
