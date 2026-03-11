@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import type { PromptItem } from './types'
+import { Iconfont } from "@/components/Iconfont";
 
 export interface PromptsDetailDialogProps {
   open: boolean
@@ -83,6 +84,10 @@ export const PromptsDetailDialog = ({
                   {data.authorName}
                 </div>
                 <div className="ml-4">{formatDate(data.createdTime)}</div>
+              </div>
+              <div className='flex items-center'>
+                <Iconfont unicode='&#xe63b;' className='text-[#ff5200] mr-0.5'/>
+                <span>{data.useCount}</span>
               </div>
             </div>
             <div className="flex-1 min-h-0 mt-4 max-h-[472px] overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg p-3 bg-[#f1f1f1]">
