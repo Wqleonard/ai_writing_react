@@ -2175,34 +2175,22 @@ const MarkdownEditorPage = () => {
   );
 
   const handleFileNameClick = useCallback((rawFileName: string) => {
-    const fileName = (rawFileName || "").trim();
-    if (!fileName) return;
-
-    const normalizedFileName = fileName
+    console.log(rawFileName, 'rawFileName')
+    const fileName = (rawFileName || "")
+      .trim()
       .replace(/^\.?\//, "")
       .replace(/[?#].*$/, "")
       .trim();
-    if (!normalizedFileName) return;
-
-    const candidates = Array.from(
-      new Set([
-        normalizedFileName,
-        normalizedFileName.replace(/^\/+/, ""),
-        normalizedFileName.split("/").filter(Boolean).pop() ?? normalizedFileName,
-      ]),
-    );
+    if (!fileName) return;
 
     const findNodeRecursive = (
       nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
-      include: boolean,
+      include = true,
     ): { id: string; content?: string } | null => {
       for (const node of nodes) {
-        const matched = candidates.some((name) =>
-          include
-            ? node.id.includes(`/${name}`) || node.id.endsWith(name)
-            : node.id === name,
-        );
-        if (matched) return node as { id: string; content?: string };
+        if (include ? node.id.includes(`/${fileName}`) : node.id === fileName) {
+          return node as { id: string; content?: string };
+        }
         if (node.children && node.children.length > 0) {
           const found = findNodeRecursive(node.children as any, include);
           if (found) return found;
@@ -2217,9 +2205,9 @@ const MarkdownEditorPage = () => {
       findNodeRecursive(tree as any, false);
 
     if (!targetNode) return;
-    useEditorStore.getState().setCurrentEditingId(targetNode.id);
-    setServerDataFile(targetNode.id, targetNode.content ?? "");
-  }, [setServerDataFile]);
+    // 与 Vue 行为一致：只定位到左侧目录并切换当前编辑文件，不在这里改写 serverData
+    useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
+  }, []);
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {
