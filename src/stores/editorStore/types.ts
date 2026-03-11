@@ -25,6 +25,7 @@ export interface WorkInfo {
   chapterNum?: number;
   wordNum?: number;
   workTags: WorkTag[];
+  tagIds?: string[] | number[];
 }
 
 /** 服务端文件数据：路径 -> 内容（与 Vue ServerData 一致） */

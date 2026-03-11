@@ -375,6 +375,7 @@ interface DualTabChatState {
   chatMessages: ChatMessage[];
   chatCurrentSession: ChatSession | null;
   cachedSessions: ChatSession[];
+  hasLoadedSessions: boolean;
   needRefreshSessions: boolean;
 }
 
@@ -385,10 +386,13 @@ const initialState: DualTabChatState = {
   chatMessages: [],
   chatCurrentSession: null,
   cachedSessions: [],
+  hasLoadedSessions: false,
   needRefreshSessions: false,
 };
 
 let state: DualTabChatState = { ...initialState };
+let refreshSessionsInFlight: Promise<void> | null = null;
+let refreshSessionsInFlightWorkId: string | null = null;
 const listeners = new Set<() => void>();
 
 function getSnapshot(): DualTabChatState {
@@ -422,6 +426,7 @@ export function useDualTabChat() {
         chatMessages: [],
         chatCurrentSession: null,
         cachedSessions: [],
+        hasLoadedSessions: false,
       });
     } else {
       setStoreState({ currentWorkId: workId });
@@ -434,31 +439,48 @@ export function useDualTabChat() {
         "[useDualTabChat] ⚠️ Invalid sessions data, expected array, got:",
         typeof sessions
       );
-      setStoreState({ cachedSessions: [] });
+      setStoreState({ cachedSessions: [], hasLoadedSessions: true });
       return;
     }
     setStoreState({
       cachedSessions: convertBackendSessionsToFrontend(sessions),
+      hasLoadedSessions: true,
     });
   }, []);
 
   const refreshSessionsFromAPI = useCallback(async () => {
-    if (!state.currentWorkId) {
+    const workId = state.currentWorkId;
+    if (!workId) {
       console.warn(
         "[useDualTabChat] Cannot refresh sessions: workId is null"
       );
       return;
     }
-    try {
-      const req: any = await getWorksByIdReq(state.currentWorkId);
-      const sessions = req?.sessions || [];
-      setCachedSessions(sessions);
-    } catch (error) {
-      console.error(
-        "[useDualTabChat] Failed to refresh sessions from API:",
-        error
-      );
+    if (
+      refreshSessionsInFlight &&
+      refreshSessionsInFlightWorkId === workId
+    ) {
+      return refreshSessionsInFlight;
     }
+    refreshSessionsInFlightWorkId = workId;
+    refreshSessionsInFlight = (async () => {
+      try {
+        const req: any = await getWorksByIdReq(workId);
+        const sessions = req?.sessions || [];
+        // workId 已切换时，丢弃旧请求结果
+        if (state.currentWorkId !== workId) return;
+        setCachedSessions(sessions);
+      } catch (error) {
+        console.error(
+          "[useDualTabChat] Failed to refresh sessions from API:",
+          error
+        );
+      } finally {
+        refreshSessionsInFlight = null;
+        refreshSessionsInFlightWorkId = null;
+      }
+    })();
+    return refreshSessionsInFlight;
   }, [setCachedSessions]);
 
   const markNeedRefreshSessions = useCallback(() => {
@@ -534,7 +556,7 @@ export function useDualTabChat() {
     async (tabType: ChatTabType): Promise<ChatSession[]> => {
       if (!state.currentWorkId) return [];
       try {
-        if (state.needRefreshSessions || state.cachedSessions.length === 0) {
+        if (state.needRefreshSessions || !state.hasLoadedSessions) {
           await refreshSessionsFromAPI();
           setStoreState({ needRefreshSessions: false });
         }

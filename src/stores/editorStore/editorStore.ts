@@ -12,7 +12,6 @@ import {
   getWorksByIdReq,
   updateWorkVersionReq,
   updateWorkInfoReq,
-  type WorkInfoStage,
 } from "@/api/works";
 import type {
   WorkInfo,
@@ -77,6 +76,8 @@ interface EditorActions {
   setCurrentEditingId: (id: string, node?: FileTreeNode | null) => void;
   /** 初始化编辑器数据：拉取作品详情并写入 workInfo、serverData（对应 Vue initEditorData） */
   initEditorData: (workId: string) => Promise<void>;
+  /** 重新拉取并更新 workInfo（对应 Vue updateWorkInfo） */
+  updateWorkInfo: () => Promise<void>;
   /** 保存编辑器数据到服务端（对应 Vue saveEditorData） */
   saveEditorData: (
     saveStatus?: EditorSaveStatus,
@@ -133,6 +134,90 @@ const getDefaultEditorServerData = (): ServerData => ({
   "正文/第一章.md": "",
 });
 
+const mapWorkTags = (rawWorkTags: unknown): WorkInfo["workTags"] => {
+  if (!Array.isArray(rawWorkTags)) return [];
+  return (rawWorkTags as Array<{ tags?: Array<{ id: number; name: string; userId: string }> }>)
+    .flatMap((wt) => wt.tags ?? [])
+    .map((tag) => ({ id: tag.id, name: tag.name, userId: tag.userId }));
+};
+
+const mergeWorkInfoFromReq = (
+  current: WorkInfo,
+  req: Record<string, unknown>,
+): WorkInfo => {
+  const nextWorkInfo = { ...current };
+
+  if (req?.id !== undefined && req?.id !== null) {
+    nextWorkInfo.workId = String(req.id);
+  }
+  if (req?.title !== undefined && req?.title !== null) {
+    nextWorkInfo.title = String(req.title);
+  }
+  if (req?.createdTime !== undefined && req?.createdTime !== null) {
+    nextWorkInfo.createdTime = String(req.createdTime);
+  }
+  if (req?.updatedTime !== undefined && req?.updatedTime !== null) {
+    nextWorkInfo.updatedTime = String(req.updatedTime);
+  }
+  if (req?.stage !== undefined && req?.stage !== null) {
+    nextWorkInfo.stage = String(req.stage);
+  }
+  if (req?.introduction !== undefined && req?.introduction !== null) {
+    nextWorkInfo.introduction = String(req.introduction);
+  }
+  if (req?.description !== undefined && req?.description !== null) {
+    nextWorkInfo.description = String(req.description);
+  }
+  if (req?.workTags !== undefined) {
+    nextWorkInfo.workTags = mapWorkTags(req.workTags);
+  }
+
+  return nextWorkInfo;
+};
+
+const isSameWorkTag = (
+  a: WorkInfo["workTags"][number],
+  b: WorkInfo["workTags"][number],
+): boolean =>
+  a.id === b.id &&
+  a.name === b.name &&
+  a.userId === b.userId &&
+  a.categoryId === b.categoryId;
+
+const isSameWorkInfo = (a: WorkInfo, b: WorkInfo): boolean => {
+  if (
+    a.workId !== b.workId ||
+    a.title !== b.title ||
+    a.introduction !== b.introduction ||
+    a.createdTime !== b.createdTime ||
+    a.updatedTime !== b.updatedTime ||
+    a.description !== b.description ||
+    a.stage !== b.stage ||
+    a.chapterNum !== b.chapterNum ||
+    a.wordNum !== b.wordNum
+  ) {
+    return false;
+  }
+  if ((a.tagIds?.length ?? 0) !== (b.tagIds?.length ?? 0)) {
+    return false;
+  }
+  if (
+    (a.tagIds?.length ?? 0) > 0 &&
+    a.tagIds?.some((id, idx) => id !== b.tagIds?.[idx])
+  ) {
+    return false;
+  }
+  if (a.workTags.length !== b.workTags.length) {
+    return false;
+  }
+  for (let i = 0; i < a.workTags.length; i++) {
+    if (!isSameWorkTag(a.workTags[i], b.workTags[i])) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const updateTreeNodeContent = (
   nodes: FileTreeNode[],
   nodeId: string,
@@ -158,6 +243,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     (set, get) => {
       const pendingSaveResolves: Array<() => void> = [];
       let latestSaveStatus: EditorSaveStatus = "0";
+      let initEditorDataInFlight: Promise<void> | null = null;
+      let initEditorDataInFlightWorkId = "";
+      let workInfoRefreshInFlight: Promise<void> | null = null;
 
       const resolvePendingSaves = () => {
         while (pendingSaveResolves.length > 0) {
@@ -415,6 +503,13 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setCurrentEditingId: (id, node) => {
           set((state) => {
+            if(id == ''){
+              return {
+                currentEditingId: '',
+                currentEditingNode: null,
+                currentContent: '',
+              };
+            }
             const nextCurrentEditingNode = node ?? findNodeById(state.treeData, id);
             return {
               currentEditingId: id,
@@ -425,85 +520,135 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         },
 
         initEditorData: async (workId) => {
-          set({ workId });
-          console.log("initEditorData", workId);
-          const { useChatStore } = await import("@/stores/chatStore");
-          useChatStore.getState().setWorkId(workId);
-          try {
-            const req = (await getWorksByIdReq(workId)) as Record<
-              string,
-              unknown
-            >;
-            const workInfo: WorkInfo = {
-              ...defaultWorkInfo,
-              workId: workId,
-              title: (req?.title as string) ?? "",
-              introduction: (req?.introduction as string) ?? "",
-              createdTime: (req?.createdTime as string) ?? "",
-              updatedTime: (req?.updatedTime as string) ?? "",
-              description: (req?.description as string) ?? "",
-              stage: (req?.stage as string) ?? "final",
-              chapterNum: (req?.chapterNum as number) ?? 10,
-              wordNum: (req?.wordNum as number) ?? 1000,
-              workTags: [],
-            };
-            if (req?.workTags && Array.isArray(req.workTags)) {
-              workInfo.workTags = (
-                req.workTags as Array<{
-                  tags?: Array<{ id: number; name: string; userId: string }>;
-                }>
-              )
-                .flatMap((wt) => wt.tags ?? [])
-                .map((t) => ({ id: t.id, name: t.name, userId: t.userId }));
-            }
-            set({ workInfo });
-
-            const latest = req?.latestWorkVersion as
-              | { content?: string }
-              | undefined;
-            let serverData: ServerData = {};
-            if (latest?.content && typeof latest.content === "string") {
-              try {
-                serverData = JSON.parse(latest.content) as ServerData;
-              } catch {
-                serverData = {};
-              }
-            }
-            let normalizedServerData = normalizeServerData(serverData);
-            // 新建作品后端可能返回空对象，补默认目录骨架，避免侧边栏 treeData 为空
-            if (Object.keys(normalizedServerData).length === 0) {
-              normalizedServerData = getDefaultEditorServerData();
-            }
-            const treeData = serverDataToTree(normalizedServerData);
-            set({
-              serverData: normalizedServerData,
-              treeData,
-            });
-            set({ newNodeIdMap: {} });
-            // 在初始化状态落库后，再基于初始化后的 treeData/currentEditingId 计算目标文件
-            const initializedState = get();
-            const firstMdNode = findFirstMdNode(
-              initializedState.treeData,
-              initializedState.currentEditingId,
-            );
-            const fileKey =
-              firstMdNode?.id ??
-              initializedState.currentEditingId ??
-              DEFAULT_EDITING_FILE_KEY;
-            const findNode = findNodeById(initializedState.treeData, fileKey,)
-            set({
-              currentEditingId: fileKey,
-              currentEditingNode: findNode,
-              currentContent: findNode?.content || '',
-            });
-            const sessions = req?.sessions;
-            if (Array.isArray(sessions)) {
-              useChatStore.getState().setCachedSessions(sessions);
-            }
-          } catch (e) {
-            console.error("[editorStore] initEditorData failed:", e);
-            // toast.error("加载作品失败");
+          if (
+            initEditorDataInFlight &&
+            initEditorDataInFlightWorkId === workId
+          ) {
+            return initEditorDataInFlight;
           }
+          initEditorDataInFlightWorkId = workId;
+          initEditorDataInFlight = (async () => {
+            set({ workId });
+            console.log("initEditorData", workId);
+            const { useChatStore } = await import("@/stores/chatStore");
+            useChatStore.getState().setWorkId(workId);
+            try {
+              const req = (await getWorksByIdReq(workId)) as Record<
+                string,
+                unknown
+              >;
+              const workInfo: WorkInfo = {
+                ...defaultWorkInfo,
+                workId: workId,
+                title: (req?.title as string) ?? "",
+                introduction: (req?.introduction as string) ?? "",
+                createdTime: (req?.createdTime as string) ?? "",
+                updatedTime: (req?.updatedTime as string) ?? "",
+                description: (req?.description as string) ?? "",
+                stage: (req?.stage as string) ?? "final",
+                chapterNum: (req?.chapterNum as number) ?? 10,
+                wordNum: (req?.wordNum as number) ?? 1000,
+                workTags: [],
+              };
+              if (req?.workTags && Array.isArray(req.workTags)) {
+                workInfo.workTags = (
+                  req.workTags as Array<{
+                    tags?: Array<{ id: number; name: string; userId: string }>;
+                  }>
+                )
+                  .flatMap((wt) => wt.tags ?? [])
+                  .map((t) => ({ id: t.id, name: t.name, userId: t.userId }));
+              }
+              set({ workInfo });
+
+              const latest = req?.latestWorkVersion as
+                | { content?: string }
+                | undefined;
+              let serverData: ServerData = {};
+              if (latest?.content && typeof latest.content === "string") {
+                try {
+                  serverData = JSON.parse(latest.content) as ServerData;
+                } catch {
+                  serverData = {};
+                }
+              }
+              let normalizedServerData = normalizeServerData(serverData);
+              // 新建作品后端可能返回空对象，补默认目录骨架，避免侧边栏 treeData 为空
+              if (Object.keys(normalizedServerData).length === 0) {
+                normalizedServerData = getDefaultEditorServerData();
+              }
+              const treeData = serverDataToTree(normalizedServerData);
+              set({
+                serverData: normalizedServerData,
+                treeData,
+              });
+              set({ newNodeIdMap: {} });
+              // 在初始化状态落库后，再基于初始化后的 treeData/currentEditingId 计算目标文件
+              const initializedState = get();
+              const firstMdNode = findFirstMdNode(
+                initializedState.treeData,
+                initializedState.currentEditingId,
+              );
+              const fileKey =
+                firstMdNode?.id ??
+                initializedState.currentEditingId ??
+                DEFAULT_EDITING_FILE_KEY;
+              const findNode = findNodeById(initializedState.treeData, fileKey,);
+              set({
+                currentEditingId: fileKey,
+                currentEditingNode: findNode,
+                currentContent: findNode?.content || "",
+              });
+              const sessions = req?.sessions;
+              if (Array.isArray(sessions)) {
+                useChatStore.getState().setCachedSessions(sessions);
+              }
+            } catch (e) {
+              console.error("[editorStore] initEditorData failed:", e);
+              // toast.error("加载作品失败");
+            } finally {
+              initEditorDataInFlight = null;
+              initEditorDataInFlightWorkId = "";
+            }
+          })();
+          return initEditorDataInFlight;
+        },
+        updateWorkInfo: async () => {
+          if (workInfoRefreshInFlight) {
+            return workInfoRefreshInFlight;
+          }
+
+          const { workId: storeWorkId, workInfo } = get();
+          const targetWorkId = workInfo.workId || storeWorkId;
+          if (!targetWorkId) return;
+
+          workInfoRefreshInFlight = (async () => {
+            try {
+              const req = (await getWorksByIdReq(targetWorkId)) as Record<
+                string,
+                unknown
+              >;
+              const {
+                workId: latestStoreWorkId,
+                workInfo: latestWorkInfo,
+              } = get();
+              const latestTargetWorkId =
+                latestWorkInfo.workId || latestStoreWorkId;
+              // 请求返回前若已切换作品，丢弃旧请求结果，避免状态回写错位。
+              if (latestTargetWorkId !== targetWorkId) return;
+              const nextWorkInfo = mergeWorkInfoFromReq(latestWorkInfo, req);
+              // 仅同步作品信息，避免变更 store.workId 触发全局依赖链路。
+              if (!isSameWorkInfo(latestWorkInfo, nextWorkInfo)) {
+                set({ workInfo: nextWorkInfo });
+              }
+            } catch (e) {
+              console.error("[editorStore] updateWorkInfo failed:", e);
+            } finally {
+              workInfoRefreshInFlight = null;
+            }
+          })();
+
+          return workInfoRefreshInFlight;
         },
         saveEditorData: (saveStatus = "0", _needLocalCache = true) => {
           void _needLocalCache;
