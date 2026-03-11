@@ -369,7 +369,9 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
               </div>
             </div>
             <div className="min-h-[480px] max-h-[660px] h-[660px] flex flex-col overflow-hidden px-[35px] pt-6 pb-[35px]">
-              <div className="flex-1 min-h-0 flex flex-col border border-[#e5e5e5] rounded-[20px] overflow-hidden bg-white">
+              <div
+                className="flex-1 min-h-0 flex flex-col border rounded-[20px] overflow-hidden bg-white border-[#e5e5e5] bg-white focus-visible:border-[#e5e5e5]"
+              >
                 <div className="shrink-0 flex items-center px-5 py-3.5 text-[15px] font-semibold text-[#8c8c8c] bg-[#e8e8e8] border-b border-[#e0e0e0]">
                   <div className="flex-1 min-w-0 text-left">详情</div>
                   <div className="w-[200px] shrink-0 text-left">日期</div>
