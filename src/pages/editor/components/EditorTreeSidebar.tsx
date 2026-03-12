@@ -13,7 +13,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/Dialog"
-import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
 import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
@@ -55,7 +54,21 @@ const generateUniqueName = (
   return name
 }
 
-type DropPosition = "above" | "below"
+type DropPosition = "above" | "into" | "below"
+
+function resolveDropPosition(
+  e: React.DragEvent,
+  node: FileTreeNode
+): DropPosition {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const relativeY = e.clientY - rect.top
+  const height = rect.height
+
+  if (relativeY < height / 3) return "above"
+  if (relativeY > (height * 2) / 3) return "below"
+  if (node.isDirectory) return "into"
+  return relativeY < height / 2 ? "above" : "below"
+}
 
 function findParentAndIndex(
   nodes: FileTreeNode[],
@@ -73,41 +86,150 @@ function findParentAndIndex(
   return { parentId: null, index: -1 }
 }
 
-function reorderInSameLevel(
+function isDescendant(nodes: FileTreeNode[], ancestorId: string, nodeId: string): boolean {
+  const stack = [...nodes]
+  while (stack.length) {
+    const cur = stack.pop()!
+    if (cur.id === ancestorId) {
+      const inner = [...(cur.children ?? [])]
+      while (inner.length) {
+        const c = inner.pop()!
+        if (c.id === nodeId) return true
+        inner.push(...(c.children ?? []))
+      }
+      return false
+    }
+    stack.push(...(cur.children ?? []))
+  }
+  return false
+}
+
+function getChildrenByParentId(list: FileTreeNode[], parentId: string | null): FileTreeNode[] {
+  if (parentId == null) return list
+  const stack = [...list]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) break
+    if (current.id === parentId) return current.children
+    if (current.children?.length) stack.push(...current.children)
+  }
+  return list
+}
+
+function findNodeById(nodes: FileTreeNode[], nodeId: string): FileTreeNode | null {
+  const stack = [...nodes]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) break
+    if (current.id === nodeId) return current
+    if (current.children?.length) stack.push(...current.children)
+  }
+  return null
+}
+
+function getUniqueMovedLabel(siblings: FileTreeNode[], baseLabel: string): string {
+  if (!checkDuplicateLabel(siblings, baseLabel)) return baseLabel
+  let n = 1
+  let candidate = `${baseLabel}（${n}）`
+  while (checkDuplicateLabel(siblings, candidate)) {
+    n += 1
+    candidate = `${baseLabel}（${n}）`
+  }
+  return candidate
+}
+
+function getFileExtFromNode(node: FileTreeNode): string {
+  if (node.isDirectory) return ""
+  const lastPart = node.path[node.path.length - 1] ?? ""
+  const dotIndex = lastPart.lastIndexOf(".")
+  if (dotIndex <= 0) return ""
+  return lastPart.slice(dotIndex)
+}
+
+function remapNodeIdBySubtree(oldId: string, oldBaseId: string, newBaseId: string): string {
+  if (oldId === oldBaseId) return newBaseId
+  if (oldId.startsWith(`${oldBaseId}/`)) {
+    return `${newBaseId}/${oldId.slice(oldBaseId.length + 1)}`
+  }
+  return oldId
+}
+
+function moveNode(
   nodes: FileTreeNode[],
   draggedId: string,
   targetId: string,
   position: DropPosition
-): FileTreeNode[] {
+): {
+  next: FileTreeNode[]
+  movedOldId: string
+  movedNewId: string
+} {
   const next = structuredClone(nodes) as FileTreeNode[]
 
-  const getChildrenByParentId = (list: FileTreeNode[], parentId: string | null): FileTreeNode[] => {
-    if (parentId == null) return list
-    const stack = [...list]
-    while (stack.length > 0) {
-      const current = stack.pop()
-      if (!current) break
-      if (current.id === parentId) return current.children
-      if (current.children?.length) stack.push(...current.children)
-    }
-    return list
-  }
-
+  // Snapshot locations BEFORE any mutation
   const draggedLoc = findParentAndIndex(next, draggedId)
   const targetLoc = findParentAndIndex(next, targetId)
-  if (draggedLoc.index < 0 || targetLoc.index < 0) return next
-  if (draggedLoc.parentId !== targetLoc.parentId) return next
+  if (draggedLoc.index < 0 || targetLoc.index < 0) {
+    return { next, movedOldId: draggedId, movedNewId: draggedId }
+  }
 
-  const siblings = getChildrenByParentId(next, draggedLoc.parentId)
-  const [moved] = siblings.splice(draggedLoc.index, 1)
-  if (!moved) return next
+  // Extract dragged node
+  const draggedSiblings = getChildrenByParentId(next, draggedLoc.parentId)
+  const [moved] = draggedSiblings.splice(draggedLoc.index, 1)
+  if (!moved) {
+    return { next, movedOldId: draggedId, movedNewId: draggedId }
+  }
 
-  let insertIndex = position === "above" ? targetLoc.index : targetLoc.index + 1
-  if (draggedLoc.index < targetLoc.index) insertIndex -= 1
-  insertIndex = Math.max(0, Math.min(insertIndex, siblings.length))
-  siblings.splice(insertIndex, 0, moved)
+  const movedOldId = moved.id
+  let movedNode = moved
 
-  return next
+  if (position === "into") {
+    // Drop into target directory — re-find after splice
+    const targetNode = findNodeById(next, targetId)
+    if (!targetNode?.isDirectory) {
+      return { next, movedOldId, movedNewId: movedOldId }
+    }
+    if (!targetNode.children) targetNode.children = []
+
+    const uniqueLabel = getUniqueMovedLabel(targetNode.children, moved.label)
+    const ext = getFileExtFromNode(moved)
+    const nextBasePath = [...(targetNode.path ?? []), moved.isDirectory ? uniqueLabel : `${uniqueLabel}${ext}`]
+    movedNode = {
+      ...rewriteSubtreePath(moved, moved.path.length, nextBasePath),
+      label: uniqueLabel,
+    }
+
+    targetNode.children.push(movedNode)
+  } else {
+    // Drop above or below — adjust index if dragged and target share the same parent
+    // and dragged was before target (splice shifted target index down by 1)
+    const targetSiblings = getChildrenByParentId(next, targetLoc.parentId)
+    let insertIndex = position === "above" ? targetLoc.index : targetLoc.index + 1
+    if (draggedLoc.parentId === targetLoc.parentId && draggedLoc.index < targetLoc.index) {
+      insertIndex -= 1
+    }
+    insertIndex = Math.max(0, Math.min(insertIndex, targetSiblings.length))
+
+    const targetParent = targetLoc.parentId ? findNodeById(next, targetLoc.parentId) : null
+    const nextParentPath = targetParent?.path ?? []
+    if (draggedLoc.parentId !== targetLoc.parentId) {
+      const uniqueLabel = getUniqueMovedLabel(targetSiblings, moved.label)
+      const ext = getFileExtFromNode(moved)
+      const nextBasePath = [...nextParentPath, moved.isDirectory ? uniqueLabel : `${uniqueLabel}${ext}`]
+      movedNode = {
+        ...rewriteSubtreePath(moved, moved.path.length, nextBasePath),
+        label: uniqueLabel,
+      }
+    }
+
+    targetSiblings.splice(insertIndex, 0, movedNode)
+  }
+
+  return {
+    next,
+    movedOldId,
+    movedNewId: movedNode.id,
+  }
 }
 
 const removeNodeById = (nodes: FileTreeNode[], targetId: string): FileTreeNode[] =>
@@ -178,30 +300,31 @@ interface TreeNodeRowProps {
   onDragEnd: () => void
 }
 
-const TreeNodeRow = React.memo(({
-                                  node,
-                                  newNodeIdMap,
-                                  level,
-                                  currentKey,
-                                  onMarkNodeAsRead,
-                                  onAddFile,
-                                  onContextMenu,
-                                  expandedIds,
-                                  onToggleExpand,
-                                  dragState,
-                                  onDragStart,
-                                  onDragOver,
-                                  onDragLeave,
-                                  onDrop,
-                                  onDragEnd,
-                                }: TreeNodeRowProps) => {
+const TreeNodeRow = React.memo((
+  {
+    node,
+    newNodeIdMap,
+    level,
+    currentKey,
+    onMarkNodeAsRead,
+    onAddFile,
+    onContextMenu,
+    expandedIds,
+    onToggleExpand,
+    dragState,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onDragEnd,
+  }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
   const showNewBadge = newNodeIdMap[node.id]
   const isSelected = currentKey === node.id
   const isMd = !isDir && node.fileType === "md"
   const expanded = expandedIds.has(node.id)
   const isDragged = dragState.draggedId === node.id
-  const showDropLine = dragState.dropTargetId === node.id
+  const isDropTarget = dragState.dropTargetId === node.id
 
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
 
@@ -230,11 +353,12 @@ const TreeNodeRow = React.memo(({
           isSelected && "bg-[#fffef9] text-(--text-primary)",
           !isSelected && "hover:bg-[#fffef9]",
           isDir && "cursor-pointer",
-          isDragged && "opacity-50 scale-[0.98]",
-          showDropLine &&
+          isDragged && "opacity-40 scale-[0.98]",
+          isDropTarget && dragState.dropPosition === "into" && "outline-2 outline-(--theme-color) bg-(--theme-color)/10",
+          isDropTarget &&
           dragState.dropPosition === "above" &&
           "before:absolute before:left-0 before:right-0 before:top-0 before:h-[2px] before:rounded before:bg-(--theme-color) before:content-['']",
-          showDropLine &&
+          isDropTarget &&
           dragState.dropPosition === "below" &&
           "after:absolute after:left-0 after:right-0 after:bottom-0 after:h-[2px] after:rounded after:bg-(--theme-color) after:content-['']"
         )}
@@ -265,8 +389,10 @@ const TreeNodeRow = React.memo(({
         >
           {isDir ? (
             <div className="flex size-3.5 items-center justify-center">
-              <IconFont unicode="&#xeaa5;"
-                        className="select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90"/>
+              <IconFont
+                unicode="&#xeaa5;"
+                className="select-none transform-gpu transition-transform! duration-200! ease-out! group-data-[state=open]/node:rotate-90"
+              />
             </div>
           ) : (
             <span className="w-2"/>
@@ -282,7 +408,8 @@ const TreeNodeRow = React.memo(({
           </div>
           {showNewBadge && (
             <span
-              className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase">
+              className="shrink-0 select-none whitespace-nowrap self-start mt-[2px] text-[10px] leading-none font-medium text-[#f56c6c] lowercase"
+            >
               new
             </span>
           )}
@@ -311,31 +438,29 @@ const TreeNodeRow = React.memo(({
           </div>
         )}
       </div>
-      {isDir && (
-        <Collapsible open={expanded} className="w-full">
-          <CollapsibleContent className="w-full">
-            {node.children.map((child) => (
-              <TreeNodeRow
-                key={child.id}
-                node={child}
-                newNodeIdMap={newNodeIdMap}
-                level={level + 1}
-                currentKey={currentKey}
-                onMarkNodeAsRead={onMarkNodeAsRead}
-                onAddFile={onAddFile}
-                onContextMenu={onContextMenu}
-                expandedIds={expandedIds}
-                onToggleExpand={onToggleExpand}
-                dragState={dragState}
-                onDragStart={onDragStart}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                onDragEnd={onDragEnd}
-              />
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
+      {isDir && expanded && (
+        < >
+          {node.children.map((child) => (
+            <TreeNodeRow
+              key={child.id}
+              node={child}
+              newNodeIdMap={newNodeIdMap}
+              level={level + 1}
+              currentKey={currentKey}
+              onMarkNodeAsRead={onMarkNodeAsRead}
+              onAddFile={onAddFile}
+              onContextMenu={onContextMenu}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
+              dragState={dragState}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
+            />
+          ))}
+        </>
       )}
     </div>
   )
@@ -360,6 +485,9 @@ const TreeNodeRow = React.memo(({
   const prevIsDragged = prev.dragState.draggedId === prev.node.id
   const nextIsDragged = next.dragState.draggedId === next.node.id
   if (prevIsDragged !== nextIsDragged) return false
+  // 文件节点在拖拽开始/结束时也需要拿到最新事件闭包，否则 onDragOver/onDrop
+  // 可能读取到旧的 draggedId（null），导致无法在文件节点上方/下方落点。
+  if (prev.dragState.draggedId !== next.dragState.draggedId) return false
 
   const prevIsDropTarget = prev.dragState.dropTargetId === prev.node.id
   const nextIsDropTarget = next.dragState.dropTargetId === next.node.id
@@ -803,17 +931,6 @@ export const EditorTreeSidebar = ({
     })
   }, [])
 
-  const canDropInSameLevel = useCallback(
-    (targetId: string): boolean => {
-      if (!dragState.draggedId) return false
-      if (dragState.draggedId === targetId) return false
-      const targetLoc = findParentAndIndex(treeData, targetId)
-      if (targetLoc.index < 0) return false
-      return targetLoc.parentId === dragState.draggedParentId
-    },
-    [dragState.draggedId, dragState.draggedParentId, treeData]
-  )
-
   const handleDragStart = useCallback(
     (e: React.DragEvent, node: FileTreeNode) => {
       const loc = findParentAndIndex(treeData, node.id)
@@ -835,26 +952,49 @@ export const EditorTreeSidebar = ({
 
   const handleDragOver = useCallback(
     (e: React.DragEvent, node: FileTreeNode) => {
-      if (!dragState.draggedId) return
+      const draggedId =
+        dragState.draggedId || e.dataTransfer?.getData("text/plain") || null
+      if (!draggedId) return
       e.preventDefault()
-      if (!canDropInSameLevel(node.id)) {
+
+      // Prevent dropping on self or descendants
+      if (draggedId === node.id) {
         if (e.dataTransfer) e.dataTransfer.dropEffect = "none"
         return
       }
+      if (isDescendant(treeData, draggedId, node.id)) {
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "none"
+        return
+      }
+
       if (e.dataTransfer) e.dataTransfer.dropEffect = "move"
+
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-      const nextPos: DropPosition =
-        e.clientY < rect.top + rect.height / 2 ? "above" : "below"
+      const relativeY = e.clientY - rect.top
+      const height = rect.height
+
+      let nextPos: DropPosition
+      if (relativeY < height / 3) {
+        nextPos = "above"
+      } else if (relativeY > (height * 2) / 3) {
+        nextPos = "below"
+      } else if (node.isDirectory) {
+        nextPos = "into"
+      } else {
+        nextPos = relativeY < height / 2 ? "above" : "below"
+      }
+
       const targetLoc = findParentAndIndex(treeData, node.id)
       setDragState((prev) => ({
         ...prev,
+        draggedId: prev.draggedId ?? draggedId,
         dropTargetId: node.id,
         dropTargetParentId: targetLoc.parentId,
         dropTargetIndex: targetLoc.index,
         dropPosition: nextPos,
       }))
     },
-    [canDropInSameLevel, dragState.draggedId, treeData]
+    [dragState.draggedId, treeData]
   )
 
   const handleDragLeave = useCallback(
@@ -875,25 +1015,49 @@ export const EditorTreeSidebar = ({
     (e: React.DragEvent, node: FileTreeNode) => {
       e.preventDefault()
       e.stopPropagation()
-      if (!dragState.draggedId || !canDropInSameLevel(node.id)) {
+
+      const draggedId =
+        dragState.draggedId || e.dataTransfer?.getData("text/plain") || null
+      const dropPosition = resolveDropPosition(e, node)
+
+      if (
+        !draggedId ||
+        draggedId === node.id ||
+        isDescendant(treeData, draggedId, node.id)
+      ) {
         resetDragState()
         return
       }
 
-      const reordered = reorderInSameLevel(
-        treeData,
-        dragState.draggedId,
-        node.id,
-        dragState.dropPosition
-      )
-      setTreeData(reordered)
+      const moved = moveNode(treeData, draggedId, node.id, dropPosition)
+      setTreeData(moved.next)
+      void saveEditorData("1")
+
+      if (moved.movedOldId !== moved.movedNewId) {
+        setExpandedIds((prev) => {
+          const next = new Set<string>()
+          prev.forEach((id) => {
+            next.add(remapNodeIdBySubtree(id, moved.movedOldId, moved.movedNewId))
+          })
+          return next
+        })
+        if (currentEditingId === moved.movedOldId || currentEditingId.startsWith(`${moved.movedOldId}/`)) {
+          setCurrentEditingId(remapNodeIdBySubtree(currentEditingId, moved.movedOldId, moved.movedNewId))
+        }
+      }
+
+      if (dropPosition === "into") {
+        setExpandedIds((prev) => new Set(prev).add(node.id))
+      }
+
       resetDragState()
     },
     [
-      canDropInSameLevel,
       dragState.draggedId,
-      dragState.dropPosition,
+      currentEditingId,
       resetDragState,
+      saveEditorData,
+      setCurrentEditingId,
       setTreeData,
       treeData,
     ]
@@ -984,7 +1148,7 @@ export const EditorTreeSidebar = ({
       </div>
 
       <ScrollArea className="mt-2 flex-1 min-h-0">
-        <div className="py-1">
+        <div className="p-1">
           {treeData.map((node) => (
             <TreeNodeRow
               key={node.id}

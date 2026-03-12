@@ -573,7 +573,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       <span
                         className={clsx(
                           "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
-                          hoveredDeleteIndex === index && "bg-[var(--bg-editor-save)] text-white",
+                          hoveredDeleteIndex === index && "bg-(--bg-editor-save) text-white",
                           isDeleteIconHovered && hoveredDeleteIndex === index && "brightness-95"
                         )}
                         onClick={() => hoveredDeleteIndex === index ? removeAssociationTag(index) : null}
@@ -653,7 +653,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       className={clsx(
                         "file-tag inline-flex items-center gap-1 rounded-md border border-[#0891b2] px-2 py-0.5 text-xs transition-all duration-200",
                         hoveredFileDeleteIndex === index
-                          ? "bg-gradient-to-r from-[#e0f2fe] to-[#bae6fd]"
+                          ? "bg-linear-to-r from-[#e0f2fe] to-[#bae6fd]"
                           : "bg-[#e0f2fe]",
                         "text-foreground"
                       )}
@@ -705,7 +705,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       <span
                         className={clsx(
                           "tag-icon cursor-pointer inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
-                          hoveredSelectedTextDeleteIndex === text.id && "bg-[var(--bg-editor-save)] text-white",
+                          hoveredSelectedTextDeleteIndex === text.id && "bg-(--bg-editor-save) text-white",
                           isSelectedTextDeleteIconHovered &&
                           hoveredSelectedTextDeleteIndex === text.id &&
                           "brightness-95"
@@ -1021,7 +1021,7 @@ export const CreationInput = (props: CreationInputProps) => {
                       title={isAnswerOnly ? "关闭仅回答后可选择文风" : "选择文风"}
                       className={clsx(
                         "writing-style-trigger inline-flex items-center gap-1 rounded-md outline-none transition-[transform,opacity]",
-                        "text-xs text-[var(--text-primary,#333)]",
+                        "text-xs text-(--text-primary,#333)",
                         "cursor-pointer hover:opacity-80",
                         "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50"
                       )}
@@ -1036,7 +1036,7 @@ export const CreationInput = (props: CreationInputProps) => {
                     align="end"
                     side="top"
                     sideOffset={8}
-                    className="w-[200px] p-1 rounded-lg border bg-[var(--bg-primary-overlay,white)] shadow-md"
+                    className="w-[200px] p-1 rounded-lg border bg-(--bg-primary-overlay,white) shadow-md"
                   >
                     <div className="writing-style-content flex flex-col max-h-[220px]">
                       <div className="style-options overflow-y-auto flex-1 min-h-0 max-h-[180px] py-0.5">
@@ -1047,15 +1047,15 @@ export const CreationInput = (props: CreationInputProps) => {
                             className={clsx(
                               "style-option w-full h-9 rounded-lg flex items-center justify-between gap-2 px-3 text-left text-sm transition-colors",
                               opt.id === selectedWritingStyle
-                                ? "bg-[var(--bg-hover,#f5f5f5)]"
-                                : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                                ? "bg-(--bg-hover,#f5f5f5)"
+                                : "hover:bg-(--bg-hover,#f5f5f5)"
                             )}
                             onClick={() => {
                               setSelectedWritingStyle(opt.id)
                               setWritingStylePopoverOpen(false)
                             }}
                           >
-                            <span className="option-label text-[var(--text-primary,#303133)] truncate">
+                            <span className="option-label text-(--text-primary,#303133) truncate">
                               {opt.name || "未命名"}
                             </span>
                             {(opt as { isPublic?: boolean }).isPublic && (
@@ -1096,7 +1096,7 @@ export const CreationInput = (props: CreationInputProps) => {
                   align="end"
                   side="top"
                   sideOffset={8}
-                  className="simple-select-popover w-[200px] p-1 border-0 bg-[var(--bg-primary-overlay,white)] shadow-md"
+                  className="simple-select-popover w-[200px] p-1 border-0 bg-(--bg-primary-overlay,white) shadow-md"
                 >
                   <div className="simple-select-content flex flex-col max-h-[220px]">
                     <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
@@ -1107,15 +1107,15 @@ export const CreationInput = (props: CreationInputProps) => {
                           className={clsx(
                             "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
                             m.id === modelLLM
-                              ? "is-selected bg-[var(--bg-editor-save)] text-white"
-                              : "hover:bg-[var(--bg-hover,#f5f5f5)]"
+                              ? "is-selected bg-(--bg-editor-save) text-white"
+                              : "hover:bg-(--bg-hover,#f5f5f5)"
                           )}
                           onClick={() => {
                             setModelLLM(m.id)
                             setModelPopoverOpen(false)
                           }}
                         >
-                          <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-[var(--text-primary,#303133)]")}>
+                          <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-(--text-primary,#303133)")}>
                             {m.name}
                           </span>
                         </button>
@@ -1160,14 +1160,14 @@ export const CreationInput = (props: CreationInputProps) => {
                 className={clsx(
                   "w-8 h-8 rounded-full",
                   isButtonClickable
-                    ? "cursor-pointer bg-[var(--bg-editor-save)] text-white"
+                    ? "cursor-pointer bg-(--bg-editor-save) text-white"
                     : "cursor-not-allowed bg-[#e5e5e5] text-[#b7b7b7]"
                 )}
               >
                 {status === 'submitted' || status === 'streaming' ? (
-                  <Loader2 className="h-4 w-4 animate-spin [color:inherit]" />
+                  <Loader2 className="h-4 w-4 animate-spin text-inherit" />
                 ) : (
-                  <Iconfont unicode="&#xe615;" className="text-lg [color:inherit]" />
+                  <Iconfont unicode="&#xe615;" className="text-lg text-inherit" />
                 )}
               </Button>
             </div>
