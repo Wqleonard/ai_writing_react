@@ -798,6 +798,7 @@ const MarkdownEditorPage = () => {
         command?: string;
         addUserMessage?: boolean;
         submitMode?: "chat" | "agent";
+        commandOnly?: boolean;
       }
     ) => {
       const message = text.trim();
@@ -830,21 +831,24 @@ const MarkdownEditorPage = () => {
       }
 
       if (workId && sessionId) {
-        skipGuideForCurrentStreamRef.current = false;
-        guideRequestRef.current = { sessionId, workId };
-        const placeholderId = `assistant_${Date.now()}`;
-        streamingMessageIdRef.current = placeholderId;
-        const placeholder: ChatMessage = {
-          id: placeholderId,
-          role: "assistant",
-          content: "",
-          createdAt: new Date(),
-          messageType: "normal",
-          mode: "chat",
-          customMessage: [],
-        };
-        streamingMessageRef.current = placeholder;
-        setStreamingMessage(placeholder);
+        const shouldRenderStreamingAssistant = options?.commandOnly !== true;
+        if (shouldRenderStreamingAssistant) {
+          skipGuideForCurrentStreamRef.current = false;
+          guideRequestRef.current = { sessionId, workId };
+          const placeholderId = `assistant_${Date.now()}`;
+          streamingMessageIdRef.current = placeholderId;
+          const placeholder: ChatMessage = {
+            id: placeholderId,
+            role: "assistant",
+            content: "",
+            createdAt: new Date(),
+            messageType: "normal",
+            mode: "chat",
+            customMessage: [],
+          };
+          streamingMessageRef.current = placeholder;
+          setStreamingMessage(placeholder);
+        }
         const attachments =
           selectedFiles.length > 0
             ? selectedFiles.map((file) => ({
@@ -863,11 +867,14 @@ const MarkdownEditorPage = () => {
           options?.reload,
           options?.command,
           modelLLM,
-          selectedWritingStyle
+          selectedWritingStyle,
+          options?.commandOnly
         );
-        // 请求发出后清空当前已选引用内容，避免继续展示在输入区
-        clearSelectedNotes();
-        clearSelectedFiles();
+        if (shouldRenderStreamingAssistant) {
+          // 请求发出后清空当前已选引用内容，避免继续展示在输入区
+          clearSelectedNotes();
+          clearSelectedFiles();
+        }
       }
     },
     [
@@ -2331,7 +2338,7 @@ const MarkdownEditorPage = () => {
         };
       });
       // 与 approve 对齐：将“拒绝”明确传回后端，结束 hilt_pending 等待态
-      sendChatText("", { command: "reject", addUserMessage: false });
+      sendChatText("", { command: "reject", addUserMessage: false, commandOnly: true });
       try {
         const res = await generateGuideReq(sessionId, Number(workId)) as {
           guides?: string[] | string
@@ -2365,7 +2372,7 @@ const MarkdownEditorPage = () => {
           ),
         };
       });
-      sendChatText("", { command: "approve", addUserMessage: false });
+      sendChatText("", { command: "approve", addUserMessage: false, commandOnly: true });
     },
     [updateLastChatMessage, sendChatText]
   );

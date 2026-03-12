@@ -71,7 +71,8 @@ export function useLangGraphStream(
     reload?: boolean,
     command?: string,
     model?: string,
-    writingStyleId?: string | number
+    writingStyleId?: string | number,
+    commandOnly?: boolean
   ) => Promise<void>;
   stop: () => void;
   fetchSuggestions: (
@@ -249,16 +250,23 @@ export function useLangGraphStream(
       reload?: boolean,
       command?: string,
       model?: string,
-      writingStyleId?: string | number
+      writingStyleId?: string | number,
+      commandOnly?: boolean
     ) => {
       if (isStreamingRef.current) return;
+      const shouldTrackStreaming = !commandOnly;
       setError(null);
-      messagesRef.current = [];
-      setMessages([]);
-      setFiles({});
-      setTodos([]);
-      setIsStreaming(true);
-      isStreamingRef.current = true;
+      if (shouldTrackStreaming) {
+        messagesRef.current = [];
+        setMessages([]);
+        setFiles({});
+        setTodos([]);
+        setIsStreaming(true);
+        isStreamingRef.current = true;
+      } else {
+        // commandOnly 场景（如 reject/approve）不应重置展示状态，也不应占用 streaming UI。
+        isStreamingRef.current = false;
+      }
       streamCompletedRef.current = false;
       sensitiveWordHandledRef.current = false;
       currentWriteOrEditorFilePathRef.current = "";
