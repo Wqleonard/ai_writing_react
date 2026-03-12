@@ -791,7 +791,15 @@ const MarkdownEditorPage = () => {
   }, []);
 
   const sendChatText = useCallback(
-    async (text: string, options?: { reload?: boolean; command?: string; addUserMessage?: boolean }) => {
+    async (
+      text: string,
+      options?: {
+        reload?: boolean;
+        command?: string;
+        addUserMessage?: boolean;
+        submitMode?: "chat" | "agent";
+      }
+    ) => {
       const message = text.trim();
       if (!message && !options?.command) return;
       let sessionId = chatCurrentSession?.id ?? "";
@@ -844,11 +852,12 @@ const MarkdownEditorPage = () => {
               remoteAddress: file.putFilePath,
             }))
             : undefined;
+        const submitMode = options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
         langGraphStream.submit(
           message,
           sessionId,
           workId,
-          isAnswerOnly ? "chat" : "agent",
+          submitMode,
           selectedTools,
           attachments,
           options?.reload,
@@ -1138,7 +1147,11 @@ const MarkdownEditorPage = () => {
         if (lastInitialAutoSendKeyRef.current !== submitKey) {
           lastInitialAutoSendKeyRef.current = submitKey;
           setTimeout(() => {
-            sendChatText(msg, { addUserMessage: true });
+            const initialSubmitMode =
+              typeof initialParams.isAnswerOnly === "boolean"
+                ? (initialParams.isAnswerOnly ? "chat" : "agent")
+                : undefined;
+            sendChatText(msg, { addUserMessage: true, submitMode: initialSubmitMode });
             setPendingInitialMessage("");
           }, 0);
         }
