@@ -651,15 +651,15 @@ const MarkdownEditorPage = () => {
         hasSensitiveWord: true,
       }));
 
-      const simulatedAssistant: DualTabChatMessage = {
-        id: `assistant_sensitive_${Date.now()}`,
-        role: "assistant",
-        content: "我无法回答你的这个问题，可以尝试下其他话题哦",
-        createdAt: new Date(),
-        messageType: "normal",
-        mode: "chat",
-      };
-      addMessageToDualTab("chat", simulatedAssistant);
+      // const simulatedAssistant: DualTabChatMessage = {
+      //   id: `assistant_sensitive_${Date.now()}`,
+      //   role: "assistant",
+      //   content: "我无法回答你的这个问题，可以尝试下其他话题哦",
+      //   createdAt: new Date(),
+      //   messageType: "normal",
+      //   mode: "chat",
+      // };
+      // addMessageToDualTab("chat", simulatedAssistant);
       toast.warning("内容包含敏感词，请尝试其他话题");
     },
     onError: (err, needSendErrorMsg) => {
