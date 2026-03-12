@@ -100,7 +100,6 @@ const EMPTY_CHARACTER: CharacterCardData = {
   age: "",
   bloodType: "",
   mbti: "",
-  biograph: "",
   experiences: "",
   personality: "",
   abilities: "",
@@ -900,7 +899,6 @@ export const StepCreateDialog = React.forwardRef<
                 age: item.age ?? "",
                 bloodType: item.bloodType ?? "",
                 mbti: item.mbti ?? "",
-                biograph: item.biograph ?? "",
                 experiences: item.experiences ?? "",
                 personality: item.personality ?? "",
                 abilities: item.abilities ?? "",
@@ -1162,7 +1160,6 @@ export const StepCreateDialog = React.forwardRef<
         ? ageText
         : "";
     const mbti = (editingCharacter.mbti || "").trim();
-    const biograph = (editingCharacter.biograph || "").trim();
 
     let nextCharacter: CharacterCardData | null = null;
     setCharacters((prev) => {
@@ -1172,9 +1169,7 @@ export const StepCreateDialog = React.forwardRef<
         name,
         age,
         mbti,
-        biograph,
       };
-      next[editingCharacterIndex] = nextCharacter;
       return next;
     });
     if (
@@ -1929,17 +1924,17 @@ export const StepCreateDialog = React.forwardRef<
                             <textarea
                               className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                               maxLength={300}
-                              value={editingCharacter.biograph}
+                              value={editingCharacter.experiences}
                               onChange={(e) =>
                                 setEditingCharacter((prev) => ({
                                   ...prev,
-                                  biograph: e.target.value,
+                                  experiences: e.target.value,
                                 }))
                               }
                               placeholder="经历，性格，能力"
                             />
                             <div className="mt-1 text-right text-xs text-[#999]">
-                              {(editingCharacter.biograph || "").length}/300
+                              {(editingCharacter.experiences || "").length}/300
                             </div>
                           </div>
                         </div>
@@ -1987,7 +1982,7 @@ export const StepCreateDialog = React.forwardRef<
               <div className="step-outline w-full step-content min-h-[540px] px-15 pt-6 flex flex-col">
                 <div
                   className={clsx(
-                    "editor-layout rounded-lg bg-[#f9eece] p-2 flex-1",
+                    "editor-layout rounded-lg bg-[#f9eece] flex-1",
                     isOutlineEditing && "outline-2 outline-[#ce644c]",
                   )}
                 >

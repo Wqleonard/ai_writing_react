@@ -15,7 +15,6 @@ export interface CharacterCardData {
   personality: string
   abilities: string
   identity: string
-  biograph: string
 }
 
 export interface CharacterCardProps {
@@ -102,7 +101,7 @@ export const CharacterCard = ({
         )}
       </div>
       <div className="line-clamp-9 mt-3 text-xs font-medium leading-tight text-black">
-        {data.biograph}
+        {data.experiences}
       </div>
       <div className="absolute bottom-3 left-3.5 w-[calc(100%-28px)]">
         <div className="text-xs">身份</div>
