@@ -38,7 +38,7 @@ export const MessageDetailDialog = ({
               </span>
               </div>
               <ScrollArea className="h-110 py-2">
-                <div>
+                <div className='pr-2'>
                   {message.content?.trim() ? (
                     <RichTextRender
                       content={message.content}

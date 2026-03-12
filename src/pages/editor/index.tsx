@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo, useDeferredValue } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo, useDeferredValue, type WheelEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
@@ -2068,6 +2068,22 @@ const MarkdownEditorPage = () => {
     if (el.scrollTop !== 0) el.scrollTop = 0;
   }, [isEditorActuallyEmpty]);
 
+  const handleEditorMaskWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    const scrollRoot = editorMainScrollRef.current;
+    if (!scrollRoot) return;
+    const viewport = scrollRoot.querySelector(
+      '[data-slot="scroll-area-viewport"]'
+    ) as HTMLElement | null;
+    if (!viewport) return;
+    event.preventDefault();
+    event.stopPropagation();
+    viewport.scrollBy({
+      top: event.deltaY,
+      left: event.deltaX,
+      behavior: "auto",
+    });
+  }, []);
+
   // 点击标题进入编辑（与 Vue startEditingLabel 一致）
   const startEditingLabel = useCallback((label: string) => {
     setEditingLabelValue(label);
@@ -2831,8 +2847,21 @@ const MarkdownEditorPage = () => {
           </div>
           {!isEditorEditable && (
             <div
-              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"
+              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed"
               style={{ right: isChangesPanelVisible ? `${CHANGES_PANEL_WIDTH_REM}rem` : 0 }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onPointerMove={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onWheel={handleEditorMaskWheel}
             />
           )}
         </div>

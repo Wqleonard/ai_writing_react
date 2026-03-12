@@ -36,8 +36,8 @@ export const MessageDetailDialog = ({
                   <span className="text-sm text-gray-500">{message.timestamp}</span>
                 ) : null}
               </div>
-              <ScrollArea className="h-110">
-                <div className="min-h-[100px] py-2">
+              <ScrollArea className="h-110 py-2">
+                <div className="pr-2">
                   {message.content?.trim() ? (
                     <RichTextRender
                       content={message.content}
