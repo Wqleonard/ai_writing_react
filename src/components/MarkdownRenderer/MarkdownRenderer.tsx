@@ -113,7 +113,11 @@ const md = new MarkdownIt({
           }
 
           const open = new TokenCtor("link_open", "a", 1);
-          open.attrs = [["href", mdFile]];
+          // 文件链接统一使用 href="#"，避免 linkify 把 .md 误转成外链域名跳转
+          open.attrs = [
+            ["href", "#"],
+            ["data-file-path", mdFile],
+          ];
           open.attrJoin("class", "file-link");
           nextChildren.push(open);
 
@@ -153,6 +157,9 @@ const md = new MarkdownIt({
     const href = token.attrGet("href") || "";
 
     if (href && isMdFileHref(href)) {
+      // 文件定位由前端点击回调处理，不走浏览器原生跳转
+      token.attrSet("data-file-path", decodeHref(href));
+      token.attrSet("href", "#");
       token.attrJoin("class", "file-link");
     } else if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
       token.attrSet("target", "_blank");
@@ -174,14 +181,17 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
       if (!root) return { handled: false };
       const a = target?.closest?.("a") as HTMLAnchorElement | null;
       if (!a || !root.contains(a)) return { handled: false };
+      const filePathAttr = a.getAttribute("data-file-path") || "";
       const href = a.getAttribute("href") || "";
-      if (!href) return { handled: false };
+      if (!filePathAttr && !href) return { handled: false };
 
-      let decodedHref = href;
-      try {
-        decodedHref = decodeURIComponent(href);
-      } catch {
-        // keep href
+      let decodedHref = filePathAttr || href;
+      if (!filePathAttr) {
+        try {
+          decodedHref = decodeURIComponent(href);
+        } catch {
+          // keep href
+        }
       }
       const isMdFile = decodedHref.endsWith(".md") || /\.md($|[?#])/.test(decodedHref);
       if (!isMdFile) return { handled: false };
