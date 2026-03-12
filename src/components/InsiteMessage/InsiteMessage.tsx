@@ -112,17 +112,17 @@ export const InsiteMessage = () => {
           sideOffset={8}
           className="insite-message-popover w-[370px] translate-x-[-20px] rounded-[10px] p-0"
         >
-          <div ref={scrollRef} className="py-2">
-            <ScrollArea className="max-h-[552px]">
-              <div className="flex flex-col px-8">
+          <div ref={scrollRef} className="py-2 w-full min-w-0">
+            <ScrollArea className="max-h-[552px] w-full">
+              <div className="flex min-w-0 flex-col overflow-x-hidden px-8 w-[370px]">
                 {messages.map((message) => (
                   <div
                     key={String(message.id)}
-                    className="flex border-b border-gray-200 py-5 last:border-b-0"
+                    className="flex min-w-0 border-b border-gray-200 py-5 last:border-b-0"
                   >
                     <div className="flex min-w-0 max-w-full flex-1 flex-col gap-3 overflow-hidden">
-                      <div className="flex items-center gap-2">
-                        <div className="min-w-0 truncate text-base font-semibold text-gray-700">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="min-w-0 flex-1 truncate text-base font-semibold text-gray-700">
                           {message.title}
                         </div>
                         {!message.isReaded && (

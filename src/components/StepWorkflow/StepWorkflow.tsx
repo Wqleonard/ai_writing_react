@@ -89,6 +89,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
   const treeData = useEditorStore((s) => s.treeData)
   const totalMdContentLength = useMemo(() => calculateTotalMdContentLength(treeData), [treeData])
+  const shouldShowQuickStart = showQuickStart && totalMdContentLength === 0
   const applyQuickStartStatus = useCallback((totalLength: number) => {
     if (isAnimatingRef.current) return
     if (showDelayTimerRef.current) {
@@ -286,7 +287,7 @@ export const StepWorkflow = React.forwardRef<StepWorkflowRef>(function StepWorkf
         onConfirm={handleStepConfirm}
       />
 
-      {showQuickStart ? (
+      {shouldShowQuickStart ? (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[230px] overflow-hidden"
           aria-hidden
