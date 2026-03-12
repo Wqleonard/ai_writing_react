@@ -100,7 +100,7 @@ export const CharacterCard = ({
           </span>
         )}
       </div>
-      <div className="line-clamp-9 mt-3 text-xs font-medium leading-tight text-black">
+      <div className="mt-3 text-xs font-medium leading-tight text-black whitespace-pre-line wrap-break-word">
         {data.experiences}
       </div>
       <div className="absolute bottom-3 left-3.5 w-[calc(100%-28px)]">
