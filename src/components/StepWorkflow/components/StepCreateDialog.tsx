@@ -34,7 +34,7 @@ import { CustomSteps } from "./CustomSteps";
 import { CharacterCard } from "./CharacterCard";
 import { TagSelector, type TagCategoryDataItem } from "./TagSelector";
 import { TemplateCardItem } from "../TemplateCardItem";
-import {MarkdownEditor} from "@/components/MarkdownEditor";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
 import type {
   Mode,
   Template,
@@ -113,6 +113,37 @@ const pxToRem = (px: number) => `${(px / ROOT_FONT_PX).toFixed(4)}rem`;
 const deepClone = <T,>(obj: T): T => {
   return JSON.parse(JSON.stringify(obj));
 };
+
+const splitByComma = (value: string): string[] =>
+  (value || "")
+    .split(/[，,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const joinByChineseComma = (parts: Array<string | undefined | null>): string =>
+  parts
+    .map((item) => (item || "").trim())
+    .filter(Boolean)
+    .join("，");
+
+const MBTI_OPTIONS = [
+  "INTJ",
+  "INTP",
+  "ENTJ",
+  "ENTP",
+  "INFJ",
+  "INFP",
+  "ENFJ",
+  "ENFP",
+  "ISTJ",
+  "ISFJ",
+  "ESTJ",
+  "ESFJ",
+  "ISTP",
+  "ISFP",
+  "ESTP",
+  "ESFP",
+];
 
 export interface StepCreateDialogProps {
   open: boolean;
@@ -273,6 +304,7 @@ export const StepCreateDialog = React.forwardRef<
     });
   const [editingCharacter, setEditingCharacter] =
     useState<CharacterCardData>(EMPTY_CHARACTER);
+  const [editingCharacterBio, setEditingCharacterBio] = useState("");
   const [editingCharacterIndex, setEditingCharacterIndex] = useState<
     number | null
   >(null);
@@ -667,7 +699,7 @@ export const StepCreateDialog = React.forwardRef<
           return;
         }
         if (result === "saveToCurrent" || result === "saveToNew") {
-          const outline = outlineContent || '';
+          const outline = outlineContent || "";
           const description =
             selectedMode === "template"
               ? (selectedTemplate?.description ?? "")
@@ -1101,6 +1133,7 @@ export const StepCreateDialog = React.forwardRef<
     clearCharacterEditTimers();
     setIsCharacterEditOpen(false);
     setEditingCharacter(EMPTY_CHARACTER);
+    setEditingCharacterBio("");
     setEditingCharacterIndex(null);
     setIsCharacterEditAnimating(false);
   }, [clearCharacterEditTimers]);
@@ -1109,6 +1142,13 @@ export const StepCreateDialog = React.forwardRef<
     (character: CharacterCardData, index: number, event?: React.MouseEvent) => {
       if (!character?.name) return;
       setEditingCharacter({ ...character });
+      setEditingCharacterBio(
+        joinByChineseComma([
+          character.experiences,
+          character.personality,
+          character.abilities,
+        ]),
+      );
       setEditingCharacterIndex(index);
       const cardElement = event?.currentTarget
         ? ((event.currentTarget as HTMLElement).closest(
@@ -1132,11 +1172,28 @@ export const StepCreateDialog = React.forwardRef<
       toast.warning("请填写角色名称");
       return;
     }
+    const ageText = (editingCharacter.age || "").trim();
+    const ageNumber = ageText === "" ? NaN : Number(ageText);
+    const age =
+      Number.isNaN(ageNumber) || ageText === ""
+        ? ""
+        : String(Math.max(0, Math.min(100, Math.round(ageNumber))));
+    const mbti = (editingCharacter.mbti || "").trim();
+    const [experiences = "", personality = "", abilities = ""] =
+      splitByComma(editingCharacterBio);
 
     let nextCharacter: CharacterCardData | null = null;
     setCharacters((prev) => {
       const next = [...prev];
-      nextCharacter = { ...editingCharacter, name };
+      nextCharacter = {
+        ...editingCharacter,
+        name,
+        age,
+        mbti,
+        experiences,
+        personality,
+        abilities,
+      };
       next[editingCharacterIndex] = nextCharacter;
       return next;
     });
@@ -1150,6 +1207,7 @@ export const StepCreateDialog = React.forwardRef<
     closeCharacterEditPanel();
   }, [
     editingCharacter,
+    editingCharacterBio,
     editingCharacterIndex,
     selectedCharacter,
     characters,
@@ -1210,7 +1268,19 @@ export const StepCreateDialog = React.forwardRef<
       },
       { signal: controller.signal },
     );
-  }, [selectedStory?.title, selectedStory?.intro, selectedStory?.theme, selectedCharacter, markStepUpdated, workId, chapterNumber, selectedMode, selectedTemplate, selectedTags, historyStepSnapshots]);
+  }, [
+    selectedStory?.title,
+    selectedStory?.intro,
+    selectedStory?.theme,
+    selectedCharacter,
+    markStepUpdated,
+    workId,
+    chapterNumber,
+    selectedMode,
+    selectedTemplate,
+    selectedTags,
+    historyStepSnapshots,
+  ]);
 
   useEffect(() => {
     if (
@@ -1383,7 +1453,9 @@ export const StepCreateDialog = React.forwardRef<
                         }
                       }}
                       className={cn(
-                        selectedTemplate?.id === t.id ? "border-2 border-(--theme-color)!" : "",
+                        selectedTemplate?.id === t.id
+                          ? "border-2 border-(--theme-color)!"
+                          : "",
                       )}
                     />
                   ))}
@@ -1394,126 +1466,133 @@ export const StepCreateDialog = React.forwardRef<
             {stepActive === 1 && selectedMode === "custom" && (
               <div className="step-content step-custom min-h-[540px] w-full">
                 <ScrollArea className="h-[540px] px-8">
-                <form
-                  className="flex flex-col gap-6 pb-4 px-4"
-                  onSubmit={(e) => e.preventDefault()}
-                >
-                  <div>
-                    <label className="mb-2 block text-xl text-gray-800">
-                      提示词
-                    </label>
-                    <Input
-                      className="w-full px-3 py-2 text-gray-500"
-                      value={formModel.prompt}
-                      disabled
-                      readOnly
-                    />
-                  </div>
-                  <div>
-                    <FormRecommendLabel
-                      label="核心梗"
-                      required
-                      recommends={toRecommendItems(recommendConfig.coreMeme)}
-                      fieldKey="coreMeme"
-                      onSelect={handleSelectRecommend}
-                    />
-                    <Textarea
-                      className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
-                      rows={2}
-                      maxLength={200}
-                      placeholder={
-                        '请填写核心冲突，如"为救家族签下替身协议后，发现金主竟是幼时白月光本尊"'
-                      }
-                      value={formModel.coreMeme}
-                      onChange={(e) =>
-                        setFormModel((p) => ({
-                          ...p,
-                          coreMeme: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FormRecommendLabel
-                      label="故事背景"
-                      required
-                      recommends={toRecommendItems(recommendConfig.background)}
-                      fieldKey="background"
-                      onSelect={handleSelectRecommend}
-                    />
-                    <Textarea
-                      className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
-                      rows={2}
-                      maxLength={200}
-                      placeholder="请填写时代背景、故事场景、主要矛盾设定、金手指设定、故事发展阶段等信息"
-                      value={formModel.background}
-                      onChange={(e) =>
-                        setFormModel((p) => ({
-                          ...p,
-                          background: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FormRecommendLabel
-                      label="主角人设"
-                      required
-                      recommends={toRecommendItems(recommendConfig.persona)}
-                      fieldKey="persona"
-                      onSelect={handleSelectRecommend}
-                    />
-                    <Input
-                      className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
-                      maxLength={200}
-                      placeholder="请填写男女主角年龄、性别、性格、目标和规划等信息"
-                      value={formModel.persona}
-                      onChange={(e) =>
-                        setFormModel((p) => ({ ...p, persona: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FormRecommendLabel
-                      label="字数"
-                      recommends={toRecommendItems(recommendConfig.wordCount)}
-                      fieldKey="wordCount"
-                      onSelect={handleSelectRecommend}
-                    />
-                    <Input
-                      className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
-                      maxLength={10}
-                      placeholder="选填，默认10000字左右短篇"
-                      value={formModel.wordCount}
-                      onChange={(e) =>
-                        setFormModel((p) => ({
-                          ...p,
-                          wordCount: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <FormRecommendLabel
-                      label="人称"
-                      recommends={toRecommendItems(recommendConfig.perspective)}
-                      fieldKey="perspective"
-                      onSelect={handleSelectRecommend}
-                    />
-                    <Input
-                      className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
-                      maxLength={10}
-                      placeholder="选填，默认第一人称"
-                      value={formModel.perspective}
-                      onChange={(e) =>
-                        setFormModel((p) => ({
-                          ...p,
-                          perspective: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </form>
+                  <form
+                    className="flex flex-col gap-6 pb-4 px-4"
+                    onSubmit={(e) => e.preventDefault()}
+                  >
+                    <div>
+                      <label className="mb-2 block text-xl text-gray-800">
+                        提示词
+                      </label>
+                      <Input
+                        className="w-full px-3 py-2 text-gray-500"
+                        value={formModel.prompt}
+                        disabled
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <FormRecommendLabel
+                        label="核心梗"
+                        required
+                        recommends={toRecommendItems(recommendConfig.coreMeme)}
+                        fieldKey="coreMeme"
+                        onSelect={handleSelectRecommend}
+                      />
+                      <Textarea
+                        className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
+                        rows={2}
+                        maxLength={200}
+                        placeholder={
+                          '请填写核心冲突，如"为救家族签下替身协议后，发现金主竟是幼时白月光本尊"'
+                        }
+                        value={formModel.coreMeme}
+                        onChange={(e) =>
+                          setFormModel((p) => ({
+                            ...p,
+                            coreMeme: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <FormRecommendLabel
+                        label="故事背景"
+                        required
+                        recommends={toRecommendItems(
+                          recommendConfig.background,
+                        )}
+                        fieldKey="background"
+                        onSelect={handleSelectRecommend}
+                      />
+                      <Textarea
+                        className="mt-2 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
+                        rows={2}
+                        maxLength={200}
+                        placeholder="请填写时代背景、故事场景、主要矛盾设定、金手指设定、故事发展阶段等信息"
+                        value={formModel.background}
+                        onChange={(e) =>
+                          setFormModel((p) => ({
+                            ...p,
+                            background: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <FormRecommendLabel
+                        label="主角人设"
+                        required
+                        recommends={toRecommendItems(recommendConfig.persona)}
+                        fieldKey="persona"
+                        onSelect={handleSelectRecommend}
+                      />
+                      <Input
+                        className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
+                        maxLength={200}
+                        placeholder="请填写男女主角年龄、性别、性格、目标和规划等信息"
+                        value={formModel.persona}
+                        onChange={(e) =>
+                          setFormModel((p) => ({
+                            ...p,
+                            persona: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <FormRecommendLabel
+                        label="字数"
+                        recommends={toRecommendItems(recommendConfig.wordCount)}
+                        fieldKey="wordCount"
+                        onSelect={handleSelectRecommend}
+                      />
+                      <Input
+                        className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
+                        maxLength={10}
+                        placeholder="选填，默认10000字左右短篇"
+                        value={formModel.wordCount}
+                        onChange={(e) =>
+                          setFormModel((p) => ({
+                            ...p,
+                            wordCount: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <FormRecommendLabel
+                        label="人称"
+                        recommends={toRecommendItems(
+                          recommendConfig.perspective,
+                        )}
+                        fieldKey="perspective"
+                        onSelect={handleSelectRecommend}
+                      />
+                      <Input
+                        className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-800 placeholder:text-gray-400"
+                        maxLength={10}
+                        placeholder="选填，默认第一人称"
+                        value={formModel.perspective}
+                        onChange={(e) =>
+                          setFormModel((p) => ({
+                            ...p,
+                            perspective: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </form>
                 </ScrollArea>
               </div>
             )}
@@ -1598,7 +1677,9 @@ export const StepCreateDialog = React.forwardRef<
                   ))}
                 </div>
                 <div className="footer-actions flex flex-col items-center w-full justify-center">
-                  <div className="text-xs text-gray-400">服务器火爆，预计等待时间30s</div>
+                  <div className="text-xs text-gray-400">
+                    服务器火爆，预计等待时间30s
+                  </div>
                   <LinkButton
                     onClick={updateStories}
                     disabled={loading}
@@ -1757,31 +1838,35 @@ export const StepCreateDialog = React.forwardRef<
                       style={characterEditPanelStyle}
                     >
                       <img
-                        src={editingCharacter.gender == "女" ? FEMALE : MALE}
+                        src={editingCharacter.gender === "女" ? FEMALE : MALE}
                         alt=""
-                        className='absolute rounded-[10px] w-40 h-auto bottom-0 right-10'
+                        className="absolute rounded-[10px] w-40 h-auto bottom-0 right-10"
                       />
                       <div className="grid grid-cols-2 gap-4 overflow-y-auto relative">
-
-                        <div>
-                          <label className="mb-2 block text-xl text-gray-700">
-                            角色名
+                        <div className="flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            角色名:
                           </label>
-                          <input
-                            className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
-                            maxLength={5}
-                            value={editingCharacter.name}
-                            onChange={(e) =>
-                              setEditingCharacter((prev) => ({
-                                ...prev,
-                                name: e.target.value,
-                              }))
-                            }
-                          />
+                          <div className="w-full">
+                            <input
+                              className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                              maxLength={5}
+                              value={editingCharacter.name}
+                              onChange={(e) =>
+                                setEditingCharacter((prev) => ({
+                                  ...prev,
+                                  name: e.target.value,
+                                }))
+                              }
+                            />
+                            <div className="mt-1 text-right text-xs text-[#999]">
+                              {(editingCharacter.name || "").length}/5
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label className="mb-2 block text-xl text-gray-700">
-                            性别
+                        <div className="flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            性别:
                           </label>
                           <select
                             className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
@@ -1793,58 +1878,99 @@ export const StepCreateDialog = React.forwardRef<
                               }))
                             }
                           >
-                            <option value="">请选择</option>
                             <option value="男">男</option>
                             <option value="女">女</option>
                           </select>
                         </div>
-                        <div>
-                          <label className="mb-2 block text-xl text-gray-700">
-                            人物标签
+                        <div className=" flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            年龄:
                           </label>
                           <input
+                            type="number"
+                            min={1}
+                            step={1}
                             className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
-                            maxLength={100}
-                            value={editingCharacter.abilities}
-                            onChange={(e) =>
+                            value={editingCharacter.age}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === "") {
+                                setEditingCharacter((prev) => ({
+                                  ...prev,
+                                  age: "",
+                                }));
+                                return;
+                              }
+                              const next = Number(value);
+                              if (Number.isNaN(next) || !Number.isInteger(next) || next <= 0) return;
                               setEditingCharacter((prev) => ({
                                 ...prev,
-                                abilities: e.target.value,
-                              }))
-                            }
+                                age: String(next),
+                              }));
+                            }}
+                            placeholder="请输入年龄..."
                           />
                         </div>
-                        <div>
-                          <label className="mb-2 block text-xl text-gray-700">
-                            人物身份
+                        <div className="flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            MBTI:
                           </label>
-                          <input
+                          <select
                             className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
-                            maxLength={50}
-                            value={editingCharacter.identity}
+                            value={editingCharacter.mbti}
                             onChange={(e) =>
                               setEditingCharacter((prev) => ({
                                 ...prev,
-                                identity: e.target.value,
+                                mbti: e.target.value,
                               }))
                             }
-                          />
+                          >
+                            {MBTI_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                        <div className="col-span-2">
-                          <label className="mb-2 block text-xl text-gray-700">
-                            人物小传
+                        <div className="col-span-2 flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            人物小传:
                           </label>
-                          <textarea
-                            className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
-                            maxLength={300}
-                            value={editingCharacter.experiences}
-                            onChange={(e) =>
-                              setEditingCharacter((prev) => ({
-                                ...prev,
-                                experiences: e.target.value,
-                              }))
-                            }
-                          />
+                          <div className="w-full">
+                            <textarea
+                              className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                              maxLength={300}
+                              value={editingCharacterBio}
+                              onChange={(e) =>
+                                setEditingCharacterBio(e.target.value)
+                              }
+                              placeholder="经历，性格，能力"
+                            />
+                            <div className="mt-1 text-right text-xs text-[#999]">
+                              {(editingCharacterBio || "").length}/300
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-span-2 flex items-start gap-2">
+                          <label className="w-30 text-right leading-10 shrink-0 block text-xl text-gray-700">
+                            人物身份:
+                          </label>
+                          <div className="w-full">
+                            <input
+                              className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                              maxLength={50}
+                              value={editingCharacter.identity}
+                              onChange={(e) =>
+                                setEditingCharacter((prev) => ({
+                                  ...prev,
+                                  identity: e.target.value,
+                                }))
+                              }
+                            />
+                            <div className="mt-1 text-right text-xs text-[#999]">
+                              {(editingCharacter.identity || "").length}/50
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="mt-5 flex justify-center gap-6">
