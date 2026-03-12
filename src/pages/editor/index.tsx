@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo, useDeferredValue } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import clsx from "clsx";
@@ -29,6 +29,7 @@ import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphS
 import { resetLLMState, useLLM } from "@/hooks/useLLM";
 import useMarkdownEditor, { type HighlightMarkerInfo } from "@/hooks/useMarkdownEditor";
 import type {
+  AgentCustomMessageItem,
   ChatMessage,
   FileItem as FileItemType,
 } from "@/stores/chatStore";
@@ -72,6 +73,14 @@ import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CircleAlert } from "lucide-react";
 import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
+import {
+  findSearchMatches,
+  filterAssociationIds,
+  parseGuidesPayload,
+  resolveFileNodeByPath,
+  sanitizeIncomingFilePath,
+  type TreeNodeLike,
+} from "./utils";
 
 /** 根据当前文件路径和新的 label 生成新路径，如 "正文/第一章.md" + "第二章" => "正文/第二章.md" */
 const getNewPathFromLabel = (currentPath: string, newLabel: string): string => {
@@ -604,19 +613,7 @@ const MarkdownEditorPage = () => {
         const { sessionId, workId: wid } = pending;
         try {
           const res = await generateGuideReq(sessionId, Number(wid)) as { guides?: string[] | string } | undefined;
-          const raw = res?.guides;
-          const guides = Array.isArray(raw)
-            ? raw
-            : typeof raw === "string"
-              ? (() => {
-                try {
-                  const parsed = JSON.parse(raw) as string[] | unknown;
-                  return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                  return [];
-                }
-              })()
-              : [];
+          const guides = parseGuidesPayload(res?.guides);
           if (guides.length > 0) {
             updateLastChatMessage((prev) => {
               const existing = prev.customMessage ?? [];
@@ -730,6 +727,11 @@ const MarkdownEditorPage = () => {
     if (langGraphStream.isStreaming) return "streaming";
     return "ready";
   }, [langGraphStream.error, langGraphStream.isStreaming]);
+  // 与 tree/workInfo 同理：稳定回调里通过 ref 读取实时状态
+  const chatInputStatusRef = useRef(chatInputStatus);
+  useEffect(() => {
+    chatInputStatusRef.current = chatInputStatus;
+  }, [chatInputStatus]);
   const isStreamingOverlayVisible = chatInputStatus === "streaming";
   const {
     associationTags,
@@ -810,9 +812,12 @@ const MarkdownEditorPage = () => {
           selectedTexts: selectedTexts.length > 0 ? [...selectedTexts] : undefined,
         };
         addMessageToDualTab("chat", userMessage as DualTabChatMessage);
-        // 与 Vue 行为对齐：用户消息发送前落一次版本（saveStatus: "2"）
+        // 保存走非阻塞，避免阻塞流式请求首包。
+        // 失败不打断发送链路，只记录日志便于排查。
         if (workId) {
-          await useEditorStore.getState().saveEditorData("2");
+          void useEditorStore.getState().saveEditorData("2").catch((err) => {
+            console.error("saveEditorData before stream failed:", err);
+          });
         }
       }
 
@@ -941,6 +946,13 @@ const MarkdownEditorPage = () => {
   const [isChangesPanelVisible, setIsChangesPanelVisible] = useState(false);
   const centerRequiredRem = CENTER_EDITOR_MIN_REM + (isChangesPanelVisible ? CHANGES_PANEL_WIDTH_REM : 0);
   const [fileChangesMap, setFileChangesMap] = useState<FileChangesMap>({});
+  // 用 ref 持有最新值，避免 chat 回调把这些字段放进依赖后频繁重建
+  const treeDataRef = useRef<TreeNodeLike[]>(treeData as TreeNodeLike[]);
+  const workInfoStageRef = useRef(workInfo.stage);
+  useEffect(() => {
+    treeDataRef.current = treeData as TreeNodeLike[];
+    workInfoStageRef.current = workInfo.stage;
+  }, [treeData, workInfo.stage]);
 
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
     try {
@@ -1286,24 +1298,12 @@ const MarkdownEditorPage = () => {
     setShowSearchReplaceDialog(true);
   }, []);
 
+  // 查找预览使用延迟值，避免每次键入都立即全量扫描正文
+  const deferredSearchText = useDeferredValue(searchText);
   const searchMatches = useMemo(() => {
-    if (!searchText.trim()) return [];
     const source = serverData[currentEditingId || DEFAULT_EDITING_FILE_KEY] || "";
-    const target = searchText.toLowerCase();
-    const sourceLower = source.toLowerCase();
-    const list: Array<{ actualIndex: number; preview: string }> = [];
-    let idx = 0;
-    while ((idx = sourceLower.indexOf(target, idx)) !== -1) {
-      const start = Math.max(0, idx - 20);
-      const end = Math.min(source.length, idx + target.length + 20);
-      list.push({
-        actualIndex: idx,
-        preview: source.slice(start, end),
-      });
-      idx += 1;
-    }
-    return list;
-  }, [serverData, currentEditingId, searchText]);
+    return findSearchMatches(source, deferredSearchText);
+  }, [serverData, currentEditingId, deferredSearchText]);
 
   const closeSearchReplaceDialog = useCallback(() => {
     setShowSearchReplaceDialog(false);
@@ -1316,13 +1316,14 @@ const MarkdownEditorPage = () => {
       toast.warning("请输入要查找的内容");
       return;
     }
-    if (searchMatches.length === 0) {
+    const targetFileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
+    let nextContent = serverData[targetFileKey] || "";
+    const effectiveMatches = findSearchMatches(nextContent, searchText);
+    if (effectiveMatches.length === 0) {
       toast.warning("未找到匹配的内容");
       return;
     }
-    const targetFileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
-    let nextContent = serverData[targetFileKey] || "";
-    const sorted = [...searchMatches].sort((a, b) => b.actualIndex - a.actualIndex);
+    const sorted = [...effectiveMatches].sort((a, b) => b.actualIndex - a.actualIndex);
     for (const match of sorted) {
       const before = nextContent.slice(0, match.actualIndex);
       const after = nextContent.slice(match.actualIndex + searchText.length);
@@ -1330,7 +1331,7 @@ const MarkdownEditorPage = () => {
     }
     setServerDataFile(targetFileKey, nextContent);
     toast.success(`已替换 ${sorted.length} 处内容`);
-  }, [searchText, searchMatches, replaceText, setServerDataFile, currentEditingId, serverData]);
+  }, [searchText, replaceText, setServerDataFile, currentEditingId, serverData]);
 
   const openTimeMachine = useCallback(async () => {
     if (!workId) return;
@@ -1839,13 +1840,17 @@ const MarkdownEditorPage = () => {
   ]);
 
   useEffect(() => {
-    setIsChangesPanelVisible(currentFilePendingCount > 0);
+    // 避免 set 同值导致的额外 render
+    const nextVisible = currentFilePendingCount > 0;
+    setIsChangesPanelVisible((prev) => (prev === nextVisible ? prev : nextVisible));
   }, [currentFilePendingCount]);
 
   useEffect(() => {
     const hasActive = currentFilePendingChanges.some((item) => item.index === activeChangeIndex);
     if (hasActive) return;
-    setActiveChangeIndex(currentFilePendingChanges[0]?.index ?? null);
+    // 仅当激活项失效时切到第一条 pending
+    const nextIndex = currentFilePendingChanges[0]?.index ?? null;
+    setActiveChangeIndex((prev) => (prev === nextIndex ? prev : nextIndex));
   }, [currentFilePendingChanges, activeChangeIndex]);
 
   useEffect(() => {
@@ -1860,6 +1865,7 @@ const MarkdownEditorPage = () => {
   useEffect(() => {
     const el = editorMainScrollRef.current;
     if (!el) return;
+    let rafId: number | null = null;
     const updateHeight = () => {
       const contentEl = el.querySelector(".markdown-editor-content") as HTMLElement | null;
       const proseMirrorEl = contentEl?.querySelector(".ProseMirror") as HTMLElement | null;
@@ -1871,14 +1877,22 @@ const MarkdownEditorPage = () => {
       );
       setChangesPanelHeight((prev) => (prev === next ? prev : next));
     };
-    updateHeight();
-    const ro = new ResizeObserver(updateHeight);
+    const scheduleUpdateHeight = () => {
+      // 高频 observer 回调合并到同一帧，降低 setState 频率
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateHeight();
+      });
+    };
+    scheduleUpdateHeight();
+    const ro = new ResizeObserver(scheduleUpdateHeight);
     ro.observe(el);
     const contentEl = el.querySelector(".markdown-editor-content") as HTMLElement | null;
     const proseMirrorEl = contentEl?.querySelector(".ProseMirror") as HTMLElement | null;
     if (contentEl) ro.observe(contentEl);
     if (proseMirrorEl) ro.observe(proseMirrorEl);
-    const mo = new MutationObserver(updateHeight);
+    const mo = new MutationObserver(scheduleUpdateHeight);
     if (proseMirrorEl) {
       mo.observe(proseMirrorEl, {
         childList: true,
@@ -1886,11 +1900,14 @@ const MarkdownEditorPage = () => {
         characterData: true,
       });
     }
-    window.addEventListener("resize", updateHeight);
+    window.addEventListener("resize", scheduleUpdateHeight);
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       ro.disconnect();
       mo.disconnect();
-      window.removeEventListener("resize", updateHeight);
+      window.removeEventListener("resize", scheduleUpdateHeight);
     };
   }, [fileKey, relationViewMode, currentFilePendingCount]);
 
@@ -2188,55 +2205,27 @@ const MarkdownEditorPage = () => {
         setServerDataFile(fileId, files[fileId] ?? "");
       }
 
-      if (workId && workInfo.stage === "blank") {
+      // 使用 ref 读取 stage，避免把 workInfo.stage 放进依赖触发回调重建
+      if (workId && workInfoStageRef.current === "blank") {
         setWorkInfo({ stage: "final" });
       }
 
       toast.success("已发送到知识库");
     },
-    [setServerData, setServerDataFile, workId, workInfo.stage, setWorkInfo]
+    [setServerData, setServerDataFile, workId, setWorkInfo]
   );
 
   const handleFileNameClick = useCallback((rawFileName: string) => {
-    const fileName = (rawFileName || "")
-      .trim()
-      .replace(/^\.?\//, "")
-      .replace(/[?#].*$/, "")
-      .trim();
-    if (!fileName) return;
+    const normalized = sanitizeIncomingFilePath(rawFileName);
+    if (!normalized) return;
 
-    const normalized = fileName.replace(/^\/+/, "").trim();
-    const isPathLike = normalized.includes("/");
-
-    const findNodeRecursive = (
-      nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
-      predicate: (id: string) => boolean,
-    ): { id: string; content?: string } | null => {
-      for (const node of nodes) {
-        if (predicate(node.id)) return node as { id: string; content?: string };
-        if (node.children && node.children.length > 0) {
-          const found = findNodeRecursive(node.children as any, predicate);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const tree = treeData as any;
-    const targetNode =
-      // 1) 全路径优先：直接命中（或后端返回带前缀路径时，兜底 endsWith）
-      (isPathLike
-        ? (findNodeRecursive(tree, (id) => id === normalized) ??
-          findNodeRecursive(tree, (id) => id.endsWith(`/${normalized}`)))
-        : null) ??
-      // 2) basename：用 endsWith 精确匹配文件名（避免 includes 误匹配）
-      findNodeRecursive(tree, (id) => id === normalized || id.endsWith(`/${normalized}`)) ??
-      // 3) 兜底：兼容旧逻辑（某些节点 id 结构不规范时）
-      findNodeRecursive(tree, (id) => id.includes(`/${normalized}`));
+    // 使用 ref 里的最新树数据，保持回调稳定引用
+    const tree = treeDataRef.current;
+    const targetNode = resolveFileNodeByPath(tree, normalized);
 
     if (!targetNode) {
       // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
-      if (chatInputStatus === "streaming") {
+      if (chatInputStatusRef.current === "streaming") {
         pendingFileNameClickRef.current = normalized;
       }
       return;
@@ -2244,36 +2233,15 @@ const MarkdownEditorPage = () => {
     // 与 Vue 行为一致：只定位到左侧目录并切换当前编辑文件，不在这里改写 serverData
     useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
     pendingFileNameClickRef.current = "";
-  }, [chatInputStatus, treeData]);
+  }, []);
 
   useEffect(() => {
     const pending = pendingFileNameClickRef.current;
     if (!pending) return;
 
-    const findNodeRecursive = (
-      nodes: Array<{ id: string; children?: Array<{ id: string; children?: any[] }> }>,
-      predicate: (id: string) => boolean,
-    ): { id: string; content?: string } | null => {
-      for (const node of nodes) {
-        if (predicate(node.id)) return node as { id: string; content?: string };
-        if (node.children && node.children.length > 0) {
-          const found = findNodeRecursive(node.children as any, predicate);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
     const normalized = pending.replace(/^\/+/, "").trim();
-    const isPathLike = normalized.includes("/");
-    const tree = treeData as any;
-    const targetNode =
-      (isPathLike
-        ? (findNodeRecursive(tree, (id) => id === normalized) ??
-          findNodeRecursive(tree, (id) => id.endsWith(`/${normalized}`)))
-        : null) ??
-      findNodeRecursive(tree, (id) => id === normalized || id.endsWith(`/${normalized}`)) ??
-      findNodeRecursive(tree, (id) => id.includes(`/${normalized}`));
+    const tree = treeData as TreeNodeLike[];
+    const targetNode = resolveFileNodeByPath(tree, normalized);
 
     if (!targetNode) return;
     useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
@@ -2294,6 +2262,216 @@ const MarkdownEditorPage = () => {
   useEffect(() => {
     if (!currentEditingId) setIsEditingLabel(false);
   }, [currentEditingId]);
+
+  const chatSessionId = chatCurrentSession?.id ?? "";
+  const displayChatMessages = useMemo(
+    () => (streamingMessage ? [...chatMessages, streamingMessage] : chatMessages),
+    [chatMessages, streamingMessage]
+  );
+  const handleOpenAssociationSelector = useCallback(() => {
+    setShowAssociationSelector(true);
+  }, []);
+  const handleToggleTodosExpanded = useCallback(() => {
+    setTodosExpanded((expanded) => !expanded);
+  }, []);
+  const handleChatSendMessage = useCallback(
+    (msg: ChatMessage) => sendChatText(msg.content ?? "", { addUserMessage: true }),
+    [sendChatText]
+  );
+  const handleSaveCurrentChatSession = useCallback(() => {
+    saveCurrentSession("chat");
+  }, [saveCurrentSession]);
+  const handleAssociationConfirm = useCallback(
+    (ids: string[]) => {
+      setAssociationTags(filterAssociationIds(ids));
+    },
+    [setAssociationTags]
+  );
+  const handleHiltReject = useCallback(
+    async (rejectedMsg: AgentCustomMessageItem) => {
+      const sessionId = chatSessionId;
+      if (!sessionId || !workId) return;
+      // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
+      handleStopStreaming(false);
+      updateLastChatMessage((prev) => {
+        const custom = prev.customMessage ?? [];
+        return {
+          ...prev,
+          customMessage: custom.map((item, idx) => {
+            const hasHiltTodos =
+              Array.isArray((item as { hiltTodos?: unknown[] } | undefined)?.hiltTodos) &&
+              ((item as { hiltTodos?: unknown[] }).hiltTodos?.length ?? 0) > 0;
+            const hasWriteTodos =
+              Array.isArray((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)?.tool_calls) &&
+              (((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
+                (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
+              ));
+            const isPendingHiltCandidate = hasHiltTodos || hasWriteTodos;
+            const shouldReject =
+              item.id === rejectedMsg.id ||
+              (idx === custom.length - 1 && isPendingHiltCandidate);
+            return shouldReject ? { ...item, hiltStatus: "rejected" as const } : item;
+          }),
+        };
+      });
+      // 与 approve 对齐：将“拒绝”明确传回后端，结束 hilt_pending 等待态
+      sendChatText("", { command: "reject", addUserMessage: false });
+      try {
+        const res = await generateGuideReq(sessionId, Number(workId)) as {
+          guides?: string[] | string
+        } | undefined;
+        const guides = parseGuidesPayload(res?.guides);
+        if (guides.length > 0) {
+          updateLastChatMessage((prev) => {
+            const custom = prev.customMessage ?? [];
+            return {
+              ...prev,
+              customMessage: custom.map((item) =>
+                item.id === rejectedMsg.id ? { ...item, suggestions: guides } : item
+              ),
+            };
+          });
+        }
+      } catch (_) {
+        // 联想提示词失败静默忽略
+      }
+    },
+    [chatSessionId, workId, handleStopStreaming, updateLastChatMessage, sendChatText]
+  );
+  const handleHiltApprove = useCallback(
+    (approvedMsg: AgentCustomMessageItem) => {
+      updateLastChatMessage((prev) => {
+        const custom = prev.customMessage ?? [];
+        return {
+          ...prev,
+          customMessage: custom.map((item) =>
+            item.id === approvedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
+          ),
+        };
+      });
+      sendChatText("", { command: "approve", addUserMessage: false });
+    },
+    [updateLastChatMessage, sendChatText]
+  );
+  const handleRendererSendMessage = useCallback(
+    (text: string, reload = false) =>
+      sendChatText(text, { reload, addUserMessage: !reload }),
+    [sendChatText]
+  );
+  const renderChatMessage = useCallback(
+    (msg: ChatMessage, options?: { isLastMessage?: boolean }) => {
+      const hasCustomMessage =
+        msg.customMessage &&
+        Array.isArray(msg.customMessage) &&
+        msg.customMessage.length > 0;
+      const hasFiles =
+        msg.files && Array.isArray(msg.files) && msg.files.length > 0;
+      const hasSelectedTexts =
+        msg.selectedTexts &&
+        Array.isArray(msg.selectedTexts) &&
+        msg.selectedTexts.length > 0;
+      const hasFilesOrSelected = hasFiles || hasSelectedTexts;
+
+      return (
+        <div
+          className={clsx(
+            "w-full flex text-sm",
+            msg.role === "user" ? "justify-end" : "justify-start"
+          )}
+        >
+          <div
+            className={clsx(
+              hasCustomMessage
+                ? "w-full max-w-none rounded-none bg-transparent px-0 py-0 text-foreground"
+                : "rounded-lg px-3 py-2 max-w-[85%] bg-primary text-primary-foreground"
+            )}
+          >
+            {hasCustomMessage ? (
+              <AgentCustomMessageRenderer
+                customMessage={msg.customMessage!}
+                activeTab="chat"
+                isLastMessage={options?.isLastMessage ?? false}
+                streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
+                currentMessageId={msg.id}
+                streamingMessageId={streamingMessageIdRef.current}
+                onSendToKnowledgeBase={handleKnowledgeBaseUpdate}
+                onFileNameClick={handleFileNameClick}
+                onHiltReject={handleHiltReject}
+                onHiltApprove={handleHiltApprove}
+                onSendMessage={handleRendererSendMessage}
+              />
+            ) : (
+              <>
+                {hasFilesOrSelected && (
+                  <div className="message-with-files space-y-1">
+                    {hasSelectedTexts && (
+                      <SelectedTextDisplay
+                        texts={msg.selectedTexts!}
+                      />
+                    )}
+                    {hasFiles && (
+                      <FileMessageDisplay
+                        files={msg.files as FileItemType[]}
+                        onFileClick={handleMessageFileClick}
+                      />
+                    )}
+                    <div className="message-content-wrapper text-right">
+                      <MarkdownRenderer
+                        content={msg.content || ""}
+                        onFileNameClick={handleFileNameClick}
+                      />
+                    </div>
+                  </div>
+                )}
+                {!hasFilesOrSelected && (
+                  <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
+                    <MarkdownRenderer
+                      content={msg.content || ""}
+                      onFileNameClick={handleFileNameClick}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    },
+    [
+      chatInputStatus,
+      handleKnowledgeBaseUpdate,
+      handleFileNameClick,
+      handleHiltReject,
+      handleHiltApprove,
+      handleRendererSendMessage,
+      handleMessageFileClick,
+    ]
+  );
+  const chatSlots = useMemo(
+    () => ({
+      todos: (
+        <TodosFixedPanel
+          todos={langGraphStream.todos}
+          expanded={todosExpanded}
+          onToggleExpand={handleToggleTodosExpanded}
+          isStreaming={chatInputStatus === "streaming"}
+        />
+      ),
+      renderMessage: renderChatMessage,
+      footer: (
+        <div className="text-center px-4 text-[11px] text-[#ccc] w-full">
+          {`<内容由AI生成，仅供参考>`}
+        </div>
+      ),
+    }),
+    [
+      langGraphStream.todos,
+      todosExpanded,
+      handleToggleTodosExpanded,
+      chatInputStatus,
+      renderChatMessage,
+    ]
+  );
 
   return (
     <div className="page-editor-panel flex h-screen w-full flex-col overflow-hidden bg-(--bg-primary)">
@@ -2703,187 +2881,17 @@ const MarkdownEditorPage = () => {
                   initialIsAnswerOnly={isAnswerOnly}
                   inputStatus={chatInputStatus}
                   onStopStreaming={handleStopStreaming}
-                  messages={
-                    streamingMessage
-                      ? [...chatMessages, streamingMessage]
-                      : chatMessages
-                  }
-                  sessionId={chatCurrentSession?.id ?? ""}
-                  onSendMessage={(msg: ChatMessage) =>
-                    sendChatText(msg.content ?? "", { addUserMessage: true })
-                  }
-                  onSaveCurrentSession={() => saveCurrentSession("chat")}
+                  messages={displayChatMessages}
+                  sessionId={chatSessionId}
+                  onSendMessage={handleChatSendMessage}
+                  onSaveCurrentSession={handleSaveCurrentChatSession}
                   checkStreamingStatusAndConfirm={checkStreamingStatusAndConfirm}
                   isHomePage={false}
                   hideAssociationFeature={false}
-                  onOpenAssociationSelector={() => setShowAssociationSelector(true)}
+                  onOpenAssociationSelector={handleOpenAssociationSelector}
                   isAnswerOnly={isAnswerOnly}
                   onAnswerOnlyChange={setIsAnswerOnly}
-                  slots={{
-                    todos: (
-                      <TodosFixedPanel
-                        todos={langGraphStream.todos}
-                        expanded={todosExpanded}
-                        onToggleExpand={() => setTodosExpanded((e) => !e)}
-                        isStreaming={chatInputStatus === "streaming"}
-                      />
-                    ),
-                    renderMessage: (msg: ChatMessage, options?: { isLastMessage?: boolean }) => {
-                      const hasCustomMessage =
-                        msg.customMessage &&
-                        Array.isArray(msg.customMessage) &&
-                        msg.customMessage.length > 0;
-                      const hasFiles =
-                        msg.files && Array.isArray(msg.files) && msg.files.length > 0;
-                      const hasSelectedTexts =
-                        msg.selectedTexts &&
-                        Array.isArray(msg.selectedTexts) &&
-                        msg.selectedTexts.length > 0;
-                      const hasFilesOrSelected = hasFiles || hasSelectedTexts;
-
-                      return (
-                        <div
-                          className={clsx(
-                            "w-full flex text-sm",
-                            msg.role === "user" ? "justify-end" : "justify-start"
-                          )}
-                        >
-                          <div
-                            className={clsx(
-                              hasCustomMessage
-                                ? "w-full max-w-none rounded-none bg-transparent px-0 py-0 text-foreground"
-                                : "rounded-lg px-3 py-2 max-w-[85%] bg-primary text-primary-foreground"
-                            )}
-                          >
-                            {hasCustomMessage ? (
-                              <AgentCustomMessageRenderer
-                                customMessage={msg.customMessage!}
-                                activeTab="chat"
-                                isLastMessage={options?.isLastMessage ?? false}
-                                streamingStatus={chatInputStatus === "streaming" ? "streaming" : "ready"}
-                                currentMessageId={msg.id}
-                                streamingMessageId={streamingMessageIdRef.current}
-                                onSendToKnowledgeBase={handleKnowledgeBaseUpdate}
-                                onFileNameClick={handleFileNameClick}
-                                onHiltReject={async (rejectedMsg) => {
-                                  const sessionId = chatCurrentSession?.id ?? "";
-                                  if (!sessionId || !workId) return;
-                                  // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
-                                  handleStopStreaming(false);
-                                  updateLastChatMessage((prev) => {
-                                    const custom = prev.customMessage ?? [];
-                                    return {
-                                      ...prev,
-                                      customMessage: custom.map((item, idx) => {
-                                        const hasHiltTodos =
-                                          Array.isArray((item as { hiltTodos?: unknown[] } | undefined)?.hiltTodos) &&
-                                          ((item as { hiltTodos?: unknown[] }).hiltTodos?.length ?? 0) > 0;
-                                        const hasWriteTodos =
-                                          Array.isArray((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)?.tool_calls) &&
-                                          (((item as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
-                                            (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-                                          ));
-                                        const isPendingHiltCandidate = hasHiltTodos || hasWriteTodos;
-                                        const shouldReject =
-                                          item.id === rejectedMsg.id ||
-                                          (idx === custom.length - 1 && isPendingHiltCandidate);
-                                        return shouldReject ? { ...item, hiltStatus: "rejected" as const } : item;
-                                      }),
-                                    };
-                                  });
-                                  // 与 approve 对齐：将“拒绝”明确传回后端，结束 hilt_pending 等待态
-                                  sendChatText("", { command: "reject", addUserMessage: false });
-                                  try {
-                                    const res = await generateGuideReq(sessionId, Number(workId)) as {
-                                      guides?: string[] | string
-                                    } | undefined;
-                                    const raw = res?.guides;
-                                    const guides = Array.isArray(raw)
-                                      ? raw
-                                      : typeof raw === "string"
-                                        ? (() => {
-                                          try {
-                                            const parsed = JSON.parse(raw) as string[] | unknown;
-                                            return Array.isArray(parsed) ? parsed : [];
-                                          } catch {
-                                            return [];
-                                          }
-                                        })()
-                                        : [];
-                                    if (guides.length > 0) {
-                                      updateLastChatMessage((prev) => {
-                                        const custom = prev.customMessage ?? [];
-                                        return {
-                                          ...prev,
-                                          customMessage: custom.map((item) =>
-                                            item.id === rejectedMsg.id ? { ...item, suggestions: guides } : item
-                                          ),
-                                        };
-                                      });
-                                    }
-                                  } catch (_) {
-                                    // 联想提示词失败静默忽略
-                                  }
-                                }}
-                                onHiltApprove={(approvedMsg) => {
-                                  updateLastChatMessage((prev) => {
-                                    const custom = prev.customMessage ?? [];
-                                    return {
-                                      ...prev,
-                                      customMessage: custom.map((item) =>
-                                        item.id === approvedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
-                                      ),
-                                    };
-                                  });
-                                  sendChatText("", { command: "approve", addUserMessage: false });
-                                }}
-                                onSendMessage={(text, reload = false) =>
-                                  sendChatText(text, { reload, addUserMessage: !reload })
-                                }
-                              />
-                            ) : (
-                              <>
-                                {hasFilesOrSelected && (
-                                  <div className="message-with-files space-y-1">
-                                    {hasSelectedTexts && (
-                                      <SelectedTextDisplay
-                                        texts={msg.selectedTexts!}
-                                      />
-                                    )}
-                                    {hasFiles && (
-                                      <FileMessageDisplay
-                                        files={msg.files as FileItemType[]}
-                                        onFileClick={handleMessageFileClick}
-                                      />
-                                    )}
-                                    <div className="message-content-wrapper text-right">
-                                      <MarkdownRenderer
-                                        content={msg.content || ""}
-                                        onFileNameClick={handleFileNameClick}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                                {!hasFilesOrSelected && (
-                                  <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
-                                    <MarkdownRenderer
-                                      content={msg.content || ""}
-                                      onFileNameClick={handleFileNameClick}
-                                    />
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    },
-                    footer: (
-                      <div className="text-center px-4 text-[11px] text-[#ccc] w-full">
-                        {`<内容由AI生成，仅供参考>`}
-                      </div>
-                    ),
-                  }}
+                  slots={chatSlots}
                 >
                   <ProChatPanel/>
                 </ProChatContainer>
@@ -2892,16 +2900,7 @@ const MarkdownEditorPage = () => {
                   onOpenChange={setShowAssociationSelector}
                   treeData={treeData}
                   selectedIds={associationTags}
-                  onConfirm={(ids) => {
-                    const filtered = ids.filter(
-                      (id) =>
-                        !ids.some(
-                          (other) =>
-                            other !== id && (id.startsWith(`${other}/`) || id === `${other}/`)
-                        )
-                    );
-                    setAssociationTags(filtered);
-                  }}
+                  onConfirm={handleAssociationConfirm}
                 />
               </>
             )}

@@ -8,6 +8,56 @@ import type { ChatMessage } from "@/stores/chatStore"
 import { useProChatContainerRequired } from "./ProChatContext"
 import titleLogo from "@/assets/images/logo.webp"
 
+type RenderMessageFn = (
+  message: ChatMessage,
+  options?: { isLastMessage?: boolean }
+) => React.ReactNode
+
+const MessageItems = React.memo(
+  ({
+    displayMessages,
+    renderMessage,
+  }: {
+    displayMessages: ChatMessage[]
+    renderMessage?: RenderMessageFn
+  }) => (
+    <>
+      {displayMessages.map((msg, index) => {
+        if (renderMessage) {
+          return (
+            <React.Fragment key={msg.id}>
+              {renderMessage(msg, {
+                isLastMessage: index === displayMessages.length - 1,
+              })}
+            </React.Fragment>
+          )
+        }
+        return (
+          <div
+            key={msg.id}
+            className={clsx(
+              "w-full flex text-sm",
+              msg.role === "user" ? "justify-end" : "justify-start"
+            )}
+          >
+            <div
+              className={clsx(
+                "rounded-lg px-3 py-2 max-w-[85%]",
+                "bg-primary text-primary-foreground"
+              )}
+            >
+              <div className="whitespace-pre-wrap break-words">{msg.content || ""}</div>
+            </div>
+          </div>
+        )
+      })}
+    </>
+  ),
+  (prev, next) =>
+    prev.displayMessages === next.displayMessages &&
+    prev.renderMessage === next.renderMessage
+)
+
 /**
  * Editor 用聊天面板：有消息时使用 AutoScrollArea 实现对话区自动滚动，
  * 通过 useProChatContainer 从 ProChatContainer 获取状态。
@@ -110,27 +160,6 @@ export const ProChatPanel = () => {
     </div>
   )
 
-  const defaultMessageBubble = (msg: ChatMessage) => (
-    <div
-      key={msg.id}
-      className={clsx(
-        "w-full flex text-sm",
-        msg.role === "user" ? "justify-end" : "justify-start"
-      )}
-    >
-      <div
-        className={clsx(
-          "rounded-lg px-3 py-2 max-w-[85%]",
-          "bg-primary text-primary-foreground"
-        )}
-      >
-        <div className="whitespace-pre-wrap break-words">
-          {msg.content || ""}
-        </div>
-      </div>
-    </div>
-  )
-
   const inputBlock = (
     <div
       className="w-full rounded-[10px] transition-opacity duration-200"
@@ -188,17 +217,10 @@ export const ProChatPanel = () => {
               >
                 <div className="w-full max-w-full min-w-0 box-border p-4 flex flex-col gap-3 chat-container">
                   {slots?.beforeMessages}
-                  {displayMessages.map((msg, index) =>
-                    slots?.renderMessage ? (
-                      <React.Fragment key={msg.id}>
-                        {slots.renderMessage(msg, {
-                          isLastMessage: index === displayMessages.length - 1,
-                        })}
-                      </React.Fragment>
-                    ) : (
-                      defaultMessageBubble(msg)
-                    )
-                  )}
+                  <MessageItems
+                    displayMessages={displayMessages}
+                    renderMessage={slots?.renderMessage}
+                  />
                 </div>
               </AutoScrollArea>
 
