@@ -95,7 +95,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
     },
     ref
   ) {
-    const isInternalUpdate = useRef(false)
     const suppressOnUpdateCountRef = useRef(0)
     const containerRef = useRef<HTMLDivElement | null>(null)
     const readonlyRef = useRef(readonly)
@@ -196,7 +195,6 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
             suppressOnUpdateCountRef.current -= 1
             return
           }
-          if (isInternalUpdate.current) return
           const nextMarkdown = currentEditor.getMarkdown?.() || ''
           onChangeRef.current?.(nextMarkdown)
         },
@@ -207,22 +205,17 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
 
     // 同步外部 value 到编辑器（受控模式）
     useEffect(() => {
-      if (!editor || isInternalUpdate.current) return
+      if (!editor) return
       try {
         const currentMarkdown = (editor as Editor & { getMarkdown?: () => string }).getMarkdown?.() ?? ''
         const valueToSet = value ?? ''
         if (isEmptyContent(valueToSet)) {
-          isInternalUpdate.current = true
-          suppressOnUpdateCountRef.current = 4
+          suppressOnUpdateCountRef.current += 1
           editor.commands.setContent('', { contentType: 'markdown' })
         } else if (valueToSet !== currentMarkdown) {
-          isInternalUpdate.current = true
-          suppressOnUpdateCountRef.current = 4
+          suppressOnUpdateCountRef.current += 1
           editor.commands.setContent(valueToSet, { contentType: 'markdown' })
         }
-        queueMicrotask(() => {  
-          isInternalUpdate.current = false
-        })
       } catch (err) {
         console.error('Error setting editor content:', err)
       }
@@ -293,12 +286,8 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         getMarkdown: () =>
           (editor as Editor & { getMarkdown?: () => string })?.getMarkdown?.() ?? '',
         setMarkdown: (markdown: string) => {
-          isInternalUpdate.current = true
-          suppressOnUpdateCountRef.current = 4
+          suppressOnUpdateCountRef.current += 1
           editor?.commands.setContent(markdown, { contentType: 'markdown' })
-          queueMicrotask(() => {
-            isInternalUpdate.current = false
-          })
         },
         focus: () => editor?.commands.focus(),
         blur: () => editor?.commands.blur(),
