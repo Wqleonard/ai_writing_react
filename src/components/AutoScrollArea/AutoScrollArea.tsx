@@ -11,6 +11,12 @@ export interface AutoScrollAreaProps
   autoScroll?: boolean
   /** 视为“在底部”的阈值（px） */
   bottomThreshold?: number
+  /** 透传给 ScrollArea 根容器的 className */
+  scrollAreaClassName?: string
+  /** 透传给 ScrollArea viewport 的 className */
+  viewportClassName?: string
+  /** 透传给内部内容容器（contentRef）的 className */
+  contentClassName?: string
   children?: React.ReactNode
 }
 
@@ -38,6 +44,9 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
       maxHeight,
       autoScroll = true,
       bottomThreshold = 50,
+      scrollAreaClassName,
+      viewportClassName,
+      contentClassName,
       className,
       children,
       ...rest
@@ -219,8 +228,17 @@ const AutoScrollArea = React.forwardRef<AutoScrollAreaRef, AutoScrollAreaProps>(
         style={containerStyle}
         {...rest}
       >
-        <ScrollArea className="h-full w-full" viewportClassName="overflow-x-hidden">
-          <div ref={contentRef} className="min-h-full min-w-0 w-full max-w-full">
+        <ScrollArea
+          className={cn('h-full w-full', scrollAreaClassName)}
+          viewportClassName={cn(
+            'overflow-x-hidden',
+            viewportClassName
+          )}
+        >
+          <div
+            ref={contentRef}
+            className={cn('min-h-full min-w-0 w-full max-w-full', contentClassName)}
+          >
             {children}
           </div>
         </ScrollArea>

@@ -1410,9 +1410,11 @@ const MarkdownEditorPage = () => {
     const contentWidthPx = el ? el.clientWidth - CONTAINER_PADDING_PX : 0;
     const remBase = getRootRemPx();
     const leftWidthPx = leftPanelRef.current?.offsetWidth ?? leftPanelWidthRem * remBase;
+    // 右栏最大宽需给中间区预留空间（含修改面板固定宽），避免把聊天区挤出页面
+    const centerRequiredPx = centerRequiredRem * remBase;
     const maxRightPx =
       contentWidthPx > 0
-        ? Math.max(0, contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase)
+        ? Math.max(0, contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase - centerRequiredPx)
         : Number.POSITIVE_INFINITY;
     // 视口过窄时，右栏最小宽不应强行占位，否则中间区无法压到 0
     const effectiveMinRightPx =
@@ -1422,7 +1424,7 @@ const MarkdownEditorPage = () => {
     const rawPx = dragStartRightPx.current + adjustedDeltaX;
     const newWidthPx = Math.max(effectiveMinRightPx, Math.min(maxRightPx, rawPx));
     setRightPanelWidthRem(newWidthPx / remBase);
-  }, [leftPanelWidthRem]);
+  }, [leftPanelWidthRem, centerRequiredRem]);
 
   const maximizeRightPanel = useCallback(() => {
     const el = resizeContainerRef.current;
@@ -1430,12 +1432,13 @@ const MarkdownEditorPage = () => {
     if (contentWidthPx <= 0) return;
     const remBase = getRootRemPx();
     const leftWidthPx = leftPanelRef.current?.offsetWidth ?? leftPanelWidthRem * remBase;
+    const centerRequiredPx = centerRequiredRem * remBase;
     const maxRightPx = Math.max(
       0,
-      contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase
+      contentWidthPx - leftWidthPx - HANDLES_WIDTH_REM * remBase - centerRequiredPx
     );
     setRightPanelWidthRem(maxRightPx / remBase);
-  }, [leftPanelWidthRem]);
+  }, [leftPanelWidthRem, centerRequiredRem]);
 
   const handleChatHeaderTabChange = useCallback(
     (tab: ChatTabType) => {
