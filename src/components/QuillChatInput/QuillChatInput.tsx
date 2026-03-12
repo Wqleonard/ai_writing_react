@@ -218,6 +218,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   )
 
   const canMove = value.trim() && !disabled
+
   /** 流式时可点击按钮取消；非流式时仅在有内容且未禁用时可点击发送 */
   const isButtonClickable = status === "streaming" ? !!onStopStreaming : canMove
   // 富文本容器引用（工具模式下使用 contenteditable + span + input-tag）
@@ -346,10 +347,12 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
 
   const handleMemeWordClick = useCallback(
     (word: { name: string }) => {
+      // 与工具标签回填互斥：点击梗词时先退出工具模式，再回填普通输入内容
+      closeRichTextMode()
       onChange(`请为我生成一篇主题为${word.name}的小说`)
       if (isAnswerOnly) setShowAnswerTip(true)
     },
-    [value, onChange, isAnswerOnly, setShowAnswerTip]
+    [closeRichTextMode, onChange, isAnswerOnly, setShowAnswerTip]
   )
 
   const {
@@ -402,7 +405,9 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                 <div
                   key={channel.title}
                   className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-muted text-sm"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (isAnswerOnly) setShowAnswerTip(true)
                     handleToolTagClick(channel.title)
                     setToolPopoverOpen(false)
                   }}
@@ -923,7 +928,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     ? "再次点击切换回普通输入模式"
                     : "点击使用此工具"
                 }
-                onClick={() => handleToolTagClick(channel.title)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isAnswerOnly) setShowAnswerTip(true)
+                  handleToolTagClick(channel.title)
+                }}
               >
                 {channel.title}
               </div>
@@ -1032,7 +1041,9 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                                 type="text"
                                 className="input-tag-input"
                                 placeholder={item.value}
-                                style={{ width: item.width ?? "120px" }}
+                                // 用 size 按占位文案长度扩展可视宽度，避免 placeholder 被过早截断
+                                size={Math.max((item.value?.length ?? 0) + 22, 10)}
+                                style={{ width: "auto" }}
                               />
                             </span>
                           )
@@ -1113,7 +1124,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                       <div
                         key={`left-${word.name}-${word.originalIndex}`}
                         className="meme-word-item-grid"
-                        onClick={() => handleMemeWordClick(word)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isAnswerOnly) setShowAnswerTip(true)
+                          handleMemeWordClick(word)
+                        }}
                       >
                         <span
                           className={clsx(
@@ -1134,7 +1149,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                       <div
                         key={`right-${word.name}-${word.originalIndex}`}
                         className="meme-word-item-grid"
-                        onClick={() => handleMemeWordClick(word)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isAnswerOnly) setShowAnswerTip(true)
+                          handleMemeWordClick(word)
+                        }}
                       >
                         <span
                           className={clsx(
@@ -1165,7 +1184,11 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                     <React.Fragment key={`${w.name}-${index}`}>
                       <div
                         className="meme-word-preview-item"
-                        onClick={() => handleMemeWordClick(w)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isAnswerOnly) setShowAnswerTip(true)
+                          handleMemeWordClick(w)
+                        }}
                       >
                         {w.name}
                       </div>
