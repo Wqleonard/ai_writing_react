@@ -494,6 +494,19 @@ const MarkdownEditorPage = () => {
       if (targetFileId && !pendingEditPaths.has(targetFileId)) {
         setServerDataFile(targetFileId, mergedFiles[targetFileId] ?? "");
       }
+
+      // 流式生成/更新文件时：对“本次新增的文件 key”打 new 标识（而不是只标 targetFileId）
+      // 注意：setNewNodeIds 是覆盖式的，所以这里做增量合并，保留旧 new。
+      const addedIds = Object.keys(safeIncomingFiles)
+        .map((k) => normalizeFilePath(k))
+        .filter(Boolean)
+        .filter((id) => !(id in currentServerData))
+        .filter((id) => !id.endsWith("/"));
+      if (addedIds.length > 0) {
+        const { newNodeIdMap, setNewNodeIds } = useEditorStore.getState();
+        const mergedNewIds = Array.from(new Set([...Object.keys(newNodeIdMap ?? {}), ...addedIds]));
+        setNewNodeIds(mergedNewIds);
+      }
       if (Array.isArray(editInfoList) && editInfoList.length > 0) {
         const grouped = editInfoList.reduce<Record<string, EditFileArgsType[]>>((acc, item) => {
           const path = normalizeFilePath(item.file_path ?? "");
