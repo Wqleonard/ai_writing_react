@@ -5,6 +5,7 @@ import { useLoginStore } from '@/stores/loginStore'
 import { isMobileDevice } from '@/utils/isMobileDevice'
 import { toast } from "sonner";
 import { cn } from '@/lib/utils'
+import { Button } from "@/components/ui/Button.tsx";
 
 const IFRAME_URL = 'https://www.baowenmao.com/login/login'
 const ALLOWED_ORIGIN = 'https://www.baowenmao.com'
@@ -111,8 +112,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
         showCloseButton
         className={cn(
           'p-0 gap-0 overflow-hidden',
-          'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
-          isMobile && 'w-[650px] p-4'
+          isMobile ? 'w-[650px] p-4' : 'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
         )}
         onInteractOutside={preventClose}
         onEscapeKeyDown={preventClose}
@@ -141,15 +141,15 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
             <div className="flex h-full w-full flex-col items-center justify-center rounded border border-gray-200 bg-gray-50 px-4">
               <div className="mb-2 text-center text-lg text-gray-500">无法加载登录页面</div>
               <div className="mb-4 text-center text-sm text-gray-500">请检查网络连接或稍后重试</div>
-              <div
+              <Button
                 role="button"
                 tabIndex={0}
-                className="cursor-pointer rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
+                className="cursor-pointer rounded  px-4 py-2 text-white "
                 onClick={handleRetry}
                 onKeyDown={(e) => e.key === 'Enter' && handleRetry()}
               >
                 重新加载
-              </div>
+              </Button>
             </div>
           )}
         </div>
