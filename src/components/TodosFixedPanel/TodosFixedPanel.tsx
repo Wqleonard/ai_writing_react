@@ -33,7 +33,12 @@ export function TodosFixedPanel({
   const showDefaultTitle = expanded || !inProgressTodo;
 
   return (
-    <div className={clsx("todos-fixed-container", !expanded && "collapsed")}>
+    <div
+      className={clsx(
+        "todos-fixed-container translate-y-1 sm:translate-y-2 md:translate-y-3 lg:translate-y-5",
+        !expanded && "collapsed"
+      )}
+    >
       <div
         className="todos-header"
         onClick={onToggleExpand}
