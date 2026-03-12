@@ -2666,11 +2666,35 @@ const MarkdownEditorPage = () => {
             </div>
 
             {/* 编辑区主体 */}
-            <div className="flex flex-1 min-h-0 min-w-0 relative">
+            <div
+              className="flex flex-1 min-h-0 min-w-0 relative"
+              onPointerDownCapture={(event) => {
+                if (isEditorEditable) return;
+                const target = event.target as HTMLElement | null;
+                if (!target) return;
+                // 修改面板保持可交互
+                if (target.closest('[data-edit-changes-panel="true"]')) return;
+                // 仅拦截编辑内容区交互，避免进入编辑态
+                if (!target.closest('[data-editor-scroll-area="true"]')) return;
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClickCapture={(event) => {
+                if (isEditorEditable) return;
+                const target = event.target as HTMLElement | null;
+                if (!target) return;
+                if (target.closest('[data-edit-changes-panel="true"]')) return;
+                if (!target.closest('[data-editor-scroll-area="true"]')) return;
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
               <div className="relative flex flex-1 min-h-0 min-w-0 flex-col"
                    style={{ minWidth: `${CENTER_EDITOR_MIN_REM}rem`, }}>
                 <ScrollArea
                   ref={editorMainScrollRef}
+                  data-editor-scroll-area="true"
+                  type={!isEditorEditable ? "always" : "hover"}
                   className={clsx(
                     "h-full relative overflow-x-hidden overflow-y-auto",
                     !isEditorEditable && "cursor-not-allowed-all",
@@ -2782,6 +2806,7 @@ const MarkdownEditorPage = () => {
               </div>
               {isChangesPanelVisible && (
                 <div
+                  data-edit-changes-panel="true"
                   className="h-full shrink-0 min-h-0 overflow-hidden border-l border-(--border-color) bg-(--bg-primary)"
                   style={{ width: `${CHANGES_PANEL_WIDTH_REM}rem` }}
                 >
@@ -2806,19 +2831,8 @@ const MarkdownEditorPage = () => {
           </div>
           {!isEditorEditable && (
             <div
-              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-auto"
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onPointerMove={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
+              className="absolute inset-0 z-20 bg-white/35 cursor-not-allowed pointer-events-none"
+              style={{ right: isChangesPanelVisible ? `${CHANGES_PANEL_WIDTH_REM}rem` : 0 }}
             />
           )}
         </div>
