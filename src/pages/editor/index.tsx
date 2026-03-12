@@ -2746,6 +2746,10 @@ const MarkdownEditorPage = () => {
                                 onHiltReject={async (rejectedMsg) => {
                                   const sessionId = chatCurrentSession?.id ?? "";
                                   if (!sessionId || !workId) return;
+                                  // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
+                                  if (langGraphStream.isStreaming) {
+                                    handleStopStreaming(false);
+                                  }
                                   updateLastChatMessage((prev) => {
                                     const custom = prev.customMessage ?? [];
                                     return {
