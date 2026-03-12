@@ -10,7 +10,7 @@
   transition: all 0.3s ease;
   padding-bottom: 15px;
   z-index: 1;
-  transform: translateY(20px);
+  transform: translateY(45px);
   position: relative;
 }
 
