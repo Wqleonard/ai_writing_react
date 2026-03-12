@@ -22,6 +22,7 @@ import { getNoteSourceDisplayName } from '@/utils/noteSource'
 import { Search, Trash2, Check, Circle } from 'lucide-react'
 import clsx from 'clsx'
 import EMPTY_IMG from '@/assets/images/empty.webp'
+import { AnimatePresence, motion } from 'framer-motion'
 
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 300
@@ -292,140 +293,162 @@ export const NotesSelectorDialog = ({
         </DialogHeader>
 
         <div ref={scrollRef} className="relative overflow-hidden bg-white h-[550px]">
-          {isExpanded ? (
-            <div className="px-6 h-[524px]">
-              <div className="bg-[#f6f6f6] h-full rounded-lg p-2 flex flex-col">
-                <Input
-                  placeholder="请输入标题"
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  className="mb-2 rounded-md bg-muted/50"
-                />
-                <Textarea
-                  placeholder="请输入内容"
-                  value={editContent}
-                  onChange={e => setEditContent(e.target.value)}
-                  className="min-h-[280px] flex-1 resize-none rounded-md"
-                />
-                <div className="flex items-center justify-between pt-4">
-                  <div className="flex gap-4 text-xs text-muted-foreground">
-                    <span>来源: {expandedSource}</span>
-                    <span>创建时间: {expandedTime}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleReturn}>
-                      返回
-                    </Button>
-                    <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                      {isSaving ? '保存中...' : '保存'}
-                    </Button>
+          <AnimatePresence initial={false} mode="wait">
+            {isExpanded ? (
+              <motion.div
+                key="expanded-view"
+                className="px-6 h-[532px]"
+                initial={{ opacity: 0, y: 18, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: '524px' }}
+                exit={{ opacity: 0, y: -12, height: 0 }}
+                transition={{ duration: 0.24, ease: 'easeOut' }}
+              >
+                <div className="bg-[#f6f6f6] h-full rounded-lg p-2 flex flex-col">
+                  <Input
+                    placeholder="请输入标题"
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    className="mb-2 rounded-md bg-muted/50"
+                  />
+                  <Textarea
+                    placeholder="请输入内容"
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                    className="min-h-[280px] flex-1 resize-none rounded-md"
+                  />
+                  <div className="flex items-center justify-between pt-4">
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      <span>来源: {expandedSource}</span>
+                      <span>创建时间: {expandedTime}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={handleReturn}>
+                        返回
+                      </Button>
+                      <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? '保存中...' : '保存'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <ScrollArea className="h-[480px]">
-                <div className="py-3 px-6 flex flex-col gap-3">
-                  {isLoadingNotes && notesList.length === 0 ? (
-                    <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
-                      <span>加载中...</span>
-                    </div>
-                  ) : (
-                    <>
-                      {notesList.map(note => (
-                        <div
-                          key={note.id}
-                          className={clsx(
-                            'flex flex-col rounded-lg bg-[#f6f6f6] p-4 transition-colors',
-                            isSelected(note.id) && 'ring-2 ring-primary/50'
-                          )}
-                        >
-                          <div
-                            className="cursor-pointer"
-                            onClick={() => onNoteRowClick(note)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                onNoteRowClick(note)
-                              }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                          >
-                            <div className="mb-2 font-semibold text-foreground line-clamp-1">
-                              {note.title || '无标题'}
-                            </div>
-                            <div className="line-clamp-3 text-sm text-muted-foreground">
-                              {note.content}
-                            </div>
-                          </div>
-                          <div className="my-3 h-px bg-border" />
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex gap-4 text-muted-foreground">
-                              {note.source && (
-                                <span>来源: {getNoteSourceDisplayName(note.source)}</span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="list-view"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+              >
+                <ScrollArea className="h-[480px]">
+                  <div className="py-3 px-6 flex flex-col gap-3">
+                    {isLoadingNotes && notesList.length === 0 ? (
+                      <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+                        <span>加载中...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <AnimatePresence initial={false}>
+                          {notesList.map(note => (
+                            <motion.div
+                              key={note.id}
+                              layout
+                              initial={{ opacity: 0, y: 12 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              transition={{ duration: 0.18, ease: 'easeOut' }}
+                              className={clsx(
+                                'flex flex-col rounded-lg bg-[#f6f6f6] p-4 transition-colors',
+                                isSelected(note.id) && 'ring-2 ring-primary/50'
                               )}
-                              <span>
-                                创建时间: {formatLocalTime(note.createdTime ?? note.updatedTime)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="cursor-pointer text-muted-foreground hover:text-destructive"
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  handleDelete(note.id)
-                                }}
-                                role="button"
-                                tabIndex={0}
-                              >
-                                <Trash2 className="size-4" />
-                              </div>
+                            >
                               <div
                                 className="cursor-pointer"
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  toggleSelection(note.id)
+                                onClick={() => onNoteRowClick(note)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    onNoteRowClick(note)
+                                  }
                                 }}
                                 role="button"
                                 tabIndex={0}
                               >
-                                {isSelected(note.id) ? (
-                                  <Check className="size-5 text-primary" />
-                                ) : (
-                                  <Circle className="size-5 text-muted-foreground" />
-                                )}
+                                <div className="mb-2 font-semibold text-foreground line-clamp-1">
+                                  {note.title || '无标题'}
+                                </div>
+                                <div className="line-clamp-3 text-sm text-muted-foreground">
+                                  {note.content}
+                                </div>
                               </div>
-                            </div>
+                              <div className="my-3 h-px bg-border" />
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex gap-4 text-muted-foreground">
+                                  {note.source && (
+                                    <span>来源: {getNoteSourceDisplayName(note.source)}</span>
+                                  )}
+                                  <span>
+                                    创建时间: {formatLocalTime(note.createdTime ?? note.updatedTime)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="cursor-pointer text-muted-foreground hover:text-destructive"
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      handleDelete(note.id)
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </div>
+                                  <div
+                                    className="cursor-pointer"
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      toggleSelection(note.id)
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                  >
+                                    {isSelected(note.id) ? (
+                                      <Check className="size-5 text-primary" />
+                                    ) : (
+                                      <Circle className="size-5 text-muted-foreground" />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                        {notesList.length === 0 && !isLoadingNotes && (
+                          <div className="flex flex-col items-center justify-center py-12">
+                            <img src={EMPTY_IMG} alt="" className="h-24 w-24 object-contain" />
+                            <p className="mt-2 text-sm text-muted-foreground">暂无笔记</p>
                           </div>
-                        </div>
-                      ))}
-                      {notesList.length === 0 && !isLoadingNotes && (
-                        <div className="flex flex-col items-center justify-center py-12">
-                          <img src={EMPTY_IMG} alt="" className="h-24 w-24 object-contain" />
-                          <p className="mt-2 text-sm text-muted-foreground">暂无笔记</p>
-                        </div>
-                      )}
-                      {isLoadingMore && (
-                        <div className="py-4 text-center text-sm text-muted-foreground">
-                          加载中...
-                        </div>
-                      )}
-                    </>
-                  )}
+                        )}
+                        {isLoadingMore && (
+                          <div className="py-4 text-center text-sm text-muted-foreground">
+                            加载中...
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </ScrollArea>
+                <div className="flex justify-end gap-2 py-4 px-6">
+                  <Button variant="outline" onClick={handleCreateNote}>
+                    +创建新笔记
+                  </Button>
+                  <Button onClick={handleConfirm} disabled={selectedIds.length === 0}>
+                    {confirmButtonText}
+                  </Button>
                 </div>
-              </ScrollArea>
-              <div className="flex justify-end gap-2 py-4 px-6">
-                <Button variant="outline" onClick={handleCreateNote}>
-                  +创建新笔记
-                </Button>
-                <Button onClick={handleConfirm} disabled={selectedIds.length === 0}>
-                  {confirmButtonText}
-                </Button>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </DialogContent>
     </Dialog>
