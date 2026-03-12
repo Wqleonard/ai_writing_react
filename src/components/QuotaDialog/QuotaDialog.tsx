@@ -265,19 +265,27 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
     }
   }, [view, usageFilterType, resetAndLoadUsage])
 
-  const handleCopyLink = useCallback(() => {
+  const handleCopyLink = useCallback(async () => {
     const copyText = `我最近在用【爆文猫】AI写作工具，宝藏功能有：AI教练、拆书仿写、切换文风、小说转剧本……\n${invitationLink} \n快帮我点点邀请链接，登录就能薅百万token！`
 
     const fallbackCopy = (text: string) => {
       const textarea = document.createElement('textarea')
       textarea.value = text
-      textarea.setAttribute('readonly', '')
+      // iOS/部分浏览器在 readonly 时可能无法正确选中，改为可编辑并隐藏
+      textarea.setAttribute('aria-hidden', 'true')
       textarea.style.position = 'fixed'
       textarea.style.top = '-9999px'
       textarea.style.left = '-9999px'
       textarea.style.opacity = '0'
+      textarea.style.pointerEvents = 'none'
+      textarea.style.zIndex = '-1'
       document.body.appendChild(textarea)
-      textarea.focus()
+
+      const selection = window.getSelection()
+      const prevRange =
+        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+
+      textarea.focus({ preventScroll: true })
       textarea.select()
       textarea.setSelectionRange(0, text.length)
       let success = false
@@ -286,6 +294,11 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
       } catch {
         success = false
       } finally {
+        // 还原用户原有选区，避免复制后光标/选区状态异常
+        if (selection) {
+          selection.removeAllRanges()
+          if (prevRange) selection.addRange(prevRange)
+        }
         document.body.removeChild(textarea)
       }
       return success
@@ -297,27 +310,22 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
       typeof navigator !== 'undefined' &&
       !!navigator.clipboard?.writeText
 
-    if (!canUseClipboardApi) {
-      if (fallbackCopy(copyText)) {
+    if (canUseClipboardApi) {
+      try {
+        await navigator.clipboard.writeText(copyText)
         toast.success('邀请链接已复制到剪贴板')
-      } else {
-        toast.error('复制失败，请手动复制')
+        return
+      } catch {
+        // 继续走兼容 fallback
       }
+    }
+
+    if (fallbackCopy(copyText)) {
+      toast.success('邀请链接已复制到剪贴板')
       return
     }
 
-    navigator.clipboard
-      .writeText(copyText)
-      .then(() => {
-        toast.success('邀请链接已复制到剪贴板')
-      })
-      .catch(() => {
-        if (fallbackCopy(copyText)) {
-          toast.success('邀请链接已复制到剪贴板')
-        } else {
-          toast.error('复制失败，请手动复制')
-        }
-      })
+    toast.error('复制失败，请手动复制')
   }, [invitationLink])
 
   const preventClose = useCallback((e: Event) => {
