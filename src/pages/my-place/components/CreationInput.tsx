@@ -1126,7 +1126,7 @@ export const CreationInput = (props: CreationInputProps) => {
               </Popover>
 
               {/* 仅回答（checkbox 始终展示；tip 仅在触发后展示） */}
-              <div className="quill-chat-input">
+              <div className="quill-chat-input" style={{ width: 'auto' }}>
                 <div ref={answerOnlyWrapRef} className="answer-only-wrap">
                   {isAnswerOnly && isShowAnswerTip && (
                     <div className="answer-tip-box">
