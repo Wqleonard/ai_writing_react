@@ -181,7 +181,7 @@ export const ProChatPanel = () => {
             <div className="relative flex-1 min-h-0 w-full overflow-hidden">
               <AutoScrollArea
                 ref={autoScrollRef}
-                className="h-full w-full overflow-hidden"
+                className="h-full w-full overflow-hidden min-w-0 max-w-full [&_[data-slot=scroll-area]]:min-w-0 [&_[data-slot=scroll-area]]:max-w-full [&_[data-slot=scroll-area-viewport]]:min-w-0 [&_[data-slot=scroll-area-viewport]]:max-w-full [&_[data-slot=scroll-area-viewport]>div]:min-w-0 [&_[data-slot=scroll-area-viewport]>div]:w-full [&_[data-slot=scroll-area-viewport]>div]:max-w-full"
                 maxHeight="100%"
                 autoScroll={true}
                 bottomThreshold={50}

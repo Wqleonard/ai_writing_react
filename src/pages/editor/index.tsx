@@ -600,7 +600,7 @@ const MarkdownEditorPage = () => {
           : ((lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
             (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
           ));
-      if (pending?.sessionId && pending?.workId && !hasHiltPending) {
+      if (pending?.sessionId && pending?.workId && !hasHiltPending && !langGraphStream.error) {
         const { sessionId, workId: wid } = pending;
         try {
           const res = await generateGuideReq(sessionId, Number(wid)) as { guides?: string[] | string } | undefined;
@@ -673,6 +673,15 @@ const MarkdownEditorPage = () => {
       skipGuideForCurrentStreamRef.current = true;
       guideRequestRef.current = null;
       if (needSendErrorMsg) toast.error(err.message);
+      const simulatedAssistant: DualTabChatMessage = {
+        id: `assistant_sensitive_${Date.now()}`,
+        role: "assistant",
+        content: "我无法回答你的这个问题，可以尝试下其他话题哦",
+        createdAt: new Date(),
+        messageType: "normal",
+        mode: "chat",
+      };
+      addMessageToDualTab("chat", simulatedAssistant);
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
@@ -2760,9 +2769,7 @@ const MarkdownEditorPage = () => {
                                   const sessionId = chatCurrentSession?.id ?? "";
                                   if (!sessionId || !workId) return;
                                   // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
-                                  if (langGraphStream.isStreaming) {
-                                    handleStopStreaming(false);
-                                  }
+                                  handleStopStreaming(false);
                                   updateLastChatMessage((prev) => {
                                     const custom = prev.customMessage ?? [];
                                     return {
