@@ -385,6 +385,7 @@ const MarkdownEditorPage = () => {
   const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
   const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
+  const latestChatSessionIdRef = useRef("");
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [todosExpanded, setTodosExpanded] = useState(false);
   const {
@@ -720,7 +721,7 @@ const MarkdownEditorPage = () => {
     [addMessageToDualTab]
   );
 
-  const handleStopStreaming = useCallback((needAIMessage = true) => {
+  const handleStopStreaming = useCallback((needAIMessage = true, needGuideRequest = true) => {
     const pending = guideRequestRef.current;
     guideRequestRef.current = null;
     stoppedByUserRef.current = true;
@@ -732,7 +733,7 @@ const MarkdownEditorPage = () => {
       streamingMessageIdRef.current = "";
     }
     langGraphStream.stop();
-    if (pending?.sessionId && pending?.workId) {
+    if (needGuideRequest && pending?.sessionId && pending?.workId) {
       void requestGuideAndAppend(pending.sessionId, pending.workId);
     }
   }, [finalizeStreamingMessageWithSuffix, langGraphStream, requestGuideAndAppend]);
@@ -823,6 +824,7 @@ const MarkdownEditorPage = () => {
         const session = createNewSession("chat");
         sessionId = session.id;
       }
+      latestChatSessionIdRef.current = sessionId;
 
       if (options?.addUserMessage !== false) {
         const userMessage: ChatMessage = {
@@ -2318,6 +2320,9 @@ const MarkdownEditorPage = () => {
   }, [currentEditingId]);
 
   const chatSessionId = chatCurrentSession?.id ?? "";
+  useEffect(() => {
+    latestChatSessionIdRef.current = chatSessionId;
+  }, [chatSessionId]);
   const displayChatMessages = useMemo(
     () => (streamingMessage ? [...chatMessages, streamingMessage] : chatMessages),
     [chatMessages, streamingMessage]
@@ -2343,10 +2348,11 @@ const MarkdownEditorPage = () => {
   );
   const handleHiltReject = useCallback(
     async (rejectedMsg: AgentCustomMessageItem) => {
-      const sessionId = chatSessionId;
+      const sessionId = latestChatSessionIdRef.current || guideRequestRef.current?.sessionId || chatSessionId;
+      const targetWorkId = workId ?? guideRequestRef.current?.workId;
       // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
-      handleStopStreaming(false);
-      if (!sessionId || !workId) return;
+      handleStopStreaming(false, false);
+      if (!sessionId || !targetWorkId) return;
       updateLastChatMessage((prev) => {
         const custom = prev.customMessage ?? [];
         return {
@@ -2370,7 +2376,7 @@ const MarkdownEditorPage = () => {
       });
       // 拒绝后仅更新本地状态并拉取联想提示词，不再触发新的 chat query 请求
       try {
-        const res = await generateGuideReq(sessionId, Number(workId)) as {
+        const res = await generateGuideReq(sessionId, Number(targetWorkId)) as {
           guides?: string[] | string
         } | undefined;
         const guides = parseGuidesPayload(res?.guides);
