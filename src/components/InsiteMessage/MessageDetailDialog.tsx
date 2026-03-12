@@ -24,8 +24,10 @@ export const MessageDetailDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton className="message-detail-dialog w-200">
-        <DialogHeader>
-          <DialogTitle>{message?.title ?? '消息详情'}</DialogTitle>
+        <DialogHeader className="w-full min-w-0 max-w-[calc(100%-32px)]">
+          <DialogTitle className="w-full min-w-0 max-w-full truncate">
+            {message?.title ?? '消息详情'}
+          </DialogTitle>
         </DialogHeader>
         <div className="h-120">
           {message && (
@@ -35,8 +37,8 @@ export const MessageDetailDialog = ({
                 {message.timestamp}
               </span>
               </div>
-              <ScrollArea className="h-full">
-                <div className="min-h-[100px] py-2">
+              <ScrollArea className="h-110 py-2">
+                <div>
                   {message.content?.trim() ? (
                     <RichTextRender
                       content={message.content}
