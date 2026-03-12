@@ -964,7 +964,7 @@ const MarkdownEditorPage = () => {
   const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setWorkId(workId ?? null);
+    if (workId) setWorkId(workId);
   }, [workId, setWorkId]);
 
   useEffect(() => {

@@ -100,6 +100,7 @@ const EMPTY_CHARACTER: CharacterCardData = {
   age: "",
   bloodType: "",
   mbti: "",
+  biograph: "",
   experiences: "",
   personality: "",
   abilities: "",
@@ -113,18 +114,6 @@ const pxToRem = (px: number) => `${(px / ROOT_FONT_PX).toFixed(4)}rem`;
 const deepClone = <T,>(obj: T): T => {
   return JSON.parse(JSON.stringify(obj));
 };
-
-const splitByComma = (value: string): string[] =>
-  (value || "")
-    .split(/[，,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const joinByChineseComma = (parts: Array<string | undefined | null>): string =>
-  parts
-    .map((item) => (item || "").trim())
-    .filter(Boolean)
-    .join("，");
 
 const MBTI_OPTIONS = [
   "INTJ",
@@ -304,7 +293,6 @@ export const StepCreateDialog = React.forwardRef<
     });
   const [editingCharacter, setEditingCharacter] =
     useState<CharacterCardData>(EMPTY_CHARACTER);
-  const [editingCharacterBio, setEditingCharacterBio] = useState("");
   const [editingCharacterIndex, setEditingCharacterIndex] = useState<
     number | null
   >(null);
@@ -912,6 +900,7 @@ export const StepCreateDialog = React.forwardRef<
                 age: item.age ?? "",
                 bloodType: item.bloodType ?? "",
                 mbti: item.mbti ?? "",
+                biograph: item.biograph ?? "",
                 experiences: item.experiences ?? "",
                 personality: item.personality ?? "",
                 abilities: item.abilities ?? "",
@@ -1133,7 +1122,6 @@ export const StepCreateDialog = React.forwardRef<
     clearCharacterEditTimers();
     setIsCharacterEditOpen(false);
     setEditingCharacter(EMPTY_CHARACTER);
-    setEditingCharacterBio("");
     setEditingCharacterIndex(null);
     setIsCharacterEditAnimating(false);
   }, [clearCharacterEditTimers]);
@@ -1142,13 +1130,6 @@ export const StepCreateDialog = React.forwardRef<
     (character: CharacterCardData, index: number, event?: React.MouseEvent) => {
       if (!character?.name) return;
       setEditingCharacter({ ...character });
-      setEditingCharacterBio(
-        joinByChineseComma([
-          character.experiences,
-          character.personality,
-          character.abilities,
-        ]),
-      );
       setEditingCharacterIndex(index);
       const cardElement = event?.currentTarget
         ? ((event.currentTarget as HTMLElement).closest(
@@ -1173,14 +1154,15 @@ export const StepCreateDialog = React.forwardRef<
       return;
     }
     const ageText = (editingCharacter.age || "").trim();
-    const ageNumber = ageText === "" ? NaN : Number(ageText);
     const age =
-      Number.isNaN(ageNumber) || ageText === ""
-        ? ""
-        : String(Math.max(0, Math.min(100, Math.round(ageNumber))));
+      /^\d+$/.test(ageText) &&
+      ageText.length <= 9 &&
+      ageText !== "0" &&
+      !(ageText.length === 9 && ageText > "999999999")
+        ? ageText
+        : "";
     const mbti = (editingCharacter.mbti || "").trim();
-    const [experiences = "", personality = "", abilities = ""] =
-      splitByComma(editingCharacterBio);
+    const biograph = (editingCharacter.biograph || "").trim();
 
     let nextCharacter: CharacterCardData | null = null;
     setCharacters((prev) => {
@@ -1190,9 +1172,7 @@ export const StepCreateDialog = React.forwardRef<
         name,
         age,
         mbti,
-        experiences,
-        personality,
-        abilities,
+        biograph,
       };
       next[editingCharacterIndex] = nextCharacter;
       return next;
@@ -1207,7 +1187,6 @@ export const StepCreateDialog = React.forwardRef<
     closeCharacterEditPanel();
   }, [
     editingCharacter,
-    editingCharacterBio,
     editingCharacterIndex,
     selectedCharacter,
     characters,
@@ -1890,6 +1869,7 @@ export const StepCreateDialog = React.forwardRef<
                             type="number"
                             min={1}
                             step={1}
+                            max={999999999}
                             className="w-full rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                             value={editingCharacter.age}
                             onChange={(e) => {
@@ -1901,11 +1881,20 @@ export const StepCreateDialog = React.forwardRef<
                                 }));
                                 return;
                               }
-                              const next = Number(value);
-                              if (Number.isNaN(next) || !Number.isInteger(next) || next <= 0) return;
+                              // 只按字符串校验，避免超大数字被 Number 转成科学计数法
+                              if (!/^\d+$/.test(value)) return;
+                              const normalized = value.replace(/^0+/, "");
+                              if (!normalized) return;
+                              if (normalized.length > 9) return;
+                              if (
+                                normalized.length === 9 &&
+                                normalized > "999999999"
+                              ) {
+                                return;
+                              }
                               setEditingCharacter((prev) => ({
                                 ...prev,
-                                age: String(next),
+                                age: normalized,
                               }));
                             }}
                             placeholder="请输入年龄..."
@@ -1940,14 +1929,17 @@ export const StepCreateDialog = React.forwardRef<
                             <textarea
                               className="h-32 w-full resize-none rounded-md border-none bg-[#fff6d999] px-3 py-2 focus:outline-none focus:ring-0 focus-visible:outline-none"
                               maxLength={300}
-                              value={editingCharacterBio}
+                              value={editingCharacter.biograph}
                               onChange={(e) =>
-                                setEditingCharacterBio(e.target.value)
+                                setEditingCharacter((prev) => ({
+                                  ...prev,
+                                  biograph: e.target.value,
+                                }))
                               }
                               placeholder="经历，性格，能力"
                             />
                             <div className="mt-1 text-right text-xs text-[#999]">
-                              {(editingCharacterBio || "").length}/300
+                              {(editingCharacter.biograph || "").length}/300
                             </div>
                           </div>
                         </div>

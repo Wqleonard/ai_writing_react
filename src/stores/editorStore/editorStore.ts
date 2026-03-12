@@ -78,6 +78,10 @@ interface EditorActions {
   initEditorData: (workId: string) => Promise<void>;
   /** 重新拉取并更新 workInfo（对应 Vue updateWorkInfo） */
   updateWorkInfo: () => Promise<void>;
+  /** 从“设定/故事设定.md”提取文章标题并更新作品标题（对应 Vue updateWorkTitle） */
+  updateWorkTitle: () => Promise<void>;
+  /** 从“正文/导语.md”提取导语并更新作品简介（对应 Vue updateWorkIntro） */
+  updateWorkIntro: () => Promise<void>;
   /** 保存编辑器数据到服务端（对应 Vue saveEditorData） */
   saveEditorData: (
     saveStatus?: EditorSaveStatus,
@@ -133,6 +137,11 @@ const getDefaultEditorServerData = (): ServerData => ({
   "设定/故事设定.md": "",
   "正文/第一章.md": "",
 });
+
+const normalizeWorkId = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
 
 const mapWorkTags = (rawWorkTags: unknown): WorkInfo["workTags"] => {
   if (!Array.isArray(rawWorkTags)) return [];
@@ -296,6 +305,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
             trackEvent("Content", "Save", "Draft");
             toast.success("保存成功");
           }
+          // 与 Vue 版保存时机对齐：保存成功后尝试回写标题与导语
+          await get().updateWorkTitle();
+          await get().updateWorkIntro();
         } catch (e) {
           console.error("[editorStore] saveEditorData failed:", e);
           toast.error("保存失败");
@@ -314,7 +326,20 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       return {
         ...initialState,
 
-        setWorkId: (workId) => set({ workId }),
+        setWorkId: (workId) =>
+          set((state) => {
+            const nextWorkId = normalizeWorkId(workId);
+            // 防止外部偶发传空值把有效 workId 覆盖掉；清空请走 initEditorStore。
+            if (!nextWorkId && state.workId) return state;
+            if (nextWorkId === state.workId) return state;
+            return {
+              workId: nextWorkId,
+              workInfo:
+                !state.workInfo.workId && nextWorkId
+                  ? { ...state.workInfo, workId: nextWorkId }
+                  : state.workInfo,
+            };
+          }),
 
         setWorkInfo: (info) => {
           let prevWorkInfo: WorkInfo | null = null;
@@ -657,6 +682,78 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           })();
 
           return workInfoRefreshInFlight;
+        },
+        updateWorkTitle: async () => {
+          const { workId: storeWorkId, workInfo, serverData } = get();
+          const targetWorkId = workInfo.workId || storeWorkId;
+          if (!targetWorkId) return;
+          // 只有当标题以“未命名作品”开头时，才执行更新逻辑
+          if (!workInfo.title || !workInfo.title.startsWith("未命名作品")) return;
+
+          const storySettingKey = "设定/故事设定.md";
+          const storySettingContent = serverData[storySettingKey];
+          if (!storySettingContent || typeof storySettingContent !== "string") {
+            console.warn("[editorStore] 未找到故事设定文件:", storySettingKey);
+            return;
+          }
+
+          const lines = storySettingContent.split("\n\n");
+          const titleIndex = lines.findIndex(
+            (line) => line.trim() === "## 文章标题",
+          );
+          if (titleIndex === -1) return;
+
+          const titleLine = lines[titleIndex + 1]?.trim();
+          if (!titleLine) return;
+          if (titleLine === workInfo.title) return;
+
+          set((state) => ({
+            workInfo: {
+              ...state.workInfo,
+              title: titleLine,
+            },
+          }));
+
+          try {
+            await updateWorkInfoReq(targetWorkId, { title: titleLine });
+          } catch (error) {
+            console.error("[editorStore] 更新作品标题失败:", error);
+            toast.error("更新作品标题失败");
+          }
+        },
+        updateWorkIntro: async () => {
+          const {
+            workId: storeWorkId,
+            workInfo,
+            treeData,
+            serverData,
+          } = get();
+          const targetWorkId = workInfo.workId || storeWorkId;
+          if (!targetWorkId) return;
+
+          const introductionKey = "正文/导语.md";
+          const introNode = findNodeById(treeData, introductionKey);
+          const introductionContent =
+            introNode?.content ?? serverData[introductionKey] ?? "";
+
+          if (!introductionContent) return;
+          if (introductionContent === workInfo.introduction) return;
+
+          set((state) => ({
+            workInfo: {
+              ...state.workInfo,
+              introduction: introductionContent,
+            },
+          }));
+
+          try {
+            await updateWorkInfoReq(targetWorkId, {
+              introduction: introductionContent,
+            });
+          } catch (error) {
+            console.error("[editorStore] 更新作品简介失败:", error);
+            toast.error("更新作品导语失败");
+          }
         },
         saveEditorData: (saveStatus = "0", _needLocalCache = true) => {
           void _needLocalCache;

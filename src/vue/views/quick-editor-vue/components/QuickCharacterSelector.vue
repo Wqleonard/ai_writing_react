@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, nextTick } from "vue";
-import { ElButton, ElMessage, ElInput, ElSelect, ElOption, ElMessageBox } from "element-plus";
-import type { CharacterCardData as BaseCharacterCardData } from "@/components/StepWorkflow/components/CharacterCard.vue";
+import {
+  ElButton,
+  ElMessage,
+  ElInput,
+  ElSelect,
+  ElOption,
+  ElMessageBox,
+} from "element-plus";
+import type { CharacterCardData as BaseCharacterCardData } from "@/components/StepWorkflow/components/CharacterCard";
 import { useEditorStore } from "@/vue/stores/editor.ts";
 import { storeToRefs } from "pinia";
 import FEMALE from "@/vue/assets/images/quick_creation/character_woman_sex.svg";
@@ -96,13 +103,32 @@ const MAX_EXPERIENCE_LENGTH = 300;
 const MAX_PERSONALITY_LENGTH = 50;
 const MAX_ABILITIES_LENGTH = 100;
 const MAX_IDENTITY_LENGTH = 50;
+const MBTI_OPTIONS = [
+  "INTJ",
+  "INTP",
+  "ENTJ",
+  "ENTP",
+  "INFJ",
+  "INFP",
+  "ENFJ",
+  "ENFP",
+  "ISTJ",
+  "ISFJ",
+  "ESTJ",
+  "ESFJ",
+  "ISTP",
+  "ISFP",
+  "ESTP",
+  "ESFP",
+];
 
 console.log("[QuickCharacterSelector] Component mounted");
 
 // 检查是否已选中角色
 const hasSelectedCharacter = computed(
   () =>
-    selectedCharacterIndex.value !== null && !!characters.value[selectedCharacterIndex.value]?.name
+    selectedCharacterIndex.value !== null &&
+    !!characters.value[selectedCharacterIndex.value]?.name,
 );
 
 // 显示的角色列表：锁定时只显示有内容的卡片，未锁定时最后一个是自定义卡片
@@ -142,7 +168,8 @@ const generateCharacters = async () => {
 
   try {
     // 获取标签名称用于description（从workInfo的workTags获取）
-    const description = workInfo.value?.workTags?.map((tag: any) => tag.name).join(",") || "";
+    const description =
+      workInfo.value?.workTags?.map((tag: any) => tag.name).join(",") || "";
 
     console.log("[QuickCharacterSelector] description:", description);
     const storyDataWrapper = JSON.parse(props.storyContent || "{}");
@@ -152,7 +179,12 @@ const generateCharacters = async () => {
       title: storyData.title || "",
       intro: storyData.intro || "",
     };
-    const res = await getQuickCharacterSettings("1", description, "doc", brainStorm);
+    const res = await getQuickCharacterSettings(
+      "1",
+      description,
+      "doc",
+      brainStorm,
+    );
 
     console.log("[QuickCharacterSelector] API response:", res);
 
@@ -177,7 +209,10 @@ const generateCharacters = async () => {
       }
     }
 
-    console.log("[QuickCharacterSelector] Generated characters:", characters.value);
+    console.log(
+      "[QuickCharacterSelector] Generated characters:",
+      characters.value,
+    );
   } catch (e) {
     console.error("[QuickCharacterSelector] 获取角色失败:", e);
     // ElMessage.error("生成角色失败，请重试");
@@ -194,7 +229,12 @@ const generateCharacters = async () => {
 // 选择角色
 const handleSelectCharacter = (character: CharacterCardData, index: number) => {
   if (loading.value || !character.name || props.locked) return;
-  console.log("[QuickCharacterSelector] handleSelectCharacter:", character, "index:", index);
+  console.log(
+    "[QuickCharacterSelector] handleSelectCharacter:",
+    character,
+    "index:",
+    index,
+  );
   selectedCharacterIndex.value = index;
 };
 
@@ -216,17 +256,20 @@ const handleShowCustomDialog = async (event: MouseEvent) => {
 const handleEditCharacter = async (
   character: CharacterCardData,
   index: number,
-  event: MouseEvent
+  event: MouseEvent,
 ) => {
   if (props.locked) return;
-  console.log("[QuickCharacterSelector] handleEditCharacter:", { character, index });
+  console.log("[QuickCharacterSelector] handleEditCharacter:", {
+    character,
+    index,
+  });
   customCharacter.value = { ...character };
   editingCharacterIndex.value = index;
   isCustomMode.value = false;
 
   // 获取点击位置（可能是编辑按钮或卡片本身）
   const target = (event.currentTarget as HTMLElement).closest(
-    ".character-card-wrapper"
+    ".character-card-wrapper",
   ) as HTMLElement;
   if (target) {
     await animateFromCard(target);
@@ -289,13 +332,16 @@ const handleSaveCustomCharacter = () => {
     return;
   }
 
-  console.log("[QuickCharacterSelector] handleSaveCustomCharacter:", customCharacter.value);
+  console.log(
+    "[QuickCharacterSelector] handleSaveCustomCharacter:",
+    customCharacter.value,
+  );
 
   if (editingCharacterIndex.value !== null) {
     // 编辑模式：更新指定位置的角色
     console.log(
       "[QuickCharacterSelector] Editing character at index:",
-      editingCharacterIndex.value
+      editingCharacterIndex.value,
     );
     const updatedCharacter = { ...customCharacter.value };
 
@@ -315,7 +361,7 @@ const handleSaveCustomCharacter = () => {
 
     // 先查找是否有重名的卡片（isCustom: true 且 name 相同）
     const sameNameIndex = characters.value.findIndex(
-      (c) => c.name && c.name.trim() === name && c.isCustom
+      (c) => c.name && c.name.trim() === name && c.isCustom,
     );
 
     if (sameNameIndex !== -1) {
@@ -331,6 +377,17 @@ const handleSaveCustomCharacter = () => {
   }
 
   closeEditPanel();
+};
+
+const handleAgeInput = (value: string | number) => {
+  const raw = String(value ?? "").trim();
+  if (raw === "") {
+    customCharacter.value.age = "";
+    return;
+  }
+  const next = Number(raw);
+  if (Number.isNaN(next) || !Number.isInteger(next) || next <= 0) return;
+  customCharacter.value.age = String(next);
 };
 
 // 关闭编辑面板
@@ -352,7 +409,9 @@ const handleConfirm = () => {
   console.log("[QuickCharacterSelector] handleConfirm:", selectedCharacter);
 
   // 保存完整数据：选中的角色 + 所有生成的卡片（不包括自定义卡片的占位符）
-  const generatedCards = characters.value.filter((c) => c.name && c.name.trim() !== "");
+  const generatedCards = characters.value.filter(
+    (c) => c.name && c.name.trim() !== "",
+  );
   const fullData = {
     selectedData: selectedCharacter,
     generatedCards: generatedCards.length > 0 ? generatedCards : undefined, // 如果没有生成卡片，不保存该字段
@@ -372,12 +431,16 @@ const handleRevert = async () => {
   console.log("[QuickCharacterSelector] handleRevert");
 
   try {
-    await ElMessageBox.confirm("回退后，该步骤后续内容将被清空不可找回", "是否回退到该步骤？", {
-      confirmButtonText: "确认",
-      cancelButtonText: "取消",
-      type: "warning",
-      customClass: "revert-confirm-dialog",
-    });
+    await ElMessageBox.confirm(
+      "回退后，该步骤后续内容将被清空不可找回",
+      "是否回退到该步骤？",
+      {
+        confirmButtonText: "确认",
+        cancelButtonText: "取消",
+        type: "warning",
+        customClass: "revert-confirm-dialog",
+      },
+    );
     emit("revert");
   } catch (e) {
     // 用户取消
@@ -388,7 +451,10 @@ const handleRevert = async () => {
 // 从props初始化数据
 const initFromProps = () => {
   console.log("[QuickCharacterSelector] initFromProps");
-  console.log("[QuickCharacterSelector] characterContent:", props.characterContent);
+  console.log(
+    "[QuickCharacterSelector] characterContent:",
+    props.characterContent,
+  );
 
   if (props.characterContent) {
     try {
@@ -397,30 +463,41 @@ const initFromProps = () => {
       // 兼容新旧数据格式
       if (data.selectedData && data.generatedCards) {
         // 新格式：包含 selectedData 和 generatedCards
-        console.log("[QuickCharacterSelector] Loading new format data with generated cards");
+        console.log(
+          "[QuickCharacterSelector] Loading new format data with generated cards",
+        );
 
         // 有生成的卡片：展示所有生成的卡片（无论是否锁定）
         characters.value = data.generatedCards;
         // 找到选中的卡片索引
         const selectedIndex = characters.value.findIndex(
           (c: CharacterCardData) =>
-            c.name === data.selectedData.name && c.mbti === data.selectedData.mbti
+            c.name === data.selectedData.name &&
+            c.mbti === data.selectedData.mbti,
         );
         selectedCharacterIndex.value = selectedIndex !== -1 ? selectedIndex : 0;
         console.log(
           "[QuickCharacterSelector] Loaded all generated cards, selected index:",
-          selectedCharacterIndex.value
+          selectedCharacterIndex.value,
         );
       } else {
         // 旧格式：只有选中的角色，兼容历史数据
-        console.log("[QuickCharacterSelector] Loading old format data (backward compatibility)");
+        console.log(
+          "[QuickCharacterSelector] Loading old format data (backward compatibility)",
+        );
         characters.value = [data];
         selectedCharacterIndex.value = 0;
       }
 
-      console.log("[QuickCharacterSelector] Loaded character from props:", data);
+      console.log(
+        "[QuickCharacterSelector] Loaded character from props:",
+        data,
+      );
     } catch (e) {
-      console.error("[QuickCharacterSelector] Failed to parse characterContent:", e);
+      console.error(
+        "[QuickCharacterSelector] Failed to parse characterContent:",
+        e,
+      );
     }
   }
 };
@@ -429,7 +506,10 @@ const initFromProps = () => {
 watch(
   () => props.characterContent,
   (newVal, oldVal) => {
-    console.log("[QuickCharacterSelector] characterContent changed:", { newVal, oldVal });
+    console.log("[QuickCharacterSelector] characterContent changed:", {
+      newVal,
+      oldVal,
+    });
 
     // 如果内容被清空（从有内容变为空），重置状态
     if (oldVal && !newVal) {
@@ -441,7 +521,7 @@ watch(
       initFromProps();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 监听 triggerGenerate 变化，触发重新生成
@@ -450,10 +530,13 @@ watch(
   (newVal, oldVal) => {
     // 只有当 triggerGenerate 增加时才触发（避免初始化时触发）
     if (newVal > oldVal && newVal > 0) {
-      console.log("[QuickCharacterSelector] triggerGenerate changed, trigger generate:", {
-        newVal,
-        oldVal,
-      });
+      console.log(
+        "[QuickCharacterSelector] triggerGenerate changed, trigger generate:",
+        {
+          newVal,
+          oldVal,
+        },
+      );
       // 检查条件：有故事梗概、有标签、未锁定（不管是否有角色内容都重新生成）
       if (
         props.storyContent &&
@@ -468,10 +551,12 @@ watch(
           generateCharacters();
         }, 100);
       } else {
-        console.log("[QuickCharacterSelector] Conditions not met, skip generate");
+        console.log(
+          "[QuickCharacterSelector] Conditions not met, skip generate",
+        );
       }
     }
-  }
+  },
 );
 
 // 组件挂载后，不自动生成，等待用户手动触发
@@ -485,7 +570,10 @@ onMounted(() => {
 <template>
   <div class="quick-character-selector">
     <!-- 角色选择区域 -->
-    <div class="character-select-layout" :class="{ 'edit-mode': showEditPanel }">
+    <div
+      class="character-select-layout"
+      :class="{ 'edit-mode': showEditPanel }"
+    >
       <!-- 回退按钮：始终显示 -->
       <!-- <div class="header-actions">
         <el-button class="revert-btn" @click="handleRevert"> 回退至选择故事梗概 </el-button>
@@ -499,18 +587,39 @@ onMounted(() => {
       <div class="card-edit-container">
         <div class="character-edit-container" ref="characterGridRef">
           <div class="character-grid" :class="{ 'edit-mode': showEditPanel }">
-            <div v-for="(character, index) in displayCharacters"
-              :key="character ? character.name + character.mbti + index : 'custom-' + index"
-              class="character-card-wrapper" :class="{
-                selected: character && character.name && selectedCharacterIndex === index,
+            <div
+              v-for="(character, index) in displayCharacters"
+              :key="
+                character
+                  ? character.name + character.mbti + index
+                  : 'custom-' + index
+              "
+              class="character-card-wrapper"
+              :class="{
+                selected:
+                  character &&
+                  character.name &&
+                  selectedCharacterIndex === index,
                 'custom-wrapper': !character,
-              }">
-              <QuickCharacterCard v-if="character" :data="character"
-                :show-edit="!!(!locked && character.name && !showEditPanel)" :loading="loading"
-                :is-selected="selectedCharacterIndex === index" @click="handleSelectCharacter(character, index)"
-                @edit="(e: MouseEvent) => handleEditCharacter(character, index, e)" />
-              <QuickCharacterCard v-else :is-custom="true" :class="{ disabled: loading }"
-                @click="(e?: MouseEvent) => e && handleShowCustomDialog(e)" />
+              }"
+            >
+              <QuickCharacterCard
+                v-if="character"
+                :data="character"
+                :show-edit="!!(!locked && character.name && !showEditPanel)"
+                :loading="loading"
+                :is-selected="selectedCharacterIndex === index"
+                @click="handleSelectCharacter(character, index)"
+                @edit="
+                  (e: MouseEvent) => handleEditCharacter(character, index, e)
+                "
+              />
+              <QuickCharacterCard
+                v-else
+                :is-custom="true"
+                :class="{ disabled: loading }"
+                @click="(e?: MouseEvent) => e && handleShowCustomDialog(e)"
+              />
             </div>
           </div>
 
@@ -530,57 +639,93 @@ onMounted(() => {
         </div>
         <!-- 内联编辑区：在 character-edit-container 内部，只占据卡片和换一批按钮区域 -->
         <Transition name="edit-panel">
-          <div v-if="showEditPanel" class="edit-panel" :style="editPanelStyle" :class="{ animating: isAnimating }">
+          <div
+            v-if="showEditPanel"
+            class="edit-panel"
+            :style="editPanelStyle"
+            :class="{ animating: isAnimating }"
+          >
             <!-- 编辑已有角色 -->
             <div v-if="!isCustomMode" class="edit-panel-content">
               <!-- 性别图片：悬浮在右下角 -->
               <div class="character-gender-image-float">
-                <img :src="customCharacter.gender === '女' ? FEMALE : MALE" alt="" />
+                <img
+                  :src="customCharacter.gender === '女' ? FEMALE : MALE"
+                  alt=""
+                />
               </div>
 
               <!-- 编辑区内容根据设计稿 node-id=62-15914 -->
               <div class="edit-form">
-                <!-- 姓名 -->
-                <div class="form-group form-group-name">
-                  <label class="form-label">姓名：</label>
-                  <div class="form-input-wrapper form-input-wrapper-name">
-                    <el-input v-model="customCharacter.name" placeholder="请填入" :maxlength="MAX_NAME_LENGTH"
-                      class="form-input" />
-                    <span class="word-count">{{ (customCharacter.name || "").length }}/{{ MAX_NAME_LENGTH }}</span>
+                <div class="form-row-inline">
+                  <!-- 姓名 -->
+                  <div class="form-group form-group-name">
+                    <label class="form-label">姓名：</label>
+                    <div class="form-input-wrapper form-input-wrapper-name flex-1!">
+                      <el-input
+                        v-model="customCharacter.name"
+                        placeholder="请填入"
+                        :maxlength="MAX_NAME_LENGTH"
+                        class="form-input"
+                      />
+                      <span class="word-count"
+                        >{{ (customCharacter.name || "").length }}/{{
+                          MAX_NAME_LENGTH
+                        }}</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- 性别 -->
+                  <div class="form-group form-group-gender">
+                    <label class="form-label">性别：</label>
+                    <div class="form-input-wrapper form-input-wrapper-gender flex-1!">
+                      <el-select
+                        v-model="customCharacter.gender"
+                        placeholder="请选择"
+                        class="form-select"
+                      >
+                        <el-option label="男" value="男" />
+                        <el-option label="女" value="女" />
+                      </el-select>
+                    </div>
                   </div>
                 </div>
 
-                <!-- 性别 -->
-                <div class="form-group form-group-gender">
-                  <label class="form-label">性别：</label>
-                  <div class="form-input-wrapper form-input-wrapper-gender">
-                    <el-select v-model="customCharacter.gender" placeholder="请选择" class="form-select">
-                      <el-option label="男" value="男" />
-                      <el-option label="女" value="女" />
-                    </el-select>
+                <div class="form-row-inline">
+                  <!-- 年龄 -->
+                  <div class="form-group form-group-age">
+                    <label class="form-label">年龄：</label>
+                    <div class="form-input-wrapper form-input-wrapper-age">
+                      <el-input
+                        :model-value="customCharacter.age"
+                        @update:modelValue="handleAgeInput"
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="请输入年龄..."
+                        class="form-input"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <!-- 人物标签 -->
-                <div class="form-group form-group-tags">
-                  <label class="form-label">人物标签：</label>
-                  <div class="form-input-wrapper form-input-wrapper-tags">
-                    <el-input v-model="customCharacter.abilities" placeholder="填写角色的特殊能力、金手指等（按、分割）"
-                      :maxlength="MAX_ABILITIES_LENGTH" class="form-input" />
-                    <span class="word-count">{{ (customCharacter.abilities || "").length }}/{{
-                      MAX_ABILITIES_LENGTH
-                      }}</span>
-                  </div>
-                </div>
-
-                <!-- 人物身份 -->
-                <div class="form-group form-group-identity">
-                  <label class="form-label">人物身份：</label>
-                  <div class="form-input-wrapper form-input-wrapper-identity">
-                    <el-input v-model="customCharacter.identity" placeholder="如：重生农神、地下牧师（按、分割）"
-                      :maxlength="MAX_IDENTITY_LENGTH" class="form-input" />
-                    <span class="word-count">{{ (customCharacter.identity || "").length }}/{{ MAX_IDENTITY_LENGTH
-                    }}</span>
+                  <!-- MBTI -->
+                  <div class="form-group form-group-mbti">
+                    <label class="form-label">MBTI：</label>
+                    <div class="form-input-wrapper form-input-wrapper-mbti">
+                      <el-select
+                        v-model="customCharacter.mbti"
+                        placeholder="请选择"
+                        class="form-select"
+                      >
+                        <el-option
+                          v-for="option in MBTI_OPTIONS"
+                          :key="option"
+                          :label="option"
+                          :value="option"
+                        />
+                      </el-select>
+                    </div>
                   </div>
                 </div>
 
@@ -588,18 +733,50 @@ onMounted(() => {
                 <div class="form-group form-group-bio">
                   <label class="form-label">人物小传：</label>
                   <div class="form-input-wrapper form-input-wrapper-bio">
-                    <el-input v-model="customCharacter.experiences" type="textarea" placeholder="填写角色的背景，过往经历、重要事件等"
-                      :maxlength="MAX_EXPERIENCE_LENGTH" :rows="6" class="form-textarea" />
-                    <span class="word-count word-count-bio">{{ (customCharacter.experiences || "").length }}/{{
-                      MAX_EXPERIENCE_LENGTH
-                      }}</span>
+                    <el-input
+                      v-model="customCharacter.experiences"
+                      type="textarea"
+                      placeholder="填写角色的背景，过往经历、重要事件等"
+                      :maxlength="MAX_EXPERIENCE_LENGTH"
+                      :rows="6"
+                      class="form-textarea"
+                    />
+                    <span class="word-count word-count-bio"
+                      >{{ (customCharacter.experiences || "").length }}/{{
+                        MAX_EXPERIENCE_LENGTH
+                      }}</span
+                    >
+                  </div>
+                </div>
+
+                <!-- 人物身份 -->
+                <div class="form-group form-group-identity">
+                  <label class="form-label">人物身份：</label>
+                  <div class="form-input-wrapper form-input-wrapper-identity">
+                    <el-input
+                      v-model="customCharacter.identity"
+                      placeholder="如：重生农神、地下牧师（按、分割）"
+                      :maxlength="MAX_IDENTITY_LENGTH"
+                      class="form-input"
+                    />
+                    <span class="word-count"
+                      >{{ (customCharacter.identity || "").length }}/{{
+                        MAX_IDENTITY_LENGTH
+                      }}</span
+                    >
                   </div>
                 </div>
 
                 <!-- 操作按钮 -->
                 <div class="edit-actions">
-                  <el-button class="cancel-btn" @click="closeEditPanel">取消</el-button>
-                  <el-button class="confirm-btn" @click="handleSaveCustomCharacter">确定</el-button>
+                  <el-button class="cancel-btn" @click="closeEditPanel"
+                    >取消</el-button
+                  >
+                  <el-button
+                    class="confirm-btn"
+                    @click="handleSaveCustomCharacter"
+                    >确定</el-button
+                  >
                 </div>
               </div>
             </div>
@@ -608,7 +785,10 @@ onMounted(() => {
             <div v-else class="edit-panel-content">
               <!-- 性别图片：悬浮在右下角 -->
               <div class="character-gender-image-float">
-                <img :src="customCharacter.gender === '女' ? FEMALE : MALE" alt="" />
+                <img
+                  :src="customCharacter.gender === '女' ? FEMALE : MALE"
+                  alt=""
+                />
               </div>
 
               <!-- 编辑区内容：与编辑模式相同的表单结构 -->
@@ -617,9 +797,17 @@ onMounted(() => {
                 <div class="form-group form-group-name">
                   <label class="form-label">姓名：</label>
                   <div class="form-input-wrapper form-input-wrapper-name">
-                    <el-input v-model="customCharacter.name" placeholder="请填入" :maxlength="MAX_NAME_LENGTH"
-                      class="form-input" />
-                    <span class="word-count">{{ (customCharacter.name || "").length }}/{{ MAX_NAME_LENGTH }}</span>
+                    <el-input
+                      v-model="customCharacter.name"
+                      placeholder="请填入"
+                      :maxlength="MAX_NAME_LENGTH"
+                      class="form-input"
+                    />
+                    <span class="word-count"
+                      >{{ (customCharacter.name || "").length }}/{{
+                        MAX_NAME_LENGTH
+                      }}</span
+                    >
                   </div>
                 </div>
 
@@ -627,33 +815,51 @@ onMounted(() => {
                 <div class="form-group form-group-gender">
                   <label class="form-label">性别：</label>
                   <div class="form-input-wrapper form-input-wrapper-gender">
-                    <el-select v-model="customCharacter.gender" placeholder="请选择" class="form-select">
+                    <el-select
+                      v-model="customCharacter.gender"
+                      placeholder="请选择"
+                      class="form-select"
+                    >
                       <el-option label="男" value="男" />
                       <el-option label="女" value="女" />
                     </el-select>
                   </div>
                 </div>
 
-                <!-- 人物标签 -->
-                <div class="form-group form-group-tags">
-                  <label class="form-label">人物标签：</label>
-                  <div class="form-input-wrapper form-input-wrapper-tags">
-                    <el-input v-model="customCharacter.abilities" placeholder="填写角色的特殊能力、金手指等（按、分割）"
-                      :maxlength="MAX_ABILITIES_LENGTH" class="form-input" />
-                    <span class="word-count">{{ (customCharacter.abilities || "").length }}/{{
-                      MAX_ABILITIES_LENGTH
-                      }}</span>
+                <div class="form-row-inline">
+                  <!-- 年龄 -->
+                  <div class="form-group form-group-age">
+                    <label class="form-label">年龄：</label>
+                    <div class="form-input-wrapper form-input-wrapper-age">
+                      <el-input
+                        :model-value="customCharacter.age"
+                        @update:modelValue="handleAgeInput"
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="请输入年龄..."
+                        class="form-input"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <!-- 人物身份 -->
-                <div class="form-group form-group-identity">
-                  <label class="form-label">人物身份：</label>
-                  <div class="form-input-wrapper form-input-wrapper-identity">
-                    <el-input v-model="customCharacter.identity" placeholder="如：重生农神、地下牧师（按、分割）"
-                      :maxlength="MAX_IDENTITY_LENGTH" class="form-input" />
-                    <span class="word-count">{{ (customCharacter.identity || "").length }}/{{ MAX_IDENTITY_LENGTH
-                    }}</span>
+                  <!-- MBTI -->
+                  <div class="form-group form-group-mbti">
+                    <label class="form-label">MBTI：</label>
+                    <div class="form-input-wrapper form-input-wrapper-mbti">
+                      <el-select
+                        v-model="customCharacter.mbti"
+                        placeholder="请选择"
+                        class="form-select"
+                      >
+                        <el-option
+                          v-for="option in MBTI_OPTIONS"
+                          :key="option"
+                          :label="option"
+                          :value="option"
+                        />
+                      </el-select>
+                    </div>
                   </div>
                 </div>
 
@@ -661,18 +867,50 @@ onMounted(() => {
                 <div class="form-group form-group-bio">
                   <label class="form-label">人物小传：</label>
                   <div class="form-input-wrapper form-input-wrapper-bio">
-                    <el-input v-model="customCharacter.experiences" type="textarea" placeholder="填写角色的背景，过往经历、重要事件等"
-                      :maxlength="MAX_EXPERIENCE_LENGTH" :rows="6" class="form-textarea" />
-                    <span class="word-count word-count-bio">{{ (customCharacter.experiences || "").length }}/{{
-                      MAX_EXPERIENCE_LENGTH
-                      }}</span>
+                    <el-input
+                      v-model="customCharacter.experiences"
+                      type="textarea"
+                      placeholder="填写角色的背景，过往经历、重要事件等"
+                      :maxlength="MAX_EXPERIENCE_LENGTH"
+                      :rows="6"
+                      class="form-textarea"
+                    />
+                    <span class="word-count word-count-bio"
+                      >{{ (customCharacter.experiences || "").length }}/{{
+                        MAX_EXPERIENCE_LENGTH
+                      }}</span
+                    >
+                  </div>
+                </div>
+
+                <!-- 人物身份 -->
+                <div class="form-group form-group-identity">
+                  <label class="form-label">人物身份：</label>
+                  <div class="form-input-wrapper form-input-wrapper-identity">
+                    <el-input
+                      v-model="customCharacter.identity"
+                      placeholder="如：重生农神、地下牧师（按、分割）"
+                      :maxlength="MAX_IDENTITY_LENGTH"
+                      class="form-input"
+                    />
+                    <span class="word-count"
+                      >{{ (customCharacter.identity || "").length }}/{{
+                        MAX_IDENTITY_LENGTH
+                      }}</span
+                    >
                   </div>
                 </div>
 
                 <!-- 操作按钮 -->
                 <div class="edit-actions">
-                  <el-button class="cancel-btn" @click="closeEditPanel">取消</el-button>
-                  <el-button class="confirm-btn" @click="handleSaveCustomCharacter">确定</el-button>
+                  <el-button class="cancel-btn" @click="closeEditPanel"
+                    >取消</el-button
+                  >
+                  <el-button
+                    class="confirm-btn"
+                    @click="handleSaveCustomCharacter"
+                    >确定</el-button
+                  >
                 </div>
               </div>
             </div>
@@ -683,8 +921,13 @@ onMounted(() => {
 
     <!-- 底部操作区 -->
     <div v-if="!showEditPanel" class="footer-actions">
-      <el-button v-if="!locked" type="primary" class="confirm-btn" :disabled="!hasSelectedCharacter"
-        @click="handleConfirm">
+      <el-button
+        v-if="!locked"
+        type="primary"
+        class="confirm-btn"
+        :disabled="!hasSelectedCharacter"
+        @click="handleConfirm"
+      >
         下一步
       </el-button>
     </div>
@@ -1129,11 +1372,26 @@ onMounted(() => {
         }
       }
 
+      .form-row-inline {
+        display: flex;
+        gap: 24px;
+        flex-shrink: 0;
+
+        .form-group {
+          flex: 1;
+          min-width: 0;
+        }
+      }
+
       .edit-actions {
         display: flex;
         justify-content: center;
         gap: 25px;
-        margin-top: clamp(20px, 3vh, 40px); // 顶部间距，确保与表单内容有足够距离
+        margin-top: clamp(
+          20px,
+          3vh,
+          40px
+        ); // 顶部间距，确保与表单内容有足够距离
         margin-bottom: 20px;
         flex-shrink: 0; // 不允许压缩，确保按钮始终可见
         min-height: 52px; // 确保按钮高度
@@ -1161,7 +1419,11 @@ onMounted(() => {
           width: 129px;
           height: 52px;
           border-radius: 10px;
-          background: linear-gradient(90deg, rgba(239, 175, 0, 1) 0%, rgba(255, 149, 0, 1) 100%);
+          background: linear-gradient(
+            90deg,
+            rgba(239, 175, 0, 1) 0%,
+            rgba(255, 149, 0, 1) 100%
+          );
           border: none;
           font-size: 24px;
           font-weight: 700;
@@ -1231,7 +1493,11 @@ onMounted(() => {
     font-weight: 700;
     line-height: 1.32em;
     color: #ffffff;
-    background: linear-gradient(90deg, rgba(239, 175, 0, 1) 0%, rgba(255, 149, 0, 1) 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(239, 175, 0, 1) 0%,
+      rgba(255, 149, 0, 1) 100%
+    );
     border: none;
 
     &:hover:not(:disabled) {

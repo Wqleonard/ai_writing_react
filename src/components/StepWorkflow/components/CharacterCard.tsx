@@ -15,6 +15,7 @@ export interface CharacterCardData {
   personality: string
   abilities: string
   identity: string
+  biograph: string
 }
 
 export interface CharacterCardProps {
@@ -91,7 +92,7 @@ export const CharacterCard = ({
         )}
         {data.age && (
           <span className="character-tag shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
-            {data.age}
+            {data.age || 0}岁
           </span>
         )}
         {data.mbti && (
@@ -101,14 +102,7 @@ export const CharacterCard = ({
         )}
       </div>
       <div className="line-clamp-9 mt-3 text-xs font-medium leading-tight text-black">
-        {data.abilities}
-        <br />
-        <br />
-        {data.experiences}
-        <br />
-        <br />
-        {data.personality}
-        <br />
+        {data.biograph}
       </div>
       <div className="absolute bottom-3 left-3.5 w-[calc(100%-28px)]">
         <div className="text-xs">身份</div>
