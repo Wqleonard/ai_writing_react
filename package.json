@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "preview:dev": "vite preview --outDir distReactDev --port 4173",
+    "preview:prd": "vite preview --outDir dist --port 4173",
     "postinstall": "patch -p1 -i patches/@certible+use-matomo+1.1.0.patch 2>/dev/null || true"
   },
   "dependencies": {
