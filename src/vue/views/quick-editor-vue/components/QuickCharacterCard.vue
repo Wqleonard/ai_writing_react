@@ -189,9 +189,11 @@ const handleAddNote = async (e: MouseEvent) => {
 
         <!-- 描述 -->
         <div class="character-description">
+          <!--
           <div v-if="props.data?.abilities" class="description-item">
             {{ props.data.abilities }}
           </div>
+          -->
 
           <!-- <div v-if="props.data?.identity" class="description-item">
             {{ props.data.identity }}
