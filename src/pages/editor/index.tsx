@@ -395,6 +395,40 @@ const MarkdownEditorPage = () => {
     replaceContentAndRemoveMarkers,
     removeHtmlTags,
   } = useMarkdownEditor();
+  const appendGuideSuggestionsToLastMessage = useCallback((guides: string[]) => {
+    if (guides.length === 0) return;
+    updateLastChatMessage((prev) => {
+      const existing = prev.customMessage ?? [];
+      const guideItem: import("@/types/chat").AgentCustomMessage = {
+        id: `guide_${Date.now()}`,
+        type: "ai",
+        content: "",
+        name: null,
+        example: false,
+        tool_calls: [],
+        invalid_tool_calls: [],
+        usage_metadata: null,
+        additional_kwargs: {},
+        response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
+        suggestions: guides,
+      };
+      return { ...prev, customMessage: [...existing, guideItem] };
+    });
+  }, [updateLastChatMessage]);
+  const requestGuideAndAppend = useCallback(
+    async (sessionId: string, wid: string | number) => {
+      try {
+        const res = await generateGuideReq(sessionId, Number(wid)) as {
+          guides?: string[] | string
+        } | undefined;
+        const guides = parseGuidesPayload(res?.guides);
+        appendGuideSuggestionsToLastMessage(guides);
+      } catch (_) {
+        // 联想提示词失败不打断交互，静默忽略
+      }
+    },
+    [appendGuideSuggestionsToLastMessage]
+  );
 
   const relabelPendingChanges = useCallback(
     (rawContent: string, pendingItems: EditorFileChangeItem[]) => {
@@ -611,31 +645,7 @@ const MarkdownEditorPage = () => {
           ));
       if (pending?.sessionId && pending?.workId && !hasHiltPending && !langGraphStream.error) {
         const { sessionId, workId: wid } = pending;
-        try {
-          const res = await generateGuideReq(sessionId, Number(wid)) as { guides?: string[] | string } | undefined;
-          const guides = parseGuidesPayload(res?.guides);
-          if (guides.length > 0) {
-            updateLastChatMessage((prev) => {
-              const existing = prev.customMessage ?? [];
-              const guideItem: import("@/types/chat").AgentCustomMessage = {
-                id: `guide_${Date.now()}`,
-                type: "ai",
-                content: "",
-                name: null,
-                example: false,
-                tool_calls: [],
-                invalid_tool_calls: [],
-                usage_metadata: null,
-                additional_kwargs: {},
-                response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
-                suggestions: guides,
-              };
-              return { ...prev, customMessage: [...existing, guideItem] };
-            });
-          }
-        } catch (_) {
-          // 联想提示词失败不打断交互，静默忽略
-        }
+        await requestGuideAndAppend(sessionId, wid);
       }
     },
     onSensitiveWord: () => {
@@ -711,16 +721,21 @@ const MarkdownEditorPage = () => {
   );
 
   const handleStopStreaming = useCallback((needAIMessage = true) => {
+    const pending = guideRequestRef.current;
+    guideRequestRef.current = null;
     stoppedByUserRef.current = true;
     if (needAIMessage) {
-      finalizeStreamingMessageWithSuffix("\n智能体已暂停\n");
+      finalizeStreamingMessageWithSuffix("\n\n智能体已暂停");
     } else {
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
     }
     langGraphStream.stop();
-  }, [finalizeStreamingMessageWithSuffix, langGraphStream]);
+    if (pending?.sessionId && pending?.workId) {
+      void requestGuideAndAppend(pending.sessionId, pending.workId);
+    }
+  }, [finalizeStreamingMessageWithSuffix, langGraphStream, requestGuideAndAppend]);
 
   const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
     if (langGraphStream.error) return "error";
@@ -2329,9 +2344,9 @@ const MarkdownEditorPage = () => {
   const handleHiltReject = useCallback(
     async (rejectedMsg: AgentCustomMessageItem) => {
       const sessionId = chatSessionId;
-      if (!sessionId || !workId) return;
       // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
       handleStopStreaming(false);
+      if (!sessionId || !workId) return;
       updateLastChatMessage((prev) => {
         const custom = prev.customMessage ?? [];
         return {
@@ -2353,8 +2368,7 @@ const MarkdownEditorPage = () => {
           }),
         };
       });
-      // 与 approve 对齐：将“拒绝”明确传回后端，结束 hilt_pending 等待态
-      sendChatText("", { command: "reject", addUserMessage: false, commandOnly: true });
+      // 拒绝后仅更新本地状态并拉取联想提示词，不再触发新的 chat query 请求
       try {
         const res = await generateGuideReq(sessionId, Number(workId)) as {
           guides?: string[] | string
@@ -2375,7 +2389,7 @@ const MarkdownEditorPage = () => {
         // 联想提示词失败静默忽略
       }
     },
-    [chatSessionId, workId, handleStopStreaming, updateLastChatMessage, sendChatText]
+    [chatSessionId, workId, handleStopStreaming, updateLastChatMessage]
   );
   const handleHiltApprove = useCallback(
     (approvedMsg: AgentCustomMessageItem) => {
