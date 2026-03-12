@@ -567,6 +567,34 @@ export const EditorTreeSidebar = ({
     if (isEditingTitle) titleInputRef.current?.focus()
   }, [isEditingTitle])
 
+  useEffect(() => {
+    if (!currentEditingId) return
+    const currentNode = findNodeById(treeData, currentEditingId)
+    if (!currentNode || !Array.isArray(currentNode.path) || currentNode.path.length === 0) return
+
+    // 外部（如消息里的文件名跳转）切换当前文件时，自动展开其父级目录路径
+    const depth = currentNode.isDirectory
+      ? currentNode.path.length
+      : currentNode.path.length - 1
+    if (depth <= 0) return
+
+    const ancestorIds = Array.from({ length: depth }, (_, i) =>
+      currentNode.path.slice(0, i + 1).join("/")
+    )
+
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const id of ancestorIds) {
+        if (!next.has(id)) {
+          next.add(id)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [currentEditingId, treeData])
+
   const hideContextMenu = useCallback(() => setContextMenu(null), [])
 
   useEffect(() => {
