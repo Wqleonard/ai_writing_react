@@ -1,0 +1,89 @@
+/* ===== fullpage watermark hide ===== */
+.fp-watermark { display: none !important; }
+
+/* ===== fp overflow scrollbar ===== */
+.fp-overflow { overflow-x: hidden !important; }
+.fp-overflow::-webkit-scrollbar { width: 6px; }
+.fp-overflow::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 3px;
+  transition: background 0.3s;
+}
+.fp-overflow::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+.fp-overflow::-webkit-scrollbar-track { background: transparent; }
+
+/* ===== loading overlay ===== */
+.landing-loading-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(255,255,255,0.7);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ===== wheel switch-btn hover width transition ===== */
+.switch-btn {
+  transition: width 0.3s, box-shadow 0.3s;
+}
+
+/* ===== dropdown transition ===== */
+.dropdown-enter { opacity: 0; transform: translateY(-10px); }
+.dropdown-enter-active { transition: all 0.3s ease; }
+.dropdown-enter-done { opacity: 1; transform: translateY(0); }
+.dropdown-exit { opacity: 1; transform: translateY(0); }
+.dropdown-exit-active { transition: all 0.3s ease; opacity: 0; transform: translateY(-10px); }
+
+/* ===== slide (wheel content) ===== */
+.slide-enter { opacity: 0; transform: translateX(100%); }
+.slide-enter-active { transition: all 0.5s ease; }
+.slide-enter-done { opacity: 1; transform: translateX(0); }
+.slide-exit { opacity: 1; transform: translateX(0); }
+.slide-exit-active { transition: all 0.5s ease; opacity: 0; transform: translateX(-100%); }
+
+/* ===== scroll reveal ===== */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.scroll-reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ===== scroll-to-top button transition ===== */
+.scroll-to-top-enter { opacity: 0; transform: translateY(8px); }
+.scroll-to-top-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.scroll-to-top-enter-done { opacity: 1; transform: translateY(0); }
+.scroll-to-top-exit { opacity: 1; transform: translateY(0); }
+.scroll-to-top-exit-active { transition: opacity 0.2s ease, transform 0.2s ease; opacity: 0; transform: translateY(8px); }
+
+/* ===== animations ===== */
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.loading-spinner {
+  width: 20px; height: 20px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: rotate 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ===== wechat qrcode popover ===== */
+.wechat-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%; transform: translateX(-50%);
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 12px;
+  z-index: 100;
+  white-space: nowrap;
+}

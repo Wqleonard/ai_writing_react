@@ -1,0 +1,11 @@
+.writing-styles-auto-scroll.show-border::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%) translateY(-16px);
+    width: 832px;
+    height: calc(100% + 32px);
+    border: 2px solid var(--theme-color);
+    border-radius: 12px;
+    pointer-events: none;
+}

@@ -1,0 +1,47 @@
+.markdown-content.markdown-renderer {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.markdown-content.markdown-renderer p,
+.markdown-content.markdown-renderer li,
+.markdown-content.markdown-renderer blockquote,
+.markdown-content.markdown-renderer code,
+.markdown-content.markdown-renderer span {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.markdown-content.markdown-renderer a {
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.markdown-content.markdown-renderer table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 100%;
+    margin: 1em 0;
+    table-layout: fixed;
+}
+
+.markdown-content.markdown-renderer th,
+.markdown-content.markdown-renderer td {
+    border: 1px solid var(--border-color, var(--border));
+    padding: 0.5em;
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.markdown-content.markdown-renderer th {
+    background-color: var(--bg-tertiary, var(--muted));
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-content.markdown-renderer pre {
+    max-width: 100%;
+    overflow-x: auto;
+}

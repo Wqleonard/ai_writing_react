@@ -1,0 +1,26 @@
+.shadow-logo {
+  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+}
+
+.works-section.my-works .section-header {
+  width: calc(100% + 32px);
+  margin-left: -16px;
+  padding: 0 16px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+.works-section.my-works .works-section-title {
+  position: relative;
+  width: fit-content;
+  z-index: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.add-work:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

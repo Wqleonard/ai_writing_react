@@ -1,0 +1,109 @@
+@theme {
+  --color-theme-500: var(--theme-color);
+  /* 统一 border-1 为 1px(0.0625rem)，避免 prd 打包后与 dev/qa 的 0.125rem 不一致 */
+  --default-border-width: 0.0625rem;
+}
+
+@layer utilities {
+  /* 强制 border-1 与 dev/qa 一致，避免 prd 下为 0.125rem */
+  .border {
+    border-style: solid;
+    border-width: 0.0625rem;
+    border-color: var(--border-primary);
+  }
+
+  .border-1 {
+    border-style: solid;
+    border-width: 0.0625rem;
+    border-color: var(--border-primary);
+  }
+
+  .rounded-full {
+    border-radius: calc(infinity * 1rem);
+  }
+
+  .rounded-full\! {
+    border-radius: calc(infinity * 1rem) !important;
+  }
+
+  /* ===== 背景色类 ===== */
+  .bg-primary {
+    background-color: var(--bg-primary);
+  }
+
+  .bg-secondary {
+    background-color: var(--bg-secondary);
+  }
+
+  .bg-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+
+  /* ===== 文字颜色类 ===== */
+  .text-primary {
+    color: var(--text-primary);
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .text-theme {
+    color: var(--theme-color);
+  }
+
+  .hide-scrollbar {
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  /* 强制容器及所有后代显示禁用光标（用于蒙层 pointer-events:none 场景） */
+  .cursor-not-allowed-all,
+  .cursor-not-allowed-all * {
+    cursor: not-allowed !important;
+  }
+
+  .font-YaHei {
+    font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .font-YaHei\! {
+    font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  }
+
+  .font-KaiTi {
+    font-family: 'KaiTi', 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .custom-btn {
+    cursor: pointer;
+
+    &:hover {
+      filter: brightness(1.1);
+    }
+
+    &:active {
+      filter: brightness(0.9);
+    }
+
+    &:disabled {
+      filter: opacity(0.5);
+      cursor: not-allowed;
+    }
+  }
+    .shadow-popper-base {
+        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
+    }
+
+    .shadow-popper-base\!{
+        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
+    }
+
+}

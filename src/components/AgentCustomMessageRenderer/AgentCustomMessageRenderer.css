@@ -1,0 +1,624 @@
+/* 与 Vue AgentCustomMessageRenderer 一致的 DOM 与样式 */
+
+.agent-custom-message-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.custom-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.custom-message-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.custom-message-item:empty {
+  display: none;
+}
+
+.message-content {
+  padding: 0;
+  line-height: 1.6;
+}
+
+/* 折叠内容外层包装器 */
+.collapsible-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapsible-content {
+  position: relative;
+  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--bg-secondary, #f9fafb);
+  max-width: 50%;
+  overflow: hidden;
+  transition: max-width 0.3s ease;
+}
+
+.collapsible-content.expanded {
+  max-width: 100%;
+}
+
+/* 左上角三角形（Vue 为 img，此处用 CSS 三角形） */
+.triangle-icon {
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  width: 14px;
+  height: 14px;
+  z-index: 10;
+  border-left: 2px solid var(--bg-editor-save);
+  border-top: 2px solid var(--bg-editor-save);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-secondary, #f9fafb);
+  user-select: none;
+}
+
+.collapsible-header.with-border {
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.header-left:hover {
+  opacity: 0.9;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-icon {
+  font-size: 14px;
+  color: var(--bg-editor-save);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary, #111827);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-toggle-icon {
+  font-size: 12px;
+  color: var(--bg-editor-save);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-to-kb-text-external {
+  font-size: 13px;
+  color: var(--bg-editor-save);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.send-to-kb-text-external:hover {
+  opacity: 0.7;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.send-to-kb-icon {
+  font-size: 14px;
+  color: var(--bg-editor-save);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-to-kb-icon:hover {
+  opacity: 0.7;
+}
+
+.footer-kb-icon {
+  font-size: 14px;
+}
+
+.collapsible-body {
+  background: var(--bg-secondary, #f9fafb);
+}
+
+.body-content {
+  padding: 0 12px 12px 12px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.body-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 10px;
+}
+
+.footer-icon {
+  font-size: 14px;
+  color: var(--bg-editor-save);
+  transition: opacity 0.2s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-icon:hover {
+  opacity: 0.7;
+}
+
+/* Tool Calls */
+.tool-calls-container {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tool-call-item {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: fit-content;
+  transition: all 0.15s ease;
+}
+
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  user-select: none;
+  background: transparent;
+}
+
+.tool-call-header.clickable {
+  cursor: pointer;
+}
+
+.tool-call-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #888;
+}
+
+.tool-call-name .tool-icon {
+  color: var(--bg-editor-save);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expand-icon-tool-call {
+  margin-left: 5px;
+  color: #ccc;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expand-icon-tool-call.expanded {
+  transform: rotate(180deg);
+}
+
+.tool-call-args {
+  padding: 4px 0 4px 16px;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #999;
+}
+
+.tool-call-args p,
+.tool-call-args div,
+.tool-call-args span {
+  color: #999;
+}
+
+.tool-call-args .old-line {
+  color: #c62828 !important;
+}
+
+.tool-call-args .new-line {
+  color: #2e7d32 !important;
+}
+
+.tool-call-args pre {
+  background-color: #f8f8f8;
+  color: #666;
+}
+
+.tool-call-args code {
+  background-color: #f8f8f8;
+  color: #666;
+}
+
+.args-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.args-content pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.args-content code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* write_todos 展开区：与 Vue :deep(.todos-display) 一致 */
+.tool-call-args .todos-display {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 8px;
+  margin: 4px 0;
+}
+
+.tool-call-args .todos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6c757d;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.tool-call-args .todos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-call-args .todo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 11px;
+  color: #495057;
+}
+
+.tool-call-args .todo-icon {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.tool-call-args .todo-item.completed .todo-icon {
+  color: #28a745;
+}
+
+.tool-call-args .todo-item.in_progress .todo-icon {
+  color: #fd7e14;
+}
+
+.tool-call-args .todo-item.pending .todo-icon {
+  color: #6c757d;
+}
+
+.tool-call-args .todo-content {
+  flex: 1;
+  line-height: 1.3;
+}
+
+/* 评价图标 + 联想提示词 */
+.suggestions-container {
+  padding: 0;
+  background: transparent;
+  border: none;
+  animation: agentMessageFadeInUp 0.3s ease-out;
+}
+
+@keyframes agentMessageFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rating-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.thumb-mask {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+  color: #9ca3af;
+}
+
+.thumb-mask:hover {
+  color: #6b7280;
+}
+
+.thumb-mask.active {
+  color: var(--bg-editor-save);
+}
+
+.thumb-mask .thumb-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.suggestion-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 15px;
+  background: var(--bg-dialog, #fff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+  max-width: 100%;
+  width: fit-content;
+  min-height: 2.25rem;
+  box-sizing: border-box;
+}
+
+.suggestion-item:hover {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.suggestion-text {
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--text-secondary, #4b5563);
+  word-break: break-word;
+  margin-right: 6px;
+  white-space: normal;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.suggestion-arrow {
+  font-size: 16px;
+  margin-left: 5px;
+  color: var(--text-secondary, #4b5563);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.suggestion-item:hover .suggestion-arrow {
+  color: var(--text-default, #111827);
+}
+
+.suggestion-item-last {
+  background: var(--bg-editor-save) !important;
+  border: 2px solid var(--bg-dialog, #fff) !important;
+}
+
+.suggestion-item-last .suggestion-text {
+  color: var(--bg-dialog, #fff) !important;
+  font-weight: bold;
+}
+
+.suggestion-item-last .suggestion-arrow {
+  color: var(--bg-dialog, #fff) !important;
+}
+
+.suggestion-item-last:hover {
+  background: var(--bg-editor-save) !important;
+  opacity: 0.9;
+}
+
+/* 人在回路：与 Vue 一致，单卡片 hilt-todos-display */
+.hilt-todos-container {
+  padding: 0;
+  background: transparent;
+  border: none;
+  animation: agentMessageFadeInUp 0.3s ease-out;
+}
+
+.hilt-todos-display {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 4px 0;
+}
+
+.hilt-todos-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.hilt-todos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.hilt-todos-display .hilt-todos-list {
+  margin-bottom: 12px;
+}
+
+/* icon 与 content 保持在一行 */
+.hilt-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #495057;
+  min-height: 24px;
+}
+
+.hilt-todo-item .hilt-todo-content {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.hilt-todo-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.hilt-todo-item.completed .hilt-todo-icon {
+  color: #28a745;
+}
+
+.hilt-todo-item.in_progress .hilt-todo-icon {
+  color: #fd7e14;
+}
+
+.hilt-todo-item.pending .hilt-todo-icon {
+  color: #6c757d;
+}
+
+.hilt-todo-content {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.hilt-todos-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #e9ecef;
+  gap: 12px;
+}
+
+.hilt-reject-btn,
+.hilt-approve-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+}
+
+.hilt-reject-btn .hilt-btn-icon,
+.hilt-approve-btn .hilt-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hilt-reject-btn {
+  color: var(--bg-tertiary, #6b7280);
+}
+
+.hilt-reject-btn:hover {
+  color: var(--border-hover, #374151);
+}
+
+.hilt-approve-btn {
+  color: var(--bg-editor-save);
+}
+
+.hilt-approve-btn:hover {
+  opacity: 0.9;
+}
