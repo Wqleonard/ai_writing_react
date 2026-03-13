@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
         deleteOriginFile: false,
       }),
       visualizer({
-        open: true,
+        open: false,
         filename: 'bundle-analysis.html'
       })
     ].flat() as PluginOption[],
