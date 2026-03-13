@@ -112,7 +112,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
         showCloseButton
         className={cn(
           'p-0 gap-0 overflow-hidden',
-          isMobile ? 'w-[650px] p-4' : 'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
+          isMobile ? 'w-[650px] h-200 p-4' : 'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
         )}
         onInteractOutside={preventClose}
         onEscapeKeyDown={preventClose}
@@ -123,7 +123,7 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
         <div
           className={cn(
             'relative overflow-hidden w-full h-[560px]',
-            isMobile && 'h-[230px]'
+            isMobile && 'h-200'
           )}
         >
           {!iframeLoadFailed ? (
