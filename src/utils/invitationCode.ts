@@ -1,8 +1,47 @@
-import storageManager from "./storage";
-
 // 缓存 key
 const INVITATION_CODE_NEW_KEY = "invitation_code_new";
 const INVITATION_CODE_OLD_KEY = "invitation_code_old";
+
+const readStringFromLocalStorage = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const value = localStorage.getItem(key);
+    if (value === null) return null;
+
+    // Backward compatibility: old values may be JSON-stringified.
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(value);
+        return typeof parsed === "string" ? parsed : value;
+      } catch {
+        return value;
+      }
+    }
+
+    return value;
+  } catch {
+    return null;
+  }
+};
+
+const writeStringToLocalStorage = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+};
+
+const removeFromLocalStorage = (key: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+};
 
 /**
  * 从 URL 中获取 invitationCode 参数
@@ -11,6 +50,7 @@ export const getInvitationCodeFromUrl = (): string | null => {
   if (typeof window === "undefined") return null;
 
   const urlParams = new URLSearchParams(window.location.search);
+  
   return urlParams.get("invitationCode");
 };
 
@@ -18,39 +58,35 @@ export const getInvitationCodeFromUrl = (): string | null => {
  * 获取新邀请码（从缓存）
  */
 export const getNewInvitationCode = (): string | null => {
-  try {
-    return storageManager.getItem<string>(INVITATION_CODE_NEW_KEY, null);
-  } catch (error) {
-    return null;
-  }
+  return readStringFromLocalStorage(INVITATION_CODE_NEW_KEY);
 };
 
 /**
  * 保存新邀请码到缓存
  */
 export const saveNewInvitationCode = (code: string): void => {
-  storageManager.setItem(INVITATION_CODE_NEW_KEY, code);
+  writeStringToLocalStorage(INVITATION_CODE_NEW_KEY, code);
 };
 
 /**
  * 清除新邀请码缓存
  */
 export const clearNewInvitationCode = (): void => {
-  storageManager.removeItem(INVITATION_CODE_NEW_KEY);
+  removeFromLocalStorage(INVITATION_CODE_NEW_KEY);
 };
 
 /**
  * 获取旧邀请码（从缓存）
  */
 export const getOldInvitationCode = (): string | null => {
-  return storageManager.getItem<string>(INVITATION_CODE_OLD_KEY, null);
+  return readStringFromLocalStorage(INVITATION_CODE_OLD_KEY);
 };
 
 /**
  * 保存旧邀请码到缓存
  */
 export const saveOldInvitationCode = (code: string): void => {
-  storageManager.setItem(INVITATION_CODE_OLD_KEY, code);
+  writeStringToLocalStorage(INVITATION_CODE_OLD_KEY, code);
 };
 
 /**
