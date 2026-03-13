@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getUserBalanceReq } from "@/api/users";
+import {
+  getInspirationCardsImageReq,
+  getInspirationCardsReq,
+} from "@/api/m-inspiration";
 import { mtoast } from "@/components/ui/toast";
 import DIAMOND_ICON_URL from "@/assets/images/m_ins/diamond_icon.png";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +44,13 @@ import TEST1 from "@/assets/images/m_ins/test1.jpg";
 import TEST2 from "@/assets/images/m_ins/test2.jpg";
 import TEST3 from "@/assets/images/m_ins/test3.jpg";
 
+const EMPTY_CARD_DATA = {
+  title: "",
+  summary: "",
+  tag: "",
+  image: '',
+}
+
 const INSPIRATION_CARDS: InspirationIdea[] = [
   {
     title: "玻璃海公约",
@@ -60,6 +71,8 @@ const INSPIRATION_CARDS: InspirationIdea[] = [
     image: TEST3,
   },
 ];
+
+const createEmptyCards = () => [EMPTY_CARD_DATA, EMPTY_CARD_DATA, EMPTY_CARD_DATA];
 
 const InspirationCard = ({ data, index }: InspirationCardProps) => {
   return (
@@ -112,7 +125,7 @@ const MInspirationPage = () => {
 
   const [InspirationCardData, setInspirationCardData] = useState<
     InspirationIdea[]
-  >([...INSPIRATION_CARDS]);
+  >(createEmptyCards);
 
   const headline = useMemo(() => {
     if (status === "loading") return "加载中...";
@@ -127,20 +140,20 @@ const MInspirationPage = () => {
     if (pawTimer.current) window.clearTimeout(pawTimer.current);
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const req: any = await getUserBalanceReq();
-        const points = Number(req?.token ?? req?.dailyFreeToken ?? 0);
-        if (Number.isFinite(points) && points > 0) {
-          setBalance(Math.floor(points / 1000));
-        }
-      } catch (error) {
-        console.error("获取灵感余额失败:", error);
-      }
-    })();
-    return clearTimers;
-  }, [clearTimers]);
+  // useEffect(() => {
+  //   (async () => {
+  //     try {
+  //       const req: any = await getUserBalanceReq();
+  //       const points = Number(req?.token ?? req?.dailyFreeToken ?? 0);
+  //       if (Number.isFinite(points) && points > 0) {
+  //         setBalance(Math.floor(points / 1000));
+  //       }
+  //     } catch (error) {
+  //       console.error("获取灵感余额失败:", error);
+  //     }
+  //   })();
+  //   return clearTimers;
+  // }, [clearTimers]);
 
   const pickNextIndex = useCallback((base: number) => {
     if (INSPIRATION_CARDS.length <= 1) return 0;
@@ -160,15 +173,62 @@ const MInspirationPage = () => {
     setStatus("ready");
   }, []);
 
-  const handleGenerate = useCallback(() => {
-    if (status === "loading" || status === "rerolling") return;
+  const handleGenerate = useCallback(async () => {
+    if (loading || status === "loading" || status === "rerolling") return;
+    setLoading(true);
     setStatus("loading");
     setSwipeDirection(0);
-    loadingTimer.current = window.setTimeout(() => {
-      const next = pickNextIndex(currentIndex);
-      revealCard(next);
-    }, 1200);
-  }, [currentIndex, pickNextIndex, revealCard, status]);
+
+    try {
+      const req: any = await getInspirationCardsReq(ideaInput.trim());
+      const inspirations = Array.isArray(req?.inspirations) ? req.inspirations : [];
+      const inspirationWord = req?.inspirationWord || ideaInput.trim();
+
+      if (!inspirations.length) {
+        setInspirationCardData(createEmptyCards());
+        setStatus("idle");
+        mtoast.error("暂未获取到灵感内容");
+        return;
+      }
+
+      const cards: InspirationIdea[] = inspirations.slice(0, 3).map((item: any) => ({
+        title: item?.inspirationTheme || "",
+        summary: item?.referenceStyle || "",
+        tag: "",
+        image: "",
+      }));
+
+      while (cards.length < 3) {
+        cards.push({ ...EMPTY_CARD_DATA });
+      }
+
+      const imageReq: any = await getInspirationCardsImageReq(inspirationWord);
+      const imageList = Array.isArray(imageReq) ? imageReq : [];
+
+      const imageByIndex = new Map<number, string>();
+      imageList.forEach((item: any) => {
+        const idx = Number(item?.index);
+        if (Number.isInteger(idx) && idx >= 0) {
+          imageByIndex.set(idx, item?.imageUrl || "");
+        }
+      });
+
+      const cardsWithImages = cards.map((item, index) => ({
+        ...item,
+        image: imageByIndex.get(index) || item.image,
+      }));
+
+      setInspirationCardData(cardsWithImages);
+      setStatus("ready");
+    } catch (error) {
+      console.error("获取灵感卡片失败:", error);
+      mtoast.error("获取灵感失败，请稍后重试");
+      setStatus("idle");
+      setInspirationCardData(createEmptyCards());
+    } finally {
+      setLoading(false);
+    }
+  }, [ideaInput, loading, status]);
 
   const handleReroll = useCallback(() => {
     if (status !== "ready") return;
@@ -220,7 +280,11 @@ const MInspirationPage = () => {
               className="w-full bg-transparent text-[32px] leading-normal text-[#464646] placeholder:text-[#dedede] outline-none border-none"
             />
             <div className="mt-7 flex items-center justify-end gap-8">
-              <Button className="size-14 p-0 rounded-full overflow-hidden text-center leading-14">
+              <Button
+                className="size-14 p-0 rounded-full overflow-hidden text-center leading-14 disabled:opacity-50"
+                onClick={handleGenerate}
+                disabled={loading || status === "loading"}
+              >
                 <Iconfont
                   unicode="&#xe601;"
                   className="text-[32px] text-white"
