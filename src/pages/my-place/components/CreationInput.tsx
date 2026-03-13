@@ -18,6 +18,7 @@ import { useChatInputStore } from '@/stores/chatInputStore'
 import { useChatInputActions } from '@/hooks/useChatInputActions'
 import { getWritingStylesListReq } from '@/api/writing-styles'
 import { uploadFileReq } from '@/api/files'
+import { postWritingStyle } from "@/api/tools-square";
 import { openLoginDialog } from '@/components/LoginDialog'
 import { toast } from 'sonner'
 import {
@@ -25,6 +26,9 @@ import {
   getQuickChannelInputCount,
 } from '@/services/quickChatComposerService'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import { EditableHeaderContentDialog } from './EditableHeaderContentDialog'
+import { WritingStyleDialog } from '@/components/Community'
+import IconFont from '@/components/Iconfont/Iconfont'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 const NOOP = () => {}
@@ -170,6 +174,10 @@ export const CreationInput = (props: CreationInputProps) => {
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
   const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
+  const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
+  const [writingStyleExtractPopoverOpen, setWritingStyleExtractPopoverOpen] = useState(false)
+  const [writingStyleHeader, setWritingStyleHeader] = useState('')
+  const [writingStyleContent, setWritingStyleContent] = useState('')
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
   // “仅回答提示气泡”由 chatInputStore 的 isShowAnswerTip 控制
 
@@ -318,6 +326,50 @@ export const CreationInput = (props: CreationInputProps) => {
       handleSubmit.cancel()
     }
   }, [handleSubmit])
+
+  const handleCloseWritingStyleDialog = useCallback(() => {
+    setWritingStyleDialogOpen(false)
+  }, [])
+
+  const openWritingStyleDialog = useCallback(() => {
+    setWritingStylePopoverOpen(false)
+    setWritingStyleDialogOpen(true)
+  }, [])
+
+  const openWritingStyleExtractDialog = useCallback(() => {
+    setWritingStylePopoverOpen(false)
+    setWritingStyleExtractPopoverOpen(true)
+  }, [])
+
+
+  const handleSaveWritingStyleDialog = useCallback(async () => {
+    try {
+      const res = await postWritingStyle({
+        name: writingStyleHeader,
+        content: writingStyleContent,
+      })
+      if (res && res.id) {
+        const res = await getWritingStylesListReq()
+            const raw = Array.isArray(res) ? res : []
+            const list = raw.map((item: unknown) => {
+              const o = item as { id?: string; name?: string; isPublic?: boolean }
+              return {
+                id: String(o?.id ?? ""),
+                name: String(o?.name ?? ""),
+                isPublic: o?.isPublic !== false,
+              }
+            })
+            setWritingStyles(list)
+            if (list.length > 0) setSelectedWritingStyle(list[list.length - 1].id)
+            setWritingStyleTipOpen(true)
+            setWritingStyleHeader('')
+            setWritingStyleContent('')
+            setWritingStyleDialogOpen(false)
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }, [writingStyleHeader, writingStyleContent])
 
   const disabled = isButtonDisabled || status === 'submitted' || status === 'streaming'
   const canMove = value.trim() && !disabled
@@ -1058,21 +1110,30 @@ export const CreationInput = (props: CreationInputProps) => {
                             <span className="option-label text-(--text-primary,#303133) truncate">
                               {opt.name || "未命名"}
                             </span>
-                            {(opt as { isPublic?: boolean }).isPublic && (
+                            {(opt as { isPublic?: boolean }).isPublic ? (
                               <span className="option-tag shrink-0 text-xs text-muted-foreground">官方</span>
-                            )}
+                            ) : <div className="flex items-center gap-1">
+                              <IconFont unicode='&#xea46;' className='cursor-pointer' />
+                              <IconFont unicode='&#xe63f;' className='cursor-pointer' />
+                            </div>}
                           </button>
                         ))}
                       </div>
                       <button
                         type="button"
                         className="create-writing-style-btn mt-1 h-8 flex items-center justify-center w-full rounded border border-border text-xs hover:bg-muted/80 transition-colors"
-                        onClick={() => {
-                          setWritingStylePopoverOpen(false)
-                        }}
+                        onClick={openWritingStyleDialog}
                       >
                         <span className="mr-1">+</span>
                         <span>创建专属文风</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="create-writing-style-btn mt-1 h-8 flex items-center justify-center w-full rounded border border-border text-xs hover:bg-muted/80 transition-colors"
+                        onClick={openWritingStyleExtractDialog}
+                      >
+                        <span className="mr-1">+</span>
+                        <span>上传内容提炼文风</span>
                       </button>
                     </div>
                   </PopoverContent>
@@ -1270,6 +1331,45 @@ export const CreationInput = (props: CreationInputProps) => {
           )}
         </div>
       )}
+      <EditableHeaderContentDialog
+        open={writingStyleDialogOpen}
+        onOpenChange={setWritingStyleDialogOpen}
+        headerPlaceholder="输入文风标题"
+        headerValue={writingStyleHeader}
+        onHeaderChange={setWritingStyleHeader}
+        contentLabel="文风详情"
+        contentPlaceholder="输入文风描述，如叙述视角、语言风格、句式结构，示例文段等"
+        contentValue={writingStyleContent}
+        onContentChange={setWritingStyleContent}
+        cancelText="取消"
+        saveText="保存"
+        onCancel={handleCloseWritingStyleDialog}
+        onSave={handleSaveWritingStyleDialog}
+      />
+      <WritingStyleDialog
+        open={writingStyleExtractPopoverOpen}
+        onClose={() => setWritingStyleExtractPopoverOpen(false)}
+        onAdd={async () => {
+          try {
+            const res = await getWritingStylesListReq()
+            const raw = Array.isArray(res) ? res : []
+            const list = raw.map((item: unknown) => {
+              const o = item as { id?: string; name?: string; isPublic?: boolean }
+              return {
+                id: String(o?.id ?? ""),
+                name: String(o?.name ?? ""),
+                isPublic: o?.isPublic !== false,
+              }
+            })
+            setWritingStyles(list)
+            if (list.length > 0) setSelectedWritingStyle(list[list.length - 1].id)
+            setWritingStyleTipOpen(true)
+          } catch {
+            // ignore
+            console.log('文风提炼 onAdd error')
+          }
+        }}
+      />
     </div>
   )
 }
