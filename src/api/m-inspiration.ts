@@ -23,10 +23,13 @@ const getInspirationCardsReq = (inspiration: string) => {
   );
 };
 
-const getInspirationCardsImageReq = (inspiration: string) => {
+const getInspirationCardsImageReq = (inspirationWord: string, inspirations: InspirationItem[]) => {
   return apiClient.post<InspirationImageItem[]>(
     "/api/works/inspiration-image",
-    inspiration ? { inspiration } : undefined,
+    {
+      inspirationWord: inspirationWord,
+      inspirations: inspirations,
+    },
   );
 };
 
