@@ -24,8 +24,7 @@ import { useChatInputStore } from "@/stores/chatInputStore"
 import { useModels } from "@/hooks/useModels"
 import { useLLM } from "@/hooks/useLLM"
 import { useLoginStore } from "@/stores/loginStore"
-import { getWritingStylesListReq } from "@/api/writing-styles"
-import { WritingStyleDialog } from "@/components/Community/WritingStyleDialog"
+import WritingStylePopup from "@/components/WritingStylePopup"
 import { useMemeWords } from "@/hooks/useMemeWords"
 import { useQuickToolComposer } from "@/hooks/useQuickToolComposer"
 import { useChatInputActions } from "@/hooks/useChatInputActions"
@@ -113,9 +112,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     setWritingStyles,
   } = useLLM()
 
-  const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
-  const [writingStyleDialogOpen, setWritingStyleDialogOpen] = useState(false)
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
   const [writingStyleTipOpen, setWritingStyleTipOpen] = useState(false)
@@ -490,97 +487,13 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
                   </div>
                 </div>
               )}
-              <Popover
-                open={writingStylePopoverOpen}
-                onOpenChange={(open) => {
-                  setWritingStylePopoverOpen(open)
-                  if (open) {
-                    getWritingStylesListReq()
-                      .then((res: unknown) => {
-                        const list = Array.isArray(res)
-                          ? res.map((item: { id?: string; name?: string; isPublic?: boolean }) => ({
-                            id: String(item?.id ?? ""),
-                            name: String(item?.name ?? ""),
-                            isPublic: item?.isPublic !== false,
-                          }))
-                          : []
-                        setWritingStyles(list)
-                        // 优先：如果外部请求指定了文风，并且列表里存在，则选中它
-                        if (requestedWritingStyleId && list.some((s) => s.id === requestedWritingStyleId)) {
-                          setSelectedWritingStyle(requestedWritingStyleId)
-                        } else if (list.length > 0 && !selectedWritingStyle) {
-                          setSelectedWritingStyle(list[0].id)
-                        }
-                      })
-                      .catch(() => { })
-                  }
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={isAnswerOnly}
-                    className={clsx(
-                      "writing-style-trigger inline-flex items-center gap-1 rounded-md outline-none transition-[transform,opacity]",
-                      "text-xs text-[var(--text-primary,#333)]",
-                      "cursor-pointer hover:opacity-80",
-                      "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50"
-                    )}
-                  >
-                    <span>
-                      {writingStyles.find((s) => s.id === selectedWritingStyle)?.name || "默认文风"}
-                    </span>
-                    <ChevronDown
-                      className={clsx("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", writingStylePopoverOpen && "rotate-180")}
-                    />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="end"
-                  side="top"
-                  sideOffset={8}
-                  className="w-[200px] p-1 rounded-lg border bg-[var(--bg-primary-overlay,white)] shadow-md"
-                >
-                  <div className="writing-style-content flex flex-col max-h-[220px]">
-                    <div className="style-options overflow-y-auto flex-1 min-h-0 max-h-[180px] py-0.5">
-                      {writingStyles.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={clsx(
-                            "style-option w-full h-9 rounded-lg flex items-center justify-between gap-2 px-3 text-left text-sm transition-colors",
-                            opt.id === selectedWritingStyle
-                              ? "bg-[var(--bg-hover,#f5f5f5)]"
-                              : "hover:bg-[var(--bg-hover,#f5f5f5)]"
-                          )}
-                          onClick={() => {
-                            setSelectedWritingStyle(opt.id)
-                            setWritingStylePopoverOpen(false)
-                          }}
-                        >
-                          <span className="option-label text-[var(--text-primary,#303133)] truncate">
-                            {opt.name || "未命名"}
-                          </span>
-                          {(opt as { isPublic?: boolean }).isPublic && (
-                            <span className="option-tag shrink-0 text-xs text-muted-foreground">官方</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      className="create-writing-style-btn mt-1 h-8 flex items-center justify-center w-full rounded border border-border text-xs hover:bg-muted/80 transition-colors"
-                      onClick={() => {
-                        setWritingStylePopoverOpen(false)
-                        setWritingStyleDialogOpen(true)
-                      }}
-                    >
-                      <span className="mr-1">+</span>
-                      <span>创建专属文风</span>
-                    </button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <div title={isAnswerOnly ? "关闭仅回答后可选择文风" : "选择文风"}>
+                <WritingStylePopup
+                  disabled={isAnswerOnly}
+                  value={selectedWritingStyle}
+                  onChange={setSelectedWritingStyle}
+                />
+              </div>
             </div>
           )}
 
@@ -1210,30 +1123,6 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
         )}
       </div>
 
-      <WritingStyleDialog
-        open={writingStyleDialogOpen}
-        onClose={() => setWritingStyleDialogOpen(false)}
-        onAdd={async () => {
-          try {
-            const res = await getWritingStylesListReq()
-            const raw = Array.isArray(res) ? res : []
-            const list = raw.map((item: unknown) => {
-              const o = item as { id?: string; name?: string; isPublic?: boolean }
-              return {
-                id: String(o?.id ?? ""),
-                name: String(o?.name ?? ""),
-                isPublic: o?.isPublic !== false,
-              }
-            })
-            setWritingStyles(list)
-            if (list.length > 0) setSelectedWritingStyle(list[list.length - 1].id)
-            setWritingStyleTipOpen(true)
-          } catch {
-            // ignore
-            console.log('文风提炼 onAdd error')
-          }
-        }}
-      />
     </div>
   )
 }
