@@ -11,31 +11,65 @@ import { ExportUtils } from "@/utils/exportUtils"
 
 interface ExportWorkMenuProps {
   onClose?: () => void
+  /** Optional override: use sidebar tree (includes unsaved edits) */
+  treeData?: FileTreeNode[]
+  workTitle?: string
+  /** Export selection mode: when provided, "导出全书" exports selected nodes */
+  selectedIds?: string[]
 }
 
 type ExportFormat = "word" | "txt"
 type ExportScope = "chapter" | "full"
 
-export const ExportWorkMenu = ({ onClose }: ExportWorkMenuProps) => {
+export const ExportWorkMenu = ({ onClose, treeData: treeDataProp, workTitle, selectedIds }: ExportWorkMenuProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const serverData = useEditorStore((s) => s.serverData)
   const currentEditingId = useEditorStore((s) => s.currentEditingId)
 
-  const treeData = useMemo(() => serverDataToTree(serverData ?? {}), [serverData])
+  const treeData = useMemo(
+    () => treeDataProp ?? serverDataToTree(serverData ?? {}),
+    [treeDataProp, serverData]
+  )
   const hasSelectedChapter = !!currentEditingId
+  const selectedIdSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds])
 
   const workNode = useMemo<FileTreeNode>(
     () => ({
-      id: workInfo.title,
-      key: workInfo.title,
-      label: workInfo.title,
+      id: workTitle ?? workInfo.title,
+      key: workTitle ?? workInfo.title,
+      label: workTitle ?? workInfo.title,
       content: "",
       isDirectory: true,
       path: [],
       fileType: "directory",
       children: treeData,
     }),
-    [workInfo.title, treeData]
+    [workInfo.title, workTitle, treeData]
+  )
+
+  const filterTreeBySelected = useCallback(
+    (nodes: FileTreeNode[]): FileTreeNode[] => {
+      const result: FileTreeNode[] = []
+      for (const node of nodes) {
+        if (selectedIdSet.has(node.id)) {
+          result.push(node)
+          continue
+        }
+        if (node.isDirectory) {
+          const nextChildren = filterTreeBySelected(node.children ?? [])
+          if (nextChildren.length > 0) {
+            result.push({ ...node, children: nextChildren })
+          }
+          continue
+        }
+        // file
+        if (selectedIdSet.has(node.id)) {
+          result.push(node)
+        }
+      }
+      return result
+    },
+    [selectedIdSet]
   )
 
   const runExportTask = useCallback(
@@ -81,18 +115,34 @@ export const ExportWorkMenu = ({ onClose }: ExportWorkMenuProps) => {
         return
       }
 
+      const hasSelectionMode = Array.isArray(selectedIds)
+      const effectiveNode: FileTreeNode = hasSelectionMode
+        ? { ...workNode, children: filterTreeBySelected(treeData) }
+        : workNode
+
+      if (hasSelectionMode) {
+        if (!selectedIds || selectedIds.length === 0) {
+          toast.warning("请选择要导出的文件或文件夹")
+          return
+        }
+        if (!effectiveNode.children || effectiveNode.children.length === 0) {
+          toast.warning("所选内容为空")
+          return
+        }
+      }
+
       const fullBookExportTaskByFormat: Record<ExportFormat, () => Promise<void>> = {
-        word: () => ExportUtils.exportWorkAsZipDoc(workNode),
-        txt: () => ExportUtils.exportWorkAsZipTxt(workNode),
+        word: () => ExportUtils.exportWorkAsZipDoc(effectiveNode),
+        txt: () => ExportUtils.exportWorkAsZipTxt(effectiveNode),
       }
       const fullBookSuccessMessageByFormat: Record<ExportFormat, string> = {
-        word: "全书 Word 文件导出成功",
-        txt: "全书 TXT 文件导出成功",
+        word: hasSelectionMode ? "所选 Word 文件导出成功" : "全书 Word 文件导出成功",
+        txt: hasSelectionMode ? "所选 TXT 文件导出成功" : "全书 TXT 文件导出成功",
       }
 
       await runExportTask(fullBookExportTaskByFormat[format], fullBookSuccessMessageByFormat[format])
     },
-    [workNode, runExportTask]
+    [workNode, runExportTask, selectedIds, filterTreeBySelected, treeData]
   )
 
   const handleExport = useCallback(
