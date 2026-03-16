@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import MainEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import { StepWorkflow, type StepWorkflowRef } from "@/components/StepWorkflow";
 import type { Template as StepTemplate } from "@/components/StepWorkflow/types";
-import { Iconfont as IconFont } from "@/components/Iconfont";
+import { Iconfont, Iconfont as IconFont } from "@/components/Iconfont";
 import {
   EditorTopToolbar,
   EditorTreeSidebar,
@@ -71,6 +71,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip";
 import { CircleAlert } from "lucide-react";
 import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
 import {
@@ -2327,6 +2328,13 @@ const MarkdownEditorPage = () => {
     () => (streamingMessage ? [...chatMessages, streamingMessage] : chatMessages),
     [chatMessages, streamingMessage]
   );
+  const lastUserMessageId = useMemo(() => {
+    for (let i = displayChatMessages.length - 1; i >= 0; i--) {
+      const m = displayChatMessages[i];
+      if (m?.role === "user") return m.id;
+    }
+    return "";
+  }, [displayChatMessages]);
   const handleOpenAssociationSelector = useCallback(() => {
     setShowAssociationSelector(true);
   }, []);
@@ -2335,6 +2343,18 @@ const MarkdownEditorPage = () => {
   }, []);
   const handleChatSendMessage = useCallback(
     (msg: ChatMessage) => sendChatText(msg.content ?? "", { addUserMessage: true }),
+    [sendChatText]
+  );
+  const handleRegenerateLastUserQuery = useCallback(
+    (query: string) => {
+      const text = String(query ?? "").trim();
+      if (!text) return;
+      if (chatInputStatusRef.current === "streaming") {
+        toast.warning("正在生成中，请稍后再试");
+        return;
+      }
+      void sendChatText(text, { reload: true, addUserMessage: false });
+    },
     [sendChatText]
   );
   const handleSaveCurrentChatSession = useCallback(() => {
@@ -2484,10 +2504,34 @@ const MarkdownEditorPage = () => {
                 )}
                 {!hasFilesOrSelected && (
                   <div className="message-content-wrapper whitespace-pre-wrap wrap-break-word">
-                    <MarkdownRenderer
-                      content={msg.content || ""}
-                      onFileNameClick={handleFileNameClick}
-                    />
+                    <div className="flex items-start">
+                      {msg.role === "user" && msg.id === lastUserMessageId && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="重新生成"
+                              className="shrink-0  m-[0.5em]"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleRegenerateLastUserQuery(msg.content ?? "");
+                              }}
+                            >
+                              <Iconfont
+                                unicode="&#xe640;"
+                                className="text-xs cursor-pointer"
+                              />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">重新生成</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <MarkdownRenderer
+                        content={msg.content || ""}
+                        onFileNameClick={handleFileNameClick}
+                      />
+                    </div>
                   </div>
                 )}
               </>
@@ -2504,6 +2548,8 @@ const MarkdownEditorPage = () => {
       handleHiltApprove,
       handleRendererSendMessage,
       handleMessageFileClick,
+      handleRegenerateLastUserQuery,
+      lastUserMessageId,
     ]
   );
   const chatSlots = useMemo(
