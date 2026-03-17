@@ -25,6 +25,7 @@ import {
   getQuickChannelInputCount,
 } from '@/services/quickChatComposerService'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
+import WritingStylePopup from '@/components/WritingStylePopup'
 
 export type SubmitStatus = 'ready' | 'error' | 'submitted' | 'streaming'
 const NOOP = () => {}
@@ -169,7 +170,6 @@ export const CreationInput = (props: CreationInputProps) => {
 
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
-  const [writingStylePopoverOpen, setWritingStylePopoverOpen] = useState(false)
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
   // “仅回答提示气泡”由 chatInputStore 的 isShowAnswerTip 控制
 
@@ -272,8 +272,6 @@ export const CreationInput = (props: CreationInputProps) => {
     return () => document.removeEventListener("click", close)
   }, [writingStyleTipOpen])
 
-  const writingStyleOptions =
-    writingStyles.length > 0 ? writingStyles : [{ id: selectedWritingStyle, name: '默认' }]
   const currentModelName = modelsLLM.find((m) => m.id === modelLLM)?.name || '模型'
 
   const completeNewbieMissionByCode = useLoginStore(s => s.completeNewbieMissionByCode)
@@ -493,25 +491,6 @@ export const CreationInput = (props: CreationInputProps) => {
     },
     [addFile, isLoggedIn, validateDragFileType]
   )
-
-  const loadWritingStyles = useCallback(async () => {
-    try {
-      const res = await getWritingStylesListReq()
-      const list = Array.isArray(res)
-        ? res.map((item: { id?: string; name?: string; isPublic?: boolean }) => ({
-          id: String(item?.id ?? ''),
-          name: String(item?.name ?? ''),
-          isPublic: item?.isPublic !== false,
-        }))
-        : []
-      setWritingStyles(list)
-      if (list.length > 0 && !list.some((s) => s.id === selectedWritingStyle)) {
-        setSelectedWritingStyle(list[0].id)
-      }
-    } catch {
-      // ignore
-    }
-  }, [selectedWritingStyle, setSelectedWritingStyle, setWritingStyles])
 
   return (
     <div
@@ -1007,76 +986,13 @@ export const CreationInput = (props: CreationInputProps) => {
                     </div>
                   </div>
                 )}
-                <Popover
-                  open={writingStylePopoverOpen}
-                  onOpenChange={(open) => {
-                    setWritingStylePopoverOpen(open)
-                    if (open) void loadWritingStyles()
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={isAnswerOnly}
-                      title={isAnswerOnly ? "关闭仅回答后可选择文风" : "选择文风"}
-                      className={clsx(
-                        "writing-style-trigger inline-flex items-center gap-1 rounded-md outline-none transition-[transform,opacity]",
-                        "text-xs text-(--text-primary,#333)",
-                        "cursor-pointer hover:opacity-80",
-                        "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50"
-                      )}
-                    >
-                      <span className="max-w-[90px] truncate text-left">
-                        {writingStyleOptions.find((s) => s.id === selectedWritingStyle)?.name || "默认文风"}
-                      </span>
-                      <ChevronDown className={clsx("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", writingStylePopoverOpen && "rotate-180")} />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    side="top"
-                    sideOffset={8}
-                    className="w-[200px] p-1 rounded-lg border bg-(--bg-primary-overlay,white) shadow-md"
-                  >
-                    <div className="writing-style-content flex flex-col max-h-[220px]">
-                      <div className="style-options overflow-y-auto flex-1 min-h-0 max-h-[180px] py-0.5">
-                        {writingStyleOptions.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={clsx(
-                              "style-option w-full h-9 rounded-lg flex items-center justify-between gap-2 px-3 text-left text-sm transition-colors",
-                              opt.id === selectedWritingStyle
-                                ? "bg-(--bg-hover,#f5f5f5)"
-                                : "hover:bg-(--bg-hover,#f5f5f5)"
-                            )}
-                            onClick={() => {
-                              setSelectedWritingStyle(opt.id)
-                              setWritingStylePopoverOpen(false)
-                            }}
-                          >
-                            <span className="option-label text-(--text-primary,#303133) truncate">
-                              {opt.name || "未命名"}
-                            </span>
-                            {(opt as { isPublic?: boolean }).isPublic && (
-                              <span className="option-tag shrink-0 text-xs text-muted-foreground">官方</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        className="create-writing-style-btn mt-1 h-8 flex items-center justify-center w-full rounded border border-border text-xs hover:bg-muted/80 transition-colors"
-                        onClick={() => {
-                          setWritingStylePopoverOpen(false)
-                        }}
-                      >
-                        <span className="mr-1">+</span>
-                        <span>创建专属文风</span>
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                <div title={isAnswerOnly ? "关闭仅回答后可选择文风" : "选择文风"}>
+                  <WritingStylePopup
+                    disabled={isAnswerOnly}
+                    value={selectedWritingStyle}
+                    onChange={setSelectedWritingStyle}
+                  />
+                </div>
               </div>
 
               {/* 模型选择器 */}

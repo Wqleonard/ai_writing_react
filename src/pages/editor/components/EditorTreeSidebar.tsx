@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useState, useEffect, useRef } from "react"
+import React, { useCallback, useMemo, useState, useEffect, useRef } from "react"
 import clsx from "clsx"
 import { toast } from "sonner"
 import IconFont from "@/components/Iconfont/Iconfont"
@@ -14,9 +14,8 @@ import {
   DialogFooter,
 } from "@/components/ui/Dialog"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/Popover"
-import { ExportWorkMenu } from "./ExportWorkMenu"
 import { useEditorStore } from "@/stores/editorStore"
-import { getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
+import { exportRecordReq, getWorkTagsReq, updateWorkInfoReq } from "@/api/works"
 import type { FileTreeNode } from "@/stores/editorStore/types"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
@@ -27,6 +26,7 @@ import {
 import type { Tag as WorkflowTag } from "@/components/StepWorkflow/types"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip.tsx";
 import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
+import { ExportUtils } from "@/utils/exportUtils"
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
@@ -298,6 +298,10 @@ interface TreeNodeRowProps {
   onDragLeave: (e: React.DragEvent, node: FileTreeNode) => void
   onDrop: (e: React.DragEvent, node: FileTreeNode) => void
   onDragEnd: () => void
+  exportSelectMode?: boolean
+  exportCheckState?: { checked: boolean; indeterminate: boolean }
+  getExportCheckState?: (id: string) => { checked: boolean; indeterminate: boolean } | undefined
+  onToggleExportCheck?: (node: FileTreeNode) => void
 }
 
 const TreeNodeRow = React.memo((
@@ -317,6 +321,10 @@ const TreeNodeRow = React.memo((
     onDragLeave,
     onDrop,
     onDragEnd,
+    exportSelectMode = false,
+    exportCheckState,
+    getExportCheckState,
+    onToggleExportCheck,
   }: TreeNodeRowProps) => {
   const isDir = node.isDirectory
   const showNewBadge = newNodeIdMap[node.id]
@@ -325,10 +333,22 @@ const TreeNodeRow = React.memo((
   const expanded = expandedIds.has(node.id)
   const isDragged = dragState.draggedId === node.id
   const isDropTarget = dragState.dropTargetId === node.id
-
+  const isKnwoledge = node.id === '知识库' || node.path.includes('知识库')
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
+  const checkboxRef = useRef<HTMLInputElement | null>(null)
+  const effectiveExportCheckState = exportCheckState ?? getExportCheckState?.(node.id)
+
+  useEffect(() => {
+    if (!exportSelectMode) return
+    if (!checkboxRef.current) return
+    checkboxRef.current.indeterminate = Boolean(effectiveExportCheckState?.indeterminate)
+  }, [exportSelectMode, effectiveExportCheckState?.indeterminate])
 
   const handleClick = useCallback(() => {
+    if (exportSelectMode) {
+      onToggleExportCheck?.(node)
+      return
+    }
     if (showNewBadge) {
       onMarkNodeAsRead(node.id)
     }
@@ -395,7 +415,7 @@ const TreeNodeRow = React.memo((
               />
             </div>
           ) : (
-            <span className="w-2"/>
+            <span className="w-2" />
           )}
         </div>
         <IconFont
@@ -415,7 +435,7 @@ const TreeNodeRow = React.memo((
           )}
         </div>
         {/* “+” 新增：仅目录节点显示，悬浮时可见 */}
-        {isDir && (
+        {isDir && !exportSelectMode && (
           <div
             role="button"
             tabIndex={0}
@@ -437,9 +457,24 @@ const TreeNodeRow = React.memo((
             +
           </div>
         )}
+        {exportSelectMode && !isKnwoledge && (
+          <input
+            ref={checkboxRef}
+            type="checkbox"
+            checked={Boolean(effectiveExportCheckState?.checked)}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+            onChange={(e) => {
+              e.stopPropagation()
+              onToggleExportCheck?.(node)
+            }}
+            className="mr-1 h-4 w-4 shrink-0 cursor-pointer accent-black"
+          />
+        )}
       </div>
       {isDir && expanded && (
-        < >
+        <>
           {node.children.map((child) => (
             <TreeNodeRow
               key={child.id}
@@ -458,6 +493,10 @@ const TreeNodeRow = React.memo((
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onDragEnd={onDragEnd}
+              exportSelectMode={exportSelectMode}
+              exportCheckState={getExportCheckState?.(child.id)}
+              getExportCheckState={getExportCheckState}
+              onToggleExportCheck={onToggleExportCheck}
             />
           ))}
         </>
@@ -467,6 +506,12 @@ const TreeNodeRow = React.memo((
 }, (prev, next) => {
   // 目录节点需要感知后代的展开状态变化，保守起见始终重渲染
   if (prev.node.isDirectory || next.node.isDirectory) return false
+
+  // 导出选择模式切换需要让文件行立即重渲染（隐藏/显示 checkbox）
+  if (prev.exportSelectMode !== next.exportSelectMode) return false
+  // 文件行勾选态变化也需要重渲染
+  if (prev.exportCheckState?.checked !== next.exportCheckState?.checked) return false
+  if (prev.exportCheckState?.indeterminate !== next.exportCheckState?.indeterminate) return false
 
   if (prev.node !== next.node) return false
   if (prev.level !== next.level) return false
@@ -504,8 +549,8 @@ export interface EditorTreeSidebarProps {
 }
 
 export const EditorTreeSidebar = ({
-                                    className,
-                                  }: EditorTreeSidebarProps) => {
+  className,
+}: EditorTreeSidebarProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
   const treeData = useEditorStore((s) => s.treeData)
@@ -537,6 +582,13 @@ export const EditorTreeSidebar = ({
   const [selectedTags, setSelectedTags] = useState<WorkflowTag[]>([])
   const [tagSaving, setTagSaving] = useState(false)
   const [exportPopoverOpen, setExportPopoverOpen] = useState(false)
+  const [exportModeOpen, setExportModeOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<"word" | "txt" | null>(null)
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set())
+  const [addFolderPopoverOpen, setAddFolderPopoverOpen] = useState(false)
+  const [addFilePopoverOpen, setAddFilePopoverOpen] = useState(false)
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
+  const importFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
   const [dragState, setDragState] = useState<{
     draggedId: string | null
@@ -602,6 +654,146 @@ export const EditorTreeSidebar = ({
     document.addEventListener("click", onDocClick)
     return () => document.removeEventListener("click", onDocClick)
   }, [hideContextMenu])
+
+  // Ensure folder picking works reliably in Chromium
+  useEffect(() => {
+    const el = importFolderInputRef.current
+    if (!el) return
+    el.setAttribute("webkitdirectory", "")
+    el.setAttribute("directory", "")
+  }, [])
+
+  useEffect(() => {
+    if (exportModeOpen) return
+    setExportSelectedIds(new Set())
+    setExportFormat(null)
+    setExportPopoverOpen(false)
+  }, [exportModeOpen])
+
+  const exportCheckStateById = useMemo(() => {
+    const map = new Map<string, { checked: boolean; indeterminate: boolean }>()
+    if (!exportModeOpen) return map
+
+    const walk = (node: FileTreeNode): { all: boolean; any: boolean } => {
+      const children = node.children ?? []
+      if (!children.length) {
+        const checked = exportSelectedIds.has(node.id)
+        map.set(node.id, { checked, indeterminate: false })
+        return { all: checked, any: checked }
+      }
+      let all = true
+      let any = false
+      for (const child of children) {
+        const r = walk(child)
+        all = all && r.all
+        any = any || r.any
+      }
+      const checked = any && all
+      const indeterminate = any && !all
+      map.set(node.id, { checked, indeterminate })
+      return { all: checked, any }
+    }
+
+    for (const root of treeData) walk(root)
+    return map
+  }, [exportModeOpen, exportSelectedIds, treeData])
+
+  const getExportCheckState = useCallback(
+    (id: string) => exportCheckStateById.get(id),
+    [exportCheckStateById]
+  )
+
+  const collectSubtreeIds = useCallback((node: FileTreeNode): string[] => {
+    const ids: string[] = [node.id]
+    const children = node.children ?? []
+    for (const child of children) {
+      ids.push(...collectSubtreeIds(child))
+    }
+    return ids
+  }, [])
+
+  const toggleExportSelect = useCallback(
+    (node: FileTreeNode) => {
+      setExportSelectedIds((prev) => {
+        const next = new Set(prev)
+        const state = exportCheckStateById.get(node.id)
+        const isOn = Boolean(state?.checked || state?.indeterminate || next.has(node.id))
+        const ids = node.isDirectory ? collectSubtreeIds(node) : [node.id]
+        if (isOn) ids.forEach((id) => next.delete(id))
+        else ids.forEach((id) => next.add(id))
+        return next
+      })
+    },
+    [collectSubtreeIds, exportCheckStateById]
+  )
+
+  const filterTreeBySelected = useCallback(
+    (nodes: FileTreeNode[], selected: Set<string>): FileTreeNode[] => {
+      const result: FileTreeNode[] = []
+      for (const node of nodes) {
+        if (selected.has(node.id)) {
+          result.push(node)
+          continue
+        }
+        if (node.isDirectory) {
+          const nextChildren = filterTreeBySelected(node.children ?? [], selected)
+          if (nextChildren.length > 0) {
+            result.push({ ...node, children: nextChildren })
+          }
+          continue
+        }
+        if (selected.has(node.id)) result.push(node)
+      }
+      return result
+    },
+    []
+  )
+
+  const handleExportCancel = useCallback(() => {
+    setExportModeOpen(false)
+  }, [])
+
+  const handleExportConfirm = useCallback(async () => {
+    if (!exportFormat) {
+      toast.warning("请选择导出类型")
+      return
+    }
+    if (exportSelectedIds.size === 0) {
+      toast.warning("请选择要导出的文件或文件夹")
+      return
+    }
+
+    const selectedTree = filterTreeBySelected(treeData, exportSelectedIds)
+    if (!selectedTree.length) {
+      toast.warning("所选内容为空")
+      return
+    }
+
+    const workNode: FileTreeNode = {
+      id: workInfo.title,
+      key: workInfo.title,
+      label: workInfo.title,
+      content: "",
+      isDirectory: true,
+      path: [],
+      fileType: "directory",
+      children: selectedTree,
+    }
+
+    try {
+      if (exportFormat === "word") {
+        await ExportUtils.exportWorkAsZipDoc(workNode)
+      } else {
+        await ExportUtils.exportWorkAsZipTxt(workNode)
+      }
+      await exportRecordReq()
+      toast.success(exportFormat === "word" ? "所选 Word 文件导出成功" : "所选 TXT 文件导出成功")
+      setExportModeOpen(false)
+    } catch (e) {
+      console.error(e)
+      toast.warning("导出失败，请重试")
+    }
+  }, [exportFormat, exportSelectedIds, filterTreeBySelected, treeData, workInfo.title])
 
   const updateTagCategories = useCallback(async () => {
     try {
@@ -947,6 +1139,161 @@ export const EditorTreeSidebar = ({
     setExpandedIds((prev) => new Set(prev))
   }, [treeData, markNewNodeId, saveEditorData, setTreeData])
 
+  const triggerImportLocalFile = useCallback(() => {
+    importFileInputRef.current?.click()
+  }, [])
+
+  const triggerImportLocalFolder = useCallback(() => {
+    const el = importFolderInputRef.current
+    if (!el) return
+    el.click()
+  }, [])
+
+  const importLocalFilesAtRoot = useCallback(
+    async (files: File[]) => {
+      if (!files || files.length === 0) return
+      const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+      const siblings = nextTreeData
+
+      let firstImportedId: string | null = null
+      for (const file of files) {
+        const lower = file.name.toLowerCase()
+        if (!lower.endsWith(".md") && !lower.endsWith(".txt")) {
+          toast.warning("仅支持导入 .md / .txt 文件")
+          continue
+        }
+        const base = file.name.replace(/\.[^.]+$/, "")
+        const unique = generateUniqueName(siblings, base || "新文件", false)
+        const newPath = [`${unique}.md`]
+        const newNodeId = newPath.join("/")
+        const newNodeKey = newPath.join("-")
+        const content = await file.text()
+        const nextNode: FileTreeNode = {
+          id: newNodeId,
+          key: newNodeKey,
+          label: unique,
+          content,
+          isDirectory: false,
+          path: newPath,
+          fileType: "md",
+          children: [],
+        }
+        siblings.push(nextNode)
+        if (!firstImportedId) firstImportedId = newNodeId
+      }
+
+      setTreeData([...nextTreeData])
+      void saveEditorData("1")
+      if (firstImportedId) {
+        markNewNodeId(firstImportedId)
+        setCurrentEditingId(firstImportedId)
+        toast.success("已导入文件")
+      }
+    },
+    [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData]
+  )
+
+  const importLocalFolderAtRoot = useCallback(
+    async (fileList: File[]) => {
+      if (!fileList || fileList.length === 0) {
+        toast.warning("未读取到文件夹内容（请确认选择的文件夹里有文件）")
+        return
+      }
+      const list = fileList
+      const first = list[0] as any
+      const rootFromPicker: string =
+        typeof first?.webkitRelativePath === "string" && first.webkitRelativePath
+          ? String(first.webkitRelativePath).split("/")[0] || "导入文件夹"
+          : "导入文件夹"
+
+      const nextTreeData = structuredClone(treeData) as FileTreeNode[]
+      const rootName = generateUniqueName(nextTreeData, rootFromPicker, true)
+      const rootId = rootName
+      const rootNode: FileTreeNode = {
+        id: rootId,
+        key: rootId.replaceAll("/", "-"),
+        label: rootName,
+        content: "",
+        isDirectory: true,
+        path: [rootName],
+        fileType: "directory",
+        children: [],
+      }
+
+      const dirMap = new Map<string, FileTreeNode>()
+      dirMap.set(rootId, rootNode)
+      const newIds: string[] = [rootId]
+
+      const ensureDir = (parent: FileTreeNode, name: string) => {
+        const id = `${parent.id}/${name}`
+        const existing = dirMap.get(id)
+        if (existing) return existing
+        const next: FileTreeNode = {
+          id,
+          key: id.replaceAll("/", "-"),
+          label: name,
+          content: "",
+          isDirectory: true,
+          path: [...parent.path, name],
+          fileType: "directory",
+          children: [],
+        }
+        parent.children.push(next)
+        dirMap.set(id, next)
+        return next
+      }
+
+      let firstImportedFileId: string | null = null
+      for (const file of list) {
+        const lower = file.name.toLowerCase()
+        if (!lower.endsWith(".md") && !lower.endsWith(".txt")) continue
+
+        const rel = (file as any).webkitRelativePath as string | undefined
+        const parts = (rel ? rel.split("/") : [file.name]).filter(Boolean)
+        const innerParts = parts.length > 1 ? parts.slice(1) : [file.name]
+        const fileName = innerParts[innerParts.length - 1]
+        const dirParts = innerParts.slice(0, -1)
+
+        let parent = rootNode
+        for (const dir of dirParts) {
+          parent = ensureDir(parent, dir)
+        }
+
+        const base = fileName.replace(/\.[^.]+$/, "") || "新文件"
+        const unique = generateUniqueName(parent.children, base, false)
+        const fileId = `${parent.id}/${unique}.md`
+        const content = await file.text()
+        const node: FileTreeNode = {
+          id: fileId,
+          key: fileId.replaceAll("/", "-"),
+          label: unique,
+          content,
+          isDirectory: false,
+          path: [...parent.path, `${unique}.md`],
+          fileType: "md",
+          children: [],
+        }
+        parent.children.push(node)
+        newIds.push(fileId)
+        if (!firstImportedFileId) firstImportedFileId = fileId
+      }
+
+      nextTreeData.push(rootNode)
+      setTreeData([...nextTreeData])
+      void saveEditorData("1")
+      console.log(newIds, 'newIds---->')
+      newIds.forEach((id) => markNewNodeId(id))
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        next.add(rootId)
+        return next
+      })
+      if (firstImportedFileId) setCurrentEditingId(firstImportedFileId)
+      toast.success("已导入文件夹")
+    },
+    [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setExpandedIds, setTreeData]
+  )
+
   const resetDragState = useCallback(() => {
     setDragState({
       draggedId: null,
@@ -1202,70 +1549,224 @@ export const EditorTreeSidebar = ({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onDragEnd={resetDragState}
+              exportSelectMode={exportModeOpen}
+              exportCheckState={exportCheckStateById.get(node.id)}
+              getExportCheckState={getExportCheckState}
+              onToggleExportCheck={toggleExportSelect}
             />
           ))}
         </div>
       </ScrollArea>
 
-      <div className="flex shrink-0 items-center justify-center gap-5 py-2.5">
-        <Tooltip>
-          <TooltipTrigger>
-            <div
-              role="button"
-              tabIndex={0}
-              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-              title="添加文件夹"
-              onClick={addFolderAtRoot}
+      
+        {exportModeOpen ? (
+          <div className="flex justify-end gap-2 mr-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="border border-black bg-white text-black hover:bg-white/90"
+              onClick={handleExportCancel}
             >
-              <IconFont unicode="\ue62d" className="text-2xl"/>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side='top' align='center'>
-            添加文件夹
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger>
-            <div
-              role="button"
-              tabIndex={0}
-              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-              title="添加文件"
-              onClick={addFileAtRoot}
+              取消
+            </Button>
+            <Button
+              type="button"
+              className="bg-black text-white hover:bg-black/90"
+              onClick={handleExportConfirm}
             >
-              <IconFont unicode="\ue62c" className="text-2xl"/>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side='top' align='center'>
-            添加文件
-          </TooltipContent>
-        </Tooltip>
-
-        <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
-          <Tooltip>
-            <PopoverAnchor asChild>
-              <TooltipTrigger asChild>
+              完成
+            </Button>
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center justify-center gap-5 py-2.5">
+            <Popover open={addFolderPopoverOpen} onOpenChange={setAddFolderPopoverOpen}>
+              <Tooltip>
+                <PopoverAnchor asChild>
+                  <TooltipTrigger asChild>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
+                      title="添加文件夹"
+                      onClick={() => setAddFolderPopoverOpen((v) => !v)}
+                    >
+                      <IconFont unicode="\ue62d" className="text-2xl" />
+                    </div>
+                  </TooltipTrigger>
+                </PopoverAnchor>
+                <TooltipContent side='top' align='center'>
+                  添加文件夹
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent side="top" align="center"
+                className="rounded-md w-auto p-1 border border-(--border-color) shadow-lg">
                 <div
                   role="button"
                   tabIndex={0}
-                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
-                  title="导出作品"
+                  className="flex items-start gap-2 cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
                   onClick={() => {
-                    setExportPopoverOpen(true)
+                    setAddFolderPopoverOpen(false)
+                    triggerImportLocalFolder()
                   }}
                 >
-                  <IconFont unicode="\ue62e" className="text-2xl"/>
+                  <IconFont unicode="&#xe65f;" className="text-2xl shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="leading-5">导入本地文件夹</div>
+                    <div className="mt-0.5 text-xs text-[#bebfc0]">
+                      *仅限包含.txt文件的文件夹
+                    </div>
+                  </div>
                 </div>
-              </TooltipTrigger>
-            </PopoverAnchor>
-            <TooltipContent side="top">导出作品</TooltipContent>
-          </Tooltip>
-          <PopoverContent side="top" align='center'
-                          className="rounded-md w-auto p-0 border border-(--border-color) shadow-lg editor-sidebar-export-popover">
-            <ExportWorkMenu onClose={() => setExportPopoverOpen(false)}/>
-          </PopoverContent>
-        </Popover>
-      </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-2 cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
+                  onClick={() => {
+                    setAddFolderPopoverOpen(false)
+                    addFolderAtRoot()
+                  }}
+                >
+                  <IconFont unicode="&#xe628;" className="text-2xl shrink-0" />
+                  <div className="leading-5">新建空白文件夹</div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover open={addFilePopoverOpen} onOpenChange={setAddFilePopoverOpen}>
+              <Tooltip>
+                <PopoverAnchor asChild>
+                  <TooltipTrigger asChild>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
+                      title="添加文件"
+                      onClick={() => setAddFilePopoverOpen((v) => !v)}
+                    >
+                      <IconFont unicode="\ue62c" className="text-2xl" />
+                    </div>
+                  </TooltipTrigger>
+                </PopoverAnchor>
+                <TooltipContent side='top' align='center'>
+                  添加文件
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent side="top" align="center"
+                className="rounded-md w-auto p-1 border border-(--border-color) shadow-lg">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-start gap-2 cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
+                  onClick={() => {
+                    setAddFilePopoverOpen(false)
+                    triggerImportLocalFile()
+                  }}
+                >
+                  <IconFont unicode="&#xe6df;" className="text-2xl shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="leading-5">导入本地文件</div>
+                    <div className="mt-0.5 text-xs text-[#bebfc0]">*仅限.txt文件</div>
+                  </div>
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-2 cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
+                  onClick={() => {
+                    setAddFilePopoverOpen(false)
+                    addFileAtRoot()
+                  }}
+                >
+                  <IconFont unicode="&#xe629;" className="text-2xl shrink-0" />
+                  <div className="leading-5">新建空白文件</div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
+              <Tooltip>
+                <PopoverAnchor asChild>
+                  <TooltipTrigger asChild>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-black shadow-sm hover:bg-[#d3d3d3]"
+                      title="导出作品"
+                      onClick={() => {
+                        setAddFolderPopoverOpen(false)
+                        setAddFilePopoverOpen(false)
+                        setExportPopoverOpen((v) => !v)
+                      }}
+                    >
+                      <IconFont unicode="\ue62e" className="text-2xl" />
+                    </div>
+                  </TooltipTrigger>
+                </PopoverAnchor>
+                <TooltipContent side="top">导出作品</TooltipContent>
+              </Tooltip>
+              <PopoverContent
+                side="top"
+                align="center"
+                className="rounded-md w-auto p-1 border border-(--border-color) shadow-lg"
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
+                  onClick={() => {
+                    setExportFormat("word")
+                    setExportSelectedIds(new Set())
+                    setExportPopoverOpen(false)
+                    setExportModeOpen(true)
+                  }}
+                >
+                  导出指定内容为word
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer rounded-xs px-3 py-2 text-sm text-[#606266] hover:bg-(--bg-hover)"
+                  onClick={() => {
+                    setExportFormat("txt")
+                    setExportSelectedIds(new Set())
+                    setExportPopoverOpen(false)
+                    setExportModeOpen(true)
+                  }}
+                >
+                  导出指定内容为TXT
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+
+      {/* 本地文件导入 */}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".md,.txt"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          // IMPORTANT: FileList is "live" — clearing input.value will empty it.
+          const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : []
+          e.currentTarget.value = ""
+          void importLocalFilesAtRoot(files)
+        }}
+      />
+      {/* 本地文件夹导入 */}
+      <input
+        ref={importFolderInputRef}
+        type="file"
+        // accept 对 folder picker 在不同浏览器表现不一致，避免导致 FileList 为空
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : []
+          e.currentTarget.value = ""
+          void importLocalFolderAtRoot(files)
+        }}
+      />
 
       {contextMenu && (
         <div
@@ -1297,7 +1798,7 @@ export const EditorTreeSidebar = ({
               >
                 添加文件
               </div>
-              <div className="my-1 h-px bg-[#e4e7ed]"/>
+              <div className="my-1 h-px bg-[#e4e7ed]" />
             </>
           )}
           <div
@@ -1378,7 +1879,7 @@ export const EditorTreeSidebar = ({
           </DialogHeader>
           <div className="delete-dialog-content flex items-start gap-3">
             <div className="warning-icon mt-0.5 shrink-0">
-              <TriangleAlert className="size-6 text-[#f56c6c]"/>
+              <TriangleAlert className="size-6 text-[#f56c6c]" />
             </div>
             <div className="warning-text flex-1">
               <p className="mb-2 text-sm text-foreground last:mb-0">

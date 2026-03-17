@@ -116,7 +116,7 @@ export default function MLandingPage() {
           </div>
 
           {/* 标题和按钮 */}
-          <div className="flex-shrink-0 pt-15 pb-20 px-19">
+          <div className="shrink-0 pt-15 pb-20 px-19">
             <div className="text-[46px] font-bold">
               爆文猫写作 陪你写出<span className="text-[#fb9d01]">好故事</span>
             </div>

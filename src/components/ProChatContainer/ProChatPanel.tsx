@@ -7,6 +7,7 @@ import { QuillChatInput } from "@/components/QuillChatInput"
 import type { ChatMessage } from "@/stores/chatStore"
 import { useProChatContainerRequired } from "./ProChatContext"
 import titleLogo from "@/assets/images/logo.webp"
+import { Iconfont } from "@/components/Iconfont"
 
 type RenderMessageFn = (
   message: ChatMessage,

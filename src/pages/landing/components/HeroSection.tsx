@@ -6,7 +6,6 @@ import bookIcon from '@/assets/landing_image/book-icon.svg'
 import scriptIcon from '@/assets/landing_image/script-icon.svg'
 import groupIcon from '@/assets/landing_image/group.svg'
 import fenge from '@/assets/landing_image/fenge.svg'
-import greyBg from '@/assets/landing_image/grey-bg.png'
 
 interface HeroSectionProps {
   isCreatingWork: boolean
@@ -197,18 +196,13 @@ export function HeroSection({
       </div>
 
       {/* Hero image */}
-      <div className="relative flex ml-15.5 mt-5.75 items-center justify-center">
-        <img
-          src={greyBg}
-          alt="background"
-          className="absolute -top-12.5 right-15 z-0 h-auto w-full max-w-186 object-contain aspect-744/628"
-          loading="lazy"
-        />
+      <div className="relative w-250 h-152 h-relative flex pl-14 py-15  items-center justify-center">
+        <div className='absolute top-0 left-40 w-[70%] h-full bg-[#dfdfdf] rotate-[5deg] rounded-3xl'>
+        </div>
         <img
           src="https://vibe-writing-qa-public.tos-cn-beijing.volces.com/fe07ba9d-3/hero-image.webp"
           alt="Hero"
-          loading="lazy"
-          className="relative z-1 h-auto w-full max-w-237.5 object-contain rounded-[0.625rem] shadow-[0_4px_4px_rgba(0,0,0,0.25)] aspect-95/49"
+          className="relative z-1 w-full h-full object-cover rounded-[0.625rem] shadow-[0_4px_4px_rgba(0,0,0,0.25)] aspect-95/49"
         />
       </div>
     </div>
