@@ -15,6 +15,7 @@ import { useLoginStore } from '@/stores/loginStore'
 import { openLoginDialog } from '@/components/LoginDialog'
 import './landing.css'
 import { trackEvent } from "@/matomo/trackingMatomoEvent.ts";
+import { Spinner } from '@/components/ui/Spinner'
 
 // CJS → ESM interop: Vite may wrap the default in an extra object layer for this webpack-bundled package
 const ReactFullpage: typeof ReactFullpageLib =
@@ -41,13 +42,13 @@ export default function LandingPage() {
     }
   }, [])
 
-  const addWork = useCallback(async () => {
+  const addQuickWork = useCallback(async () => {
     if (isCreatingWork) return
     try {
       setIsCreatingWork(true)
-      const req = await createWorkReq('editor')
+      const req = await createWorkReq('doc')
       if (req?.id) {
-        navigate(`/script-editor/${req.id}`, { state: { showTake2: true } })
+        navigate(`/quick-editor/${req.id}`, { state: { showTake2: true } })
       }
     } catch {
       toast.error('创建作品失败，请稍后重试')
@@ -56,15 +57,18 @@ export default function LandingPage() {
     }
   }, [isCreatingWork, navigate])
   
-  const addScript = useCallback(async () => {
+  const addScriptWork = useCallback(async () => {
     if (isCreatingWork) return
     try {
+      setIsCreatingWork(true)
       const req = await createWorkReq("script")
       if (req?.id) {
         navigate(`/script-editor/${req.id}`, { state: { isNew: true } })
       }
     } catch {
       toast.error("创建作品失败，请稍后重试")
+    } finally {
+      setIsCreatingWork(false)
     }
   },[isCreatingWork, navigate])
 
@@ -72,7 +76,7 @@ export default function LandingPage() {
     if (isCreatingWork) return
     try {
       setIsCreatingWork(true)
-      const req = await createWorkReq()
+      const req = await createWorkReq('editor')
       if (req?.id) {
         navigate(`/editor/${req.id}`, { state: { showTake2: true } })
       }
@@ -83,28 +87,28 @@ export default function LandingPage() {
     }
   }, [isCreatingWork, navigate])
 
-  const handleShortStoryClick = async () => {
+  const handleQuickEditorClick = async () => {
     trackEvent('Story Creation', 'Click', 'Quick New from Landing')
-    await requireLogin(addWork)
+    await requireLogin(addQuickWork)
   }
 
-  const handleScriptClick = async () => {
+  const handleScriptEditorClick = async () => {
     trackEvent('Story Creation', 'Click', 'Script New from Landing')
-    await requireLogin(addScript)
+    await requireLogin(addScriptWork)
   }
 
-  const handleProfessionalClick = async () => {
+  const handleEditorClick = async () => {
     trackEvent('Story Creation', 'Click', "Common New from Landing")
     await requireLogin(addWorkEditor)
   }
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#f7f7f4', overflow: 'hidden' }}>
-      {isCreatingWork && (
+      {/* {isCreatingWork && (
         <div className="landing-loading-overlay">
-          <div className="loading-spinner" style={{ width: 40, height: 40, borderColor: 'rgba(239,175,0,0.3)', borderTopColor: '#efaf00' }} />
+          <Spinner className="size-10 text-theme" />
         </div>
-      )}
+      )} */}
 
       <LandingNavbar
         isLoggedIn={isLoggedIn}
@@ -138,9 +142,9 @@ export default function LandingPage() {
               <div className="section" data-anchor="home">
                 <HeroSection
                   isCreatingWork={isCreatingWork}
-                  onShortStoryClick={handleShortStoryClick}
-                  onScriptClick={handleScriptClick}
-                  onProfessionalClick={handleProfessionalClick}
+                  onShortStoryClick={handleQuickEditorClick}
+                  onScriptClick={handleScriptEditorClick}
+                  onProfessionalClick={handleEditorClick}
                 />
               </div>
 

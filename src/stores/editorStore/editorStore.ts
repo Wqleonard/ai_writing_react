@@ -143,6 +143,44 @@ const normalizeWorkId = (value: unknown): string => {
   return value.trim();
 };
 
+const normalizeTreeNodeId = (rawId: string): string => {
+  const trimmed = String(rawId ?? "").trim();
+  if (!trimmed) return "";
+  // Tree node ids are normalized as "/"-joined paths in this app.
+  const unified = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
+  // Tree node ids for directories typically do NOT include trailing "/".
+  return unified.endsWith("/") ? unified.slice(0, -1) : unified;
+};
+
+const getTreeNodeIdPrefixes = (rawId: string): string[] => {
+  const id = normalizeTreeNodeId(rawId);
+  if (!id) return [];
+  const parts = id.split("/").filter(Boolean);
+  if (parts.length <= 1) return [id];
+  const prefixes: string[] = [];
+  for (let i = 1; i <= parts.length; i++) {
+    prefixes.push(parts.slice(0, i).join("/"));
+  }
+  return prefixes;
+};
+
+const hasServerDataPath = (serverData: ServerData, rawId: string): boolean => {
+  const id = normalizeTreeNodeId(rawId);
+  if (!id) return false;
+
+  // Exact file path (e.g. "正文/第一章.md")
+  if (Object.prototype.hasOwnProperty.call(serverData, id)) return true;
+  // Exact directory key (e.g. "正文/")
+  if (Object.prototype.hasOwnProperty.call(serverData, `${id}/`)) return true;
+
+  // Directory inferred by any descendant keys
+  const dirPrefix = `${id}/`;
+  for (const key of Object.keys(serverData ?? {})) {
+    if (key.startsWith(dirPrefix)) return true;
+  }
+  return false;
+};
+
 const mapWorkTags = (rawWorkTags: unknown): WorkInfo["workTags"] => {
   if (!Array.isArray(rawWorkTags)) return [];
   return (rawWorkTags as Array<{ tags?: Array<{ id: number; name: string; userId: string }> }>)
@@ -436,12 +474,23 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           }),
 
         markNewNodeId: (id) =>
-          set((state) => ({
-            newNodeIdMap: {
-              ...state.newNodeIdMap,
-              [id]: true,
-            },
-          })),
+          set((state) => {
+            const normalizedId = normalizeTreeNodeId(id);
+            const prefixes = getTreeNodeIdPrefixes(normalizedId);
+            if (prefixes.length === 0) return state;
+
+            const nextNewNodeIdMap = { ...state.newNodeIdMap };
+            for (const key of prefixes) {
+              if (key === normalizedId) {
+                nextNewNodeIdMap[key] = true;
+                continue;
+              }
+              if (!hasServerDataPath(state.serverData, key)) {
+                nextNewNodeIdMap[key] = true;
+              }
+            }
+            return { newNodeIdMap: nextNewNodeIdMap };
+          }),
 
         clearNewNodeId: (id) =>
           set((state) => {
