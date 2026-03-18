@@ -106,7 +106,7 @@ function getSubagentName(subagent_type?: string): string {
   const m: Record<string, string> = {
     "content-analysis-agent": "作品内容及结构分析",
     "structure-planning-agent": "作品结构设计",
-    "writing-agent": "作品内容起草",
+    "writer": "作品内容起草",
   };
   return m[subagent_type] || "工具";
 }
@@ -468,8 +468,11 @@ const AgentCustomMessageRenderer = ({
     const baseName = config?.input?.name || "正在执行工具";
     if (!config?.input) return baseName;
     const inputConfig = config.input;
+    const filePath = (toolCall.args?.file_path || '' )as string;
+    const isInlcudeBaoWenAgentPath = filePath.includes('/BaoWenAgent/skills/');
+    const skillTxt = isInlcudeBaoWenAgentPath ? `AI正在调用${filePath.split('/')[3]}` : 'AI正在读取提示词指令';
     const spliceFields = [
-      { key: "file_path", value: toolCall.args?.file_path },
+      { key: "file_path", value: isInlcudeBaoWenAgentPath ? skillTxt : toolCall.args?.file_path },
       { key: "keyword", value: toolCall.args?.keyword },
       { key: "file_type", value: toolCall.args?.file_type },
       { key: "query", value: toolCall.args?.query },
@@ -477,9 +480,9 @@ const AgentCustomMessageRenderer = ({
     ];
     for (const field of spliceFields) {
       if (inputConfig[field.key as keyof typeof inputConfig] && field.value)
-        return `${baseName} ${String(field.value)}`;
+        return `${isInlcudeBaoWenAgentPath ? '' :baseName} ${String(field.value)}`;
     }
-    if (inputConfig.default_splice_value) return `${baseName} ${inputConfig.default_splice_value}`;
+    if (inputConfig.default_splice_value) return `${isInlcudeBaoWenAgentPath ? '' : baseName} ${inputConfig.default_splice_value}`;
     return baseName;
   }, []);
 
