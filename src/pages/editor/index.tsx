@@ -491,14 +491,24 @@ const MarkdownEditorPage = () => {
     },
     onUpdateFiles: (files, fileId, editInfoList) => {
       const currentServerData = useEditorStore.getState().serverData;
-      let targetFileId = normalizeFilePath(fileId || "");
+      // 兼容后端返回的 "/path"、"./path"、"path?x=1" 等格式，避免 mergedFiles key 与 targetFileId 不一致导致正文写入空串
+      const normalizedIncomingFiles = Object.entries((files ?? {}) as Record<string, string>).reduce<
+        Record<string, string>
+      >((acc, [rawKey, value]) => {
+        const key = sanitizeIncomingFilePath(String(rawKey ?? ""));
+        if (!key) return acc;
+        acc[key] = String(value ?? "");
+        return acc;
+      }, {});
+
+      let targetFileId = sanitizeIncomingFilePath(fileId || "");
       if (!targetFileId && currentEditingId && files[currentEditingId] !== undefined) {
         targetFileId = currentEditingId;
       }
       if (!targetFileId && Array.isArray(editInfoList) && editInfoList.length > 0) {
         const fromEditInfo = editInfoList.find((item) => item?.file_path)?.file_path;
         if (fromEditInfo) {
-          targetFileId = normalizeFilePath(fromEditInfo);
+          targetFileId = sanitizeIncomingFilePath(fromEditInfo);
         }
       }
 
@@ -520,15 +530,11 @@ const MarkdownEditorPage = () => {
         pendingEditPaths.add(targetFileId);
       }
 
-      const safeIncomingFiles = { ...files };
+      const safeIncomingFiles = { ...normalizedIncomingFiles };
       if (pendingEditPaths.size > 0) {
         pendingEditPaths.forEach((path) => {
           if (path in safeIncomingFiles) {
             delete safeIncomingFiles[path];
-          }
-          const slashPath = `/${path}`;
-          if (slashPath in safeIncomingFiles) {
-            delete safeIncomingFiles[slashPath];
           }
         });
       }
@@ -2861,7 +2867,7 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={!isEditorEditable}
+                              // readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}
