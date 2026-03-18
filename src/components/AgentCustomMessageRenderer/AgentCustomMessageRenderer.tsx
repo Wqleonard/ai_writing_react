@@ -106,7 +106,7 @@ function getSubagentName(subagent_type?: string): string {
   const m: Record<string, string> = {
     "content-analysis-agent": "作品内容及结构分析",
     "structure-planning-agent": "作品结构设计",
-    "writing-agent": "作品内容起草",
+    "writer": "作品内容起草",
   };
   return m[subagent_type] || "工具";
 }
@@ -447,15 +447,33 @@ const AgentCustomMessageRenderer = ({
     [visibleToolCallsMap]
   );
 
+  const getToolCallDedupKey = useCallback((toolCall: ToolCallItemForRender): string => {
+    const name = String(toolCall.name ?? "");
+    let serializedArgs = "";
+    try {
+      serializedArgs = JSON.stringify(toolCall.args ?? {});
+    } catch {
+      serializedArgs = String(toolCall.args ?? "");
+    }
+    return `${name}::${serializedArgs}`;
+  }, []);
+
   const getVisibleToolCalls = useCallback(
     (msg: AgentCustomMessageItem) => {
       if (!msg.tool_calls?.length) return [];
-      return msg.tool_calls
+      const visibleCalls = msg.tool_calls
         .map((toolCall, toolIndex) => ({ toolCall, toolIndex, shouldShow: shouldShowToolCall(msg.id, toolIndex) }))
         .filter((x) => x.shouldShow)
         .map((x) => ({ toolCall: x.toolCall as ToolCallItemForRender, toolIndex: x.toolIndex }));
+      const lastIndexByKey = new Map<string, number>();
+      visibleCalls.forEach((item, visibleIndex) => {
+        lastIndexByKey.set(getToolCallDedupKey(item.toolCall), visibleIndex);
+      });
+      return visibleCalls.filter(
+        (item, visibleIndex) => lastIndexByKey.get(getToolCallDedupKey(item.toolCall)) === visibleIndex
+      );
     },
-    [shouldShowToolCall]
+    [getToolCallDedupKey, shouldShowToolCall]
   );
 
   const shouldShowExpand = useCallback((toolCall: ToolCallItemForRender): boolean => {
@@ -468,8 +486,11 @@ const AgentCustomMessageRenderer = ({
     const baseName = config?.input?.name || "正在执行工具";
     if (!config?.input) return baseName;
     const inputConfig = config.input;
+    const filePath = (toolCall.args?.file_path || '' )as string;
+    const isInlcudeBaoWenAgentPath = filePath.includes('/BaoWenAgent/skills/');
+    const skillTxt = isInlcudeBaoWenAgentPath ? `AI正在调用${filePath.split('/')[3]}` : 'AI正在读取提示词指令';
     const spliceFields = [
-      { key: "file_path", value: toolCall.args?.file_path },
+      { key: "file_path", value: isInlcudeBaoWenAgentPath ? skillTxt : toolCall.args?.file_path },
       { key: "keyword", value: toolCall.args?.keyword },
       { key: "file_type", value: toolCall.args?.file_type },
       { key: "query", value: toolCall.args?.query },
@@ -477,9 +498,9 @@ const AgentCustomMessageRenderer = ({
     ];
     for (const field of spliceFields) {
       if (inputConfig[field.key as keyof typeof inputConfig] && field.value)
-        return `${baseName} ${String(field.value)}`;
+        return `${isInlcudeBaoWenAgentPath ? '' :baseName} ${String(field.value)}`;
     }
-    if (inputConfig.default_splice_value) return `${baseName} ${inputConfig.default_splice_value}`;
+    if (inputConfig.default_splice_value) return `${isInlcudeBaoWenAgentPath ? '' : baseName} ${inputConfig.default_splice_value}`;
     return baseName;
   }, []);
 
@@ -784,18 +805,18 @@ const AgentCustomMessageRenderer = ({
                     ));
                   })()}
 
-                  {/* 人在回路：write_todos 内层为 tool-call 展开的待办列表，外层为确认卡片（与 Vue 207-245 一致），控制是否按当前 todo list 执行；无 msg.hiltTodos 时从 write_todos 推导并展示外层卡片 */}
+                  {/* 人在回路：外层确认卡仅在真正收到 msg.hiltTodos（interrupt/HILT 最终态）后展示，避免跟随 write_todos 的流式中间态实时变化 */}
                   {(() => {
-                    const effectiveTodos = getEffectiveHiltTodos(msg);
-                    const effectiveStatus = getEffectiveHiltStatus(msg, effectiveTodos);
-                    const currentTodosKey = getHiltTodosProgressKey(effectiveTodos);
+                    const outerCardTodos = msg.hiltTodos && msg.hiltTodos.length > 0 ? msg.hiltTodos : undefined;
+                    const effectiveStatus = getEffectiveHiltStatus(msg, outerCardTodos);
+                    const currentTodosKey = getHiltTodosProgressKey(outerCardTodos);
                     const isLastCustomMessage = index === customMessage.length - 1;
                     const isDismissedForCurrentTodos =
                       !!currentTodosKey &&
                       dismissedHiltCardKeyByMessageId[msg.id] === currentTodosKey;
                     const showOuterCard =
-                      effectiveTodos &&
-                      effectiveTodos.length > 0 &&
+                      outerCardTodos &&
+                      outerCardTodos.length > 0 &&
                       isLastMessage &&
                       isLastCustomMessage &&
                       streamingStatus !== "streaming" &&
@@ -807,7 +828,7 @@ const AgentCustomMessageRenderer = ({
                         <div className="hilt-todos-display">
                           <div className="hilt-todos-header">将帮您执行以下任务，是否确认？</div>
                           <div className="hilt-todos-list">
-                            {effectiveTodos.map((todo, todoIndex) => {
+                            {outerCardTodos.map((todo, todoIndex) => {
                               const status = todo.status || "pending";
                               return (
                                 <div
