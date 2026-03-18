@@ -388,6 +388,7 @@ const MarkdownEditorPage = () => {
   const stoppedByUserRef = useRef(false);
   const latestChatSessionIdRef = useRef("");
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
+  const [isHiltApproveStreaming, setIsHiltApproveStreaming] = useState(false);
   const [todosExpanded, setTodosExpanded] = useState(false);
   const {
     findTextInMarkdown,
@@ -607,6 +608,7 @@ const MarkdownEditorPage = () => {
       }
     },
     onComplete: async () => {
+      setIsHiltApproveStreaming(false);
       const finalized = streamingMessageRef.current;
       if (finalized) {
         const suffix = "(内容由AI生成，仅供参考)";
@@ -657,6 +659,7 @@ const MarkdownEditorPage = () => {
       }
     },
     onSensitiveWord: () => {
+      setIsHiltApproveStreaming(false);
       // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
       skipGuideForCurrentStreamRef.current = true;
       guideRequestRef.current = null;
@@ -681,6 +684,7 @@ const MarkdownEditorPage = () => {
       toast.warning("内容包含敏感词，请尝试其他话题");
     },
     onError: (err, needSendErrorMsg) => {
+      setIsHiltApproveStreaming(false);
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
@@ -732,6 +736,7 @@ const MarkdownEditorPage = () => {
     const pending = guideRequestRef.current;
     guideRequestRef.current = null;
     stoppedByUserRef.current = true;
+    setIsHiltApproveStreaming(false);
     if (needAIMessage) {
       finalizeStreamingMessageWithSuffix("\n\n智能体已暂停");
     } else {
@@ -747,9 +752,9 @@ const MarkdownEditorPage = () => {
 
   const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
     if (langGraphStream.error) return "error";
-    if (langGraphStream.isStreaming) return "streaming";
+    if (langGraphStream.isStreaming || isHiltApproveStreaming) return "streaming";
     return "ready";
-  }, [langGraphStream.error, langGraphStream.isStreaming]);
+  }, [isHiltApproveStreaming, langGraphStream.error, langGraphStream.isStreaming]);
   // 与 tree/workInfo 同理：稳定回调里通过 ref 读取实时状态
   const chatInputStatusRef = useRef(chatInputStatus);
   useEffect(() => {
@@ -2434,6 +2439,7 @@ const MarkdownEditorPage = () => {
           ),
         };
       });
+      setIsHiltApproveStreaming(true);
       sendChatText("", { command: "approve", addUserMessage: false, commandOnly: true });
     },
     [updateLastChatMessage, sendChatText]
