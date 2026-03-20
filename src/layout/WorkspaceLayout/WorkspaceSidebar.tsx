@@ -90,8 +90,9 @@ function getActiveRoute(pathname: string): string {
 
 /** 关于我们 Popover 内容 */
 function AboutUsContent({ onClose }: { onClose: () => void }) {
-  const userAgreementUrl = `${window.location.origin}/user-agreement`
-  const privacyPolicyUrl = `${window.location.origin}/privacy-policy`
+  const navigate = useNavigate()
+  const userAgreementUrl = '/user-agreement'
+  const privacyPolicyUrl = '/privacy-policy'
 
   return (
     <div className="relative">
@@ -123,22 +124,20 @@ function AboutUsContent({ onClose }: { onClose: () => void }) {
         <div className="mt-5 border-t pt-4 border-(--border-color)">
           <h4 className="mb-3 text-sm font-semibold text-(--text-primary)">隐私安全</h4>
           <div className="mb-2 flex gap-4">
-            <a
-              href={privacyPolicyUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[13px] no-underline transition-colors hover:underline! text-(--text-secondary)"
+            <button
+              type="button"
+              onClick={() => navigate(privacyPolicyUrl)}
+              className="cursor-pointer border-0 bg-transparent p-0 text-[13px] no-underline transition-colors hover:underline! text-(--text-secondary)"
             >
               隐私协议
-            </a>
-            <a
-              href={userAgreementUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[13px] no-underline transition-colors hover:underline! text-(--text-secondary)"
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(userAgreementUrl)}
+              className="cursor-pointer border-0 bg-transparent p-0 text-[13px] no-underline transition-colors hover:underline! text-(--text-secondary)"
             >
               用户协议
-            </a>
+            </button>
           </div>
           <div className="mb-2">
             <a

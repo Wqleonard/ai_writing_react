@@ -5,6 +5,9 @@ import { lazy } from 'react'
 import LandingPage from '@/pages/landing'
 import { WorkspaceLayout } from '@/layout'
 import { AppRouteGuard } from '@/router/guards/AppRouteGuard'
+import UserServiceAgreementPage from '@/pages/agreement/user-service-agreement'
+import PrivacyPolicyPage from '@/pages/agreement/privacy-policy'
+import ChildrenPrivacyProtectionPolicyPage from '@/pages/agreement/children-privacy-protection-policy'
 import TestPage from '@/pages/test'
 
 
@@ -22,9 +25,6 @@ const WritingStylesPage = lazy(() => import('@/pages/ai-expert/writing-styles'))
 const MyPlacePage = lazy(() => import('@/pages/my-place'))
 const QuickEditorVueHostPage = lazy(() => import('@/pages/quick-editor-vue-host'))
 const ScriptEditorVueHostPage = lazy(() => import('@/pages/script-editor-vue-host'))
-const UserServiceAgreementPage = lazy(() => import('@/pages/agreement/user-service-agreement'))
-const PrivacyPolicyPage = lazy(() => import('@/pages/agreement/privacy-policy'))
-const ChildrenPrivacyProtectionPolicyPage = lazy(() => import('@/pages/agreement/children-privacy-protection-policy'))
 // const NotFoundPage = lazy(() => import('@/pages/not-found'))
 
 // Mobile layouts

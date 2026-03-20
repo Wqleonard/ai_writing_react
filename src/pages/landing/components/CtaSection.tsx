@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ctaBg from '@/assets/landing_image/cta-bg.svg'
 import socialBili from '@/assets/landing_image/social-icon-bili.svg'
 import socialRb from '@/assets/landing_image/social-icon-rb.svg'
@@ -10,11 +11,12 @@ import LOGO from '@/assets/images/my-place/sidebar_logo.png'
 import GONGAN from '@/assets/images/gongan.png'
 
 export function CtaSection() {
+  const navigate = useNavigate()
   const [showQrCode, setShowQrCode] = useState(false)
   const wechatRef = useRef<HTMLSpanElement>(null)
 
-  const privacyPolicyUrl = `${window.location.origin}/privacy-policy`
-  const userAgreementUrl = `${window.location.origin}/user-agreement`
+  const privacyPolicyUrl = '/privacy-policy'
+  const userAgreementUrl = '/user-agreement'
 
   return (
     <div className="flex h-full min-h-screen w-full flex-col justify-end overflow-hidden box-border">
@@ -131,15 +133,14 @@ export function CtaSection() {
               { label: '隐私政策', href: privacyPolicyUrl },
               { label: '服务政策', href: userAgreementUrl },
             ].map(link => (
-              <a
+              <button
                 key={link.label}
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2.5 mr-5 whitespace-nowrap text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00] hover:underline"
+                type="button"
+                onClick={() => navigate(link.href)}
+                className="mt-2.5 mr-5 cursor-pointer whitespace-nowrap border-0 bg-transparent p-0 text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00] hover:underline"
               >
                 {link.label}
-              </a>
+              </button>
             ))}
           </div>
           <a
