@@ -196,7 +196,6 @@
 
 /* Tool Calls */
 .tool-calls-container {
-  margin-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -207,6 +206,10 @@
   flex-direction: column;
   max-width: fit-content;
   transition: all 0.15s ease;
+}
+
+.tool-calls-container > .tool-call-item:not(:first-child) {
+  margin-top: 4px;
 }
 
 .tool-call-header {

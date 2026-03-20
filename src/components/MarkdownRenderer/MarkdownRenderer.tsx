@@ -61,9 +61,28 @@ const md = new MarkdownIt({
     return decoded.endsWith(".md") || /\.md($|[?#])/.test(decoded);
   };
 
+  const getDisplayMdPath = (mdFile: string): string => mdFile.replace(/^\/+/, "");
+
   let TokenCtor: any = null;
   md.core.ruler.after("inline", "colon_md_plaintext_links", (state) => {
     if (!TokenCtor) TokenCtor = (state as any).Token;
+    const appendFileLink = (target: any[], mdFile: string) => {
+      const open = new TokenCtor("link_open", "a", 1);
+      // 文件链接统一使用 href="#"，避免 linkify 把 .md 误转成外链域名跳转
+      open.attrs = [
+        ["href", "#"],
+        ["data-file-path", mdFile],
+      ];
+      open.attrJoin("class", "file-link");
+      target.push(open);
+
+      const inner = new TokenCtor("text", "", 0);
+      inner.content = getDisplayMdPath(mdFile);
+      target.push(inner);
+
+      const close = new TokenCtor("link_close", "a", -1);
+      target.push(close);
+    };
     for (const blockToken of state.tokens) {
       if (blockToken.type !== "inline" || !blockToken.children) continue;
 
@@ -71,7 +90,8 @@ const md = new MarkdownIt({
       const nextChildren: any[] = [];
       let inLink = 0;
 
-      for (const child of children) {
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
         if (child.type === "link_open") {
           inLink += 1;
           nextChildren.push(child);
@@ -83,13 +103,29 @@ const md = new MarkdownIt({
           continue;
         }
 
+        const nextChild = children[i + 1];
+        const codeInlineContent = String(nextChild?.content || "");
+        const textContent = String(child.content || "");
+        const colonCodeInlineMatch =
+          inLink === 0 &&
+          child.type === "text" &&
+          nextChild?.type === "code_inline" &&
+          /[：:]\s*$/.test(textContent) &&
+          isMdFileHref(codeInlineContent);
+        if (colonCodeInlineMatch) {
+          nextChildren.push(child);
+          appendFileLink(nextChildren, codeInlineContent);
+          i += 1;
+          continue;
+        }
+
         // Vue 版：如果已经在 <a> 内，不再把文本转成链接
         if (inLink > 0 || child.type !== "text") {
           nextChildren.push(child);
           continue;
         }
 
-        const text = child.content || "";
+        const text = textContent;
         colonMdPattern.lastIndex = 0;
         let lastIndex = 0;
         let match: RegExpExecArray | null;
@@ -112,21 +148,7 @@ const md = new MarkdownIt({
             nextChildren.push(t);
           }
 
-          const open = new TokenCtor("link_open", "a", 1);
-          // 文件链接统一使用 href="#"，避免 linkify 把 .md 误转成外链域名跳转
-          open.attrs = [
-            ["href", "#"],
-            ["data-file-path", mdFile],
-          ];
-          open.attrJoin("class", "file-link");
-          nextChildren.push(open);
-
-          const inner = new TokenCtor("text", "", 0);
-          inner.content = mdFile;
-          nextChildren.push(inner);
-
-          const close = new TokenCtor("link_close", "a", -1);
-          nextChildren.push(close);
+          appendFileLink(nextChildren, mdFile);
 
           lastIndex = match.index + match[0].length;
         }
@@ -174,7 +196,7 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHandledLinkRef = useRef<{ key: string; ts: number } | null>(null);
   const html = useMemo(() => md.render(content ?? ""), [content]);
-
+console.log(content, 'content')
   const tryHandleMdLink = useCallback(
     (target: HTMLElement | null): { handled: boolean; key?: string } => {
       const root = containerRef.current;

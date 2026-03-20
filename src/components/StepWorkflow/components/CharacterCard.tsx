@@ -57,6 +57,8 @@ export const CharacterCard = ({
   }
 
   const imgSrc = data.gender === "女" ? FEMALE : MALE
+  const ageText = data.age.trim()
+  const displayAge = ageText ? (ageText.includes("岁") ? ageText : `${ageText}岁`) : ""
 
   return (
     <div
@@ -89,9 +91,9 @@ export const CharacterCard = ({
             {data.gender}
           </span>
         )}
-        {data.age && (
+        {displayAge && (
           <span className="character-tag shrink-0 rounded-md bg-[#eec9aa] px-1.5 text-xs font-bold leading-5 text-black">
-            {data.age || 0}岁
+            {displayAge}
           </span>
         )}
         {data.mbti && (
