@@ -16,6 +16,13 @@ export interface InspirationImageItem extends InspirationItem {
   inspirationWord: string;
 }
 
+export interface InspirationDetailResponse {
+  roleInfo: string;
+  mainEvent: string;
+  roleSetting: string;
+  worldSetting: string;
+}
+
 const getInspirationCardsReq = (inspiration: string) => {
   return apiClient.post<InspirationCardsResponse>(
     "/api/works/inspiration",
@@ -33,4 +40,14 @@ const getInspirationCardsImageReq = (inspirationWord: string, inspirations: Insp
   );
 };
 
-export { getInspirationCardsReq, getInspirationCardsImageReq };
+const getInspirationDetail = (inspirationWord: string, inspirationTheme: string) => {
+  return apiClient.post<InspirationDetailResponse>(
+    "/api/works/inspiration/detail",
+    {
+      inspirationWord: inspirationWord,
+      inspirationTheme: inspirationTheme,
+    },
+  );
+};
+
+export { getInspirationCardsReq, getInspirationCardsImageReq, getInspirationDetail };

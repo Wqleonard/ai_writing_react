@@ -16,6 +16,7 @@ import type { NoteSourceType } from "@/api/notes";
 import {
   getInspirationCardsImageReq,
   getInspirationCardsReq,
+  getInspirationDetail,
 } from "@/api/m-inspiration";
 import { mtoast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/Button";
@@ -53,6 +54,15 @@ interface InspirationIdea {
   image: string;
 }
 
+interface InspirationDetailFields {
+  roleInfo: string;
+  mainEvent: string;
+  roleSetting: string;
+  worldSetting: string;
+}
+
+type InspirationDetailData = InspirationIdea & InspirationDetailFields;
+
 interface InspirationCardProps {
   data: InspirationIdea;
   style: CSSProperties;
@@ -67,6 +77,7 @@ import TEST3 from "@/assets/images/m_ins/test3.jpg";
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const EMPTY_CARD_DATA = {
   title: "",
@@ -157,9 +168,10 @@ const MInspirationPage = () => {
   const [ideaInput, setIdeaInput] = useState("");
 
   const [openInsDetail, setOpenInsDetail] = useState(false);
-  const [insDetailData, setInsDetailData] = useState<InspirationIdea | null>(
+  const [insDetailData, setInsDetailData] = useState<InspirationDetailData | null>(
     null,
   );
+  const [insDetailLoading, setInsDetailLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
 
   const loadingTimer = useRef<number | null>(null);
@@ -199,6 +211,7 @@ const MInspirationPage = () => {
   const pointerAxisRef = useRef<"undecided" | "x" | "y">("undecided");
   const suppressCardClickRef = useRef(false);
   const snapTimerRef = useRef<number | null>(null);
+  const detailRequestIdRef = useRef(0);
 
   const normalizeCarouselOffset = useCallback(
     (value: number) => {
@@ -550,19 +563,75 @@ const MInspirationPage = () => {
     }, 260);
   }, [balance, fetchInspirationCards, ideaInput, lastInspirationWord, loading, status]);
 
+  const fetchCardDetail = useCallback(
+    async (inspirationTheme: string) => {
+      const inspirationWord = lastInspirationWord || ideaInput.trim();
+      if (!inspirationWord) {
+        mtoast.error("缺少灵感关键词，暂无法重新生成详情");
+        return;
+      }
+
+      const requestId = detailRequestIdRef.current + 1;
+      detailRequestIdRef.current = requestId;
+      setInsDetailLoading(true);
+      try {
+        const req: any = await getInspirationDetail(inspirationWord, inspirationTheme);
+        const detail = req?.data ?? req ?? {};
+        if (detailRequestIdRef.current !== requestId) return;
+        setInsDetailData((prev) =>
+          prev
+            ? {
+                ...prev,
+                roleInfo: detail?.roleInfo || "",
+                mainEvent: detail?.mainEvent || "",
+                roleSetting: detail?.roleSetting || "",
+                worldSetting: detail?.worldSetting || "",
+              }
+            : prev,
+        );
+      } catch (error) {
+        console.error("获取灵感详情失败:", error);
+        mtoast.error("获取详情失败，请稍后重试");
+      } finally {
+        if (detailRequestIdRef.current === requestId) {
+          setInsDetailLoading(false);
+        }
+      }
+    },
+    [ideaInput, lastInspirationWord],
+  );
+
   const handleCardClick = useCallback(
-    (cardData: InspirationIdea) => {
+    async (cardData: InspirationIdea) => {
       if (suppressCardClickRef.current) {
         suppressCardClickRef.current = false;
         return;
       }
       if (!cardData.title) return;
       if (loading) return;
-      setInsDetailData(cardData);
+
+      setInsDetailData({
+        ...cardData,
+        roleInfo: "",
+        mainEvent: "",
+        roleSetting: "",
+        worldSetting: "",
+      });
       setOpenInsDetail(true);
+      await fetchCardDetail(cardData.title);
     },
-    [loading],
+    [fetchCardDetail, loading],
   );
+
+  const handleRegenerateDetail = useCallback(async () => {
+    if (insDetailLoading) return;
+    if (!insDetailData?.title) {
+      mtoast.error("暂无可重新生成的灵感");
+      return;
+    }
+
+    await fetchCardDetail(insDetailData.title);
+  }, [fetchCardDetail, insDetailData?.title, insDetailLoading]);
 
   const handleAddToNote = useCallback(async () => {
     if (noteSaving) return;
@@ -576,10 +645,10 @@ const MInspirationPage = () => {
     const content = [
       `灵感主题：${title}`,
       `参考风格：${summary}`,
-      `主角信息：${summary}`,
-      `主要事件：${summary}`,
-      `角色设定：${summary}`,
-      `世界观设定：${summary}`,
+      `主角信息：${insDetailData.roleInfo || "-"}`,
+      `主要事件：${insDetailData.mainEvent || "-"}`,
+      `角色设定：${insDetailData.roleSetting || "-"}`,
+      `世界观设定：${insDetailData.worldSetting || "-"}`,
     ].join("\n");
 
     try {
@@ -692,7 +761,13 @@ const MInspirationPage = () => {
 
       <Dialog
         open={openInsDetail && Boolean(insDetailData)}
-        onOpenChange={setOpenInsDetail}
+        onOpenChange={(open) => {
+          setOpenInsDetail(open);
+          if (!open) {
+            detailRequestIdRef.current += 1;
+            setInsDetailLoading(false);
+          }
+        }}
       >
         <DialogContent
           showCloseButton={false}
@@ -718,22 +793,46 @@ const MInspirationPage = () => {
                     </div>
                   )}
                 </div>
-                <div className="px-10 py-12 text-[32px] text-[#464646] flex flex-col gap-7">
+                <div className="px-10 py-12 text-[32px] leading-[40px] text-[#464646] flex flex-col gap-7">
                   <div>
                     <span className="font-bold">主角信息：</span>
-                    {insDetailData?.summary}
+                    {insDetailLoading ? (
+                      <span className="inline-flex flex-col gap-2 align-middle ml-2">
+                        <Skeleton className="h-10 w-84 rounded-lg" />
+                      </span>
+                    ) : (
+                      insDetailData?.roleInfo || "-"
+                    )}
                   </div>
                   <div>
                     <span className="font-bold">主要事件：</span>
-                    {insDetailData?.summary}
+                    {insDetailLoading ? (
+                      <span className="inline-flex flex-col gap-2 align-middle ml-2">
+                        <Skeleton className="h-10 w-90 rounded-lg" />
+                      </span>
+                    ) : (
+                      insDetailData?.mainEvent || "-"
+                    )}
                   </div>
                   <div>
                     <span className="font-bold">角色设定：</span>
-                    {insDetailData?.summary}
+                    {insDetailLoading ? (
+                      <span className="inline-flex flex-col gap-2 align-middle ml-2">
+                        <Skeleton className="h-10 w-80 rounded-lg" />
+                      </span>
+                    ) : (
+                      insDetailData?.roleSetting || "-"
+                    )}
                   </div>
-                  <div>
-                    <span className="font-bold">世界观设定：</span>
-                    {insDetailData?.summary}
+                  <div className="">
+                    <span className="font-bold shrink-0">世界观设定：</span>
+                    {insDetailLoading ? (
+                      <span className="inline-flex flex-col gap-2 align-middle ml-2">
+                        <Skeleton className="h-10 w-92 rounded-lg" />
+                      </span>
+                    ) : (
+                      insDetailData?.worldSetting || "-"
+                    )}
                   </div>
                 </div>
               </div>
@@ -747,11 +846,21 @@ const MInspirationPage = () => {
                 <Iconfont unicode="&#xe64c;" className="text-[32px] mr-2" />
                 <span>{noteSaving ? "添加中..." : "添加到笔记"}</span>
               </Button>
-              <LinkButton className="mt-8 text-[#a6a6a6]">
+              <LinkButton
+                className="mt-8 text-[#a6a6a6]"
+                onClick={handleRegenerateDetail}
+                disabled={insDetailLoading || !insDetailData?.title}
+              >
                 <Iconfont unicode="&#xe66f;" className="text-[32px] mr-2" />
                 <span>重新生成</span>
               </LinkButton>
             </div>
+          </div>
+          <div 
+          className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn" 
+          onClick={() => setOpenInsDetail(false)}
+          >
+            <Iconfont unicode="&#xe633;" className="text-[28px] text-white" />
           </div>
         </DialogContent>
       </Dialog>
