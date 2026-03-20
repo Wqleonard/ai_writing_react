@@ -10,7 +10,6 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from "react";
-import { getUserBalanceReq } from "@/api/users";
 import { addNote } from "@/api/notes";
 import type { NoteSourceType } from "@/api/notes";
 import {
@@ -78,6 +77,7 @@ import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { selectDailyBalance, selectDailyBalanceLimit, selectFixedBalance, useLoginStore } from "@/stores/loginStore";
 
 const EMPTY_CARD_DATA = {
   title: "",
@@ -164,7 +164,16 @@ const MInspirationPage = () => {
   const [status, setStatus] = useState<Status>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [imageReady, setImageReady] = useState(false);
-  const [balance, setBalance] = useState(500);
+  const balance = useLoginStore(selectDailyBalance);
+  const fixedToken = useLoginStore(selectFixedBalance);
+  const dailyBalanceLimit = useLoginStore(selectDailyBalanceLimit);
+
+  // 整数化
+  const totalPoint = useMemo(() => {
+    return Math.floor(fixedToken + (dailyBalanceLimit - balance));
+  }, [fixedToken, dailyBalanceLimit, balance]);
+
+  const refreshBalance = useLoginStore((s) => s.refreshBalance);
   const [ideaInput, setIdeaInput] = useState("");
 
   const [openInsDetail, setOpenInsDetail] = useState(false);
@@ -419,38 +428,9 @@ const MInspirationPage = () => {
     setCarouselOffset(Math.floor(InspirationCardData.length / 2));
   }, [InspirationCardData.length]);
 
-  // useEffect(() => {
-  //   (async () => {
-  //     try {
-  //       const req: any = await getUserBalanceReq();
-  //       const points = Number(req?.token ?? req?.dailyFreeToken ?? 0);
-  //       if (Number.isFinite(points) && points > 0) {
-  //         setBalance(Math.floor(points / 1000));
-  //       }
-  //     } catch (error) {
-  //       console.error("获取灵感余额失败:", error);
-  //     }
-  //   })();
-  //   return clearTimers;
-  // }, [clearTimers]);
-
-  const pickNextIndex = useCallback((base: number) => {
-    if (INSPIRATION_CARDS.length <= 1) return 0;
-    let next = base;
-    while (next === base) {
-      next = Math.floor(Math.random() * INSPIRATION_CARDS.length);
-    }
-    return next;
-  }, []);
-
-  const revealCard = useCallback((nextIndex: number) => {
-    setCurrentIndex(nextIndex);
-    setImageReady(false);
-    imageTimer.current = window.setTimeout(() => {
-      setImageReady(true);
-    }, 420);
-    setStatus("ready");
-  }, []);
+  useEffect(() => {
+    refreshBalance();
+  }, [refreshBalance]);
 
   const fetchInspirationCards = useCallback(async (seed: string) => {
     try {
@@ -502,6 +482,7 @@ const MInspirationPage = () => {
       setLastInspirationWord(inspirationWord);
       setInspirationCardData(cardsWithImages);
       setStatus("ready");
+      await refreshBalance();
       return true;
     } catch (error) {
       console.error("获取灵感卡片失败:", error);
@@ -510,7 +491,7 @@ const MInspirationPage = () => {
       setInspirationCardData(createEmptyCards());
       return false;
     }
-  }, []);
+  }, [refreshBalance]);
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
@@ -527,7 +508,7 @@ const MInspirationPage = () => {
 
   const handleReroll = useCallback(async () => {
     if (loading || status === "loading" || status === "rerolling") return;
-    if (balance < COST_PER_REROLL) {
+    if (totalPoint < COST_PER_REROLL) {
       mtoast.error("灵感余额不足");
       return;
     }
@@ -538,7 +519,6 @@ const MInspirationPage = () => {
       return;
     }
 
-    setBalance((prev) => Math.max(prev - COST_PER_REROLL, 0));
     setStatus("rerolling");
     setShowPaw(true);
     setPawHit(false);
@@ -589,6 +569,7 @@ const MInspirationPage = () => {
               }
             : prev,
         );
+        await refreshBalance();
       } catch (error) {
         console.error("获取灵感详情失败:", error);
         mtoast.error("获取详情失败，请稍后重试");
@@ -598,7 +579,7 @@ const MInspirationPage = () => {
         }
       }
     },
-    [ideaInput, lastInspirationWord],
+    [ideaInput, lastInspirationWord, refreshBalance],
   );
 
   const handleCardClick = useCallback(
@@ -644,11 +625,20 @@ const MInspirationPage = () => {
     const summary = insDetailData.summary.trim();
     const content = [
       `灵感主题：${title}`,
-      `参考风格：${summary}`,
-      `主角信息：${insDetailData.roleInfo || "-"}`,
-      `主要事件：${insDetailData.mainEvent || "-"}`,
-      `角色设定：${insDetailData.roleSetting || "-"}`,
-      `世界观设定：${insDetailData.worldSetting || "-"}`,
+      "",
+      `参考风格：${summary || "-"}`,
+      "",
+      "主角信息：",
+      insDetailData.roleInfo || "-",
+      "",
+      "主要事件：",
+      insDetailData.mainEvent || "-",
+      "",
+      "角色设定：",
+      insDetailData.roleSetting || "-",
+      "",
+      "世界观设定：",
+      insDetailData.worldSetting || "-",
     ].join("\n");
 
     try {
@@ -664,6 +654,8 @@ const MInspirationPage = () => {
       setNoteSaving(false);
     }
   }, [insDetailData, noteSaving]);
+
+
 
   return (
     <div className="w-full flex flex-col overflow-x-hidden h-full overflow-y-auto bg-[#f3f3f3]">
@@ -738,7 +730,7 @@ const MInspirationPage = () => {
                 </div>
                 <div className="">
                   <Iconfont unicode="&#xe60c;" className="text-[28px] mr-2" />
-                  <span className="text-[28px]">{COST_PER_REROLL}/{balance}</span>
+                  <span className="text-[28px]">{COST_PER_REROLL}/{totalPoint}</span>
                 </div>
               </div>
             </div>
@@ -841,7 +833,7 @@ const MInspirationPage = () => {
               <Button
                 className="w-106 h-26 text-[40px] font-bold text-white rounded-full disabled:opacity-50"
                 onClick={handleAddToNote}
-                disabled={noteSaving || !insDetailData?.title}
+                disabled={noteSaving || !insDetailData?.title || insDetailLoading}
               >
                 <Iconfont unicode="&#xe64c;" className="text-[32px] mr-2" />
                 <span>{noteSaving ? "添加中..." : "添加到笔记"}</span>
