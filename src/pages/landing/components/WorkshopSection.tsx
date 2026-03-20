@@ -137,7 +137,7 @@ export function WorkshopSection() {
   const item = WHEEL_ITEMS[currentWheel]
 
   return (
-    <div className="relative flex min-h-screen w-screen flex-col items-center justify-start pt-21">
+    <div className="flex min-h-screen w-screen flex-col items-center justify-start pt-21">
       <div className="flex flex-col items-center">
         <h2 className="m-0 mb-4 text-4xl font-bold leading-[1.32] text-[#464646]">
           一人工作室，全链路护航写作
@@ -147,61 +147,63 @@ export function WorkshopSection() {
         </p>
       </div>
 
-      {/* Carousel wheel */}
-      <div className="absolute bottom-0 left-[200px] flex h-[calc(100vh-176px)] w-[calc(100vh-176px)] flex-row items-center justify-center">
-        <div className="absolute h-full w-full">
-          <img src={wheelBg} alt="wheel background" className="absolute top-0 left-0 h-full w-full object-cover" loading="lazy" />
-          {WHEEL_ITEMS.map((wItem, index) => (
-            <div
-              key={index}
-              onClick={() => handleWheelClick(index)}
-              style={{
-                top: WHEEL_POSITIONS[index].top,
-                left: WHEEL_POSITIONS[index].left,
-              }}
-              className="absolute z-10 flex cursor-pointer items-center gap-5 transition-all duration-300 hover:-translate-x-[5px]"
-            >
-              <img
-                src={currentWheel === index ? wItem.iconActive : wItem.icon}
-                alt={wItem.title}
-                className="size-15"
-                loading="lazy"
-              />
-              <span
-                className={cn(
-                  'font-YaHei text-2xl font-bold whitespace-nowrap transition-all duration-300',
-                  currentWheel === index ? 'text-[#464646]' : 'text-[#8e8e8e]',
-                )}
+      <div className="flex w-full flex-1 items-center justify-center px-8">
+        {/* Carousel wheel */}
+        <div className="flex -mr-30 h-[calc(100vh-176px)] w-40/100 shrink-0 items-center justify-center">
+          <div className="relative h-full w-full">
+            <img src={wheelBg} alt="wheel background" className="absolute top-0 left-0 h-full w-full object-cover" loading="lazy" />
+            {WHEEL_ITEMS.map((wItem, index) => (
+              <div
+                key={index}
+                onClick={() => handleWheelClick(index)}
+                style={{
+                  top: WHEEL_POSITIONS[index].top,
+                  left: WHEEL_POSITIONS[index].left,
+                }}
+                className="absolute z-10 flex cursor-pointer items-center gap-5 transition-all duration-300 hover:-translate-x-[5px]"
               >
-                {wItem.title}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right content */}
-      <div className="absolute bottom-0 right-[200px] z-5">
-        <div
-          key={animKey}
-          className="flex h-[calc(100vh-176px)] max-w-[985px] flex-col items-center justify-center overflow-hidden box-border animate-[slideIn_0.5s_ease]"
-        >
-          <style>{`@keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }`}</style>
-          <img
-            src={item.image}
-            alt={item.title}
-            style={getImageStyle(currentWheel)}
-            className="h-auto w-auto shrink-0 object-contain"
-            loading="lazy"
-          />
-          <p className="font-YaHei relative mt-10 w-[474px] shrink-0 text-center text-2xl font-bold leading-[1.32] text-[#696969]">
-            <span className="absolute top-3 left-[-20px] block size-2 rounded-full bg-[#efaf00]" />
-            {item.descriptionParts.map((part, i) => (
-              <span key={i} className={part.highlight ? 'text-[#efaf00]' : undefined}>
-                {part.text}
-              </span>
+                <img
+                  src={currentWheel === index ? wItem.iconActive : wItem.icon}
+                  alt={wItem.title}
+                  className="size-15"
+                  loading="lazy"
+                />
+                <span
+                  className={cn(
+                    'font-YaHei text-2xl font-bold whitespace-nowrap transition-all duration-300',
+                    currentWheel === index ? 'text-[#464646]' : 'text-[#8e8e8e]',
+                  )}
+                >
+                  {wItem.title}
+                </span>
+              </div>
             ))}
-          </p>
+          </div>
+        </div>
+
+        {/* Right content */}
+        <div className="flex h-[calc(100vh-176px)] w-40/100 items-center justify-center">
+          <div
+            key={animKey}
+            className="flex h-full max-w-[985px] flex-col items-center justify-center overflow-hidden box-border animate-[slideIn_0.5s_ease]"
+          >
+            <style>{`@keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }`}</style>
+            <img
+              src={item.image}
+              alt={item.title}
+              style={getImageStyle(currentWheel)}
+              className="h-auto w-auto shrink-0 object-contain"
+              loading="lazy"
+            />
+            <p className="font-YaHei relative mt-10 w-[474px] shrink-0 text-center text-2xl font-bold leading-[1.32] text-[#696969]">
+              <span className="absolute top-3 left-[-20px] block size-2 rounded-full bg-[#efaf00]" />
+              {item.descriptionParts.map((part, i) => (
+                <span key={i} className={part.highlight ? 'text-[#efaf00]' : undefined}>
+                  {part.text}
+                </span>
+              ))}
+            </p>
+          </div>
         </div>
       </div>
     </div>
