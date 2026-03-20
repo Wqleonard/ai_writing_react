@@ -254,9 +254,12 @@ export function WorkspaceSidebar() {
     })
   }, [requireLogin])
 
+  const joinUsDesc = useOptionsStore(s=>s.joinUsDesc)
+  const joinUsQrCode = useOptionsStore(s=>s.joinUsQrCode)
+
   return (
     <aside
-      className="flex h-full w-[210px] bg-(--bg-secondary) shrink-0 flex-col justify-between rounded-tr-[20px] rounded-br-[20px] px-3 py-5">
+      className="flex overflow-y-scroll hide-scrollbar h-full w-[210px] bg-(--bg-secondary) shrink-0 flex-col justify-between rounded-tr-[20px] rounded-br-[20px] px-3 py-5">
       {/* 顶部区域 */}
       <div>
         {/* Logo */}
@@ -368,63 +371,86 @@ export function WorkspaceSidebar() {
       </div>
 
       {/* 底部工具栏 */}
-      <div className="flex items-center gap-[6px] pl-3">
-        {/* 关于我们 */}
-        <Popover open={aboutOpen} onOpenChange={setAboutOpen}>
-          <Tooltip>
-            <PopoverAnchor asChild>
-              <TooltipTrigger asChild>
-                <div
-                  className="iconfont flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-xl! transition-colors hover:bg-(--bg-tertiary)"
-                  style={{ color: '#757575' }}
-                  onClick={() => setAboutOpen(v => !v)}
-                  dangerouslySetInnerHTML={{ __html: '&#xe604;' }}
-                />
-              </TooltipTrigger>
-            </PopoverAnchor>
-            <TooltipContent side="top">关于我们</TooltipContent>
-          </Tooltip>
-          <PopoverContent side="right" align="end" sideOffset={8} className="w-[260px] p-0">
-            <AboutUsContent onClose={() => setAboutOpen(false)}/>
-          </PopoverContent>
-        </Popover>
+      <div className="flex flex-col items-center gap-[6px]">
+        <div className='flex flex-col pb-3'>
+          {joinUsDesc && <p className="mb-1 text-sm font-semibold text-(--text-primary)">{joinUsDesc}</p>}
 
-        {/* 加入社群 */}
-        <Popover open={joinGroupOpen} onOpenChange={setJoinGroupOpen}>
-          <Tooltip>
-            <PopoverAnchor asChild>
-              <TooltipTrigger asChild>
-                <div
-                  className="iconfont flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-xl! transition-colors hover:bg-(--bg-tertiary)"
-                  style={{ color: '#757575' }}
-                  onClick={() => setJoinGroupOpen(v => !v)}
-                  dangerouslySetInnerHTML={{ __html: '&#xe60a;' }}
-                />
-              </TooltipTrigger>
-            </PopoverAnchor>
-            <TooltipContent side="top">加入社群</TooltipContent>
-          </Tooltip>
-          <PopoverContent side="right" align="end" sideOffset={8} className="w-[280px] p-0">
-            <JoinGroupContent
-              onClose={() => setJoinGroupOpen(false)}
-              desc={optionsStore.joinUsDesc || undefined}
-              qrCode={optionsStore.joinUsQrCode || undefined}
-            />
-          </PopoverContent>
-        </Popover>
+          {/* 二维码 */}
+          {joinUsQrCode ? (
+            <div className="flex items-center justify-center rounded px-3">
+              <img
+                src={joinUsQrCode}
+                alt="产品内测群二维码"
+                className="h-[108px] w-[108px] rounded object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex h-[108px] w-[108px] items-center justify-center rounded bg-gray-100 text-xs text-gray-400">
+              二维码加载中
+            </div>
+          )}
+        </div>
 
-        {/* 问题反馈 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              className="iconfont flex h-7 w-7 text-[#757575]! cursor-pointer items-center justify-center rounded-[8px] transition-colors hover:bg-(--bg-tertiary)"
-              onClick={handleFeedbackClick}
-            >
-              &#xe64e;
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">问题反馈</TooltipContent>
-        </Tooltip>
+
+
+        <div className='w-full flex items-center justify-start pl-3'>
+          {/* 关于我们 */}
+          <Popover open={aboutOpen} onOpenChange={setAboutOpen}>
+            <Tooltip>
+              <PopoverAnchor asChild>
+                <TooltipTrigger asChild>
+                  <div
+                    className="iconfont flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-xl! transition-colors hover:bg-(--bg-tertiary)"
+                    style={{ color: '#757575' }}
+                    onClick={() => setAboutOpen(v => !v)}
+                    dangerouslySetInnerHTML={{ __html: '&#xe604;' }}
+                  />
+                </TooltipTrigger>
+              </PopoverAnchor>
+              <TooltipContent side="top">关于我们</TooltipContent>
+            </Tooltip>
+            <PopoverContent side="right" align="end" sideOffset={8} className="w-[260px] p-0">
+              <AboutUsContent onClose={() => setAboutOpen(false)}/>
+            </PopoverContent>
+          </Popover>
+
+          {/* 加入社群 */}
+          {/*<Popover open={joinGroupOpen} onOpenChange={setJoinGroupOpen}>*/}
+          {/*  <Tooltip>*/}
+          {/*    <PopoverAnchor asChild>*/}
+          {/*      <TooltipTrigger asChild>*/}
+          {/*        <div*/}
+          {/*          className="iconfont flex h-7 w-7 cursor-pointer items-center justify-center rounded-[8px] text-xl! transition-colors hover:bg-(--bg-tertiary)"*/}
+          {/*          style={{ color: '#757575' }}*/}
+          {/*          onClick={() => setJoinGroupOpen(v => !v)}*/}
+          {/*          dangerouslySetInnerHTML={{ __html: '&#xe60a;' }}*/}
+          {/*        />*/}
+          {/*      </TooltipTrigger>*/}
+          {/*    </PopoverAnchor>*/}
+          {/*    <TooltipContent side="top">加入社群</TooltipContent>*/}
+          {/*  </Tooltip>*/}
+          {/*  <PopoverContent side="right" align="end" sideOffset={8} className="w-[280px] p-0">*/}
+          {/*    <JoinGroupContent*/}
+          {/*      onClose={() => setJoinGroupOpen(false)}*/}
+          {/*      desc={optionsStore.joinUsDesc || undefined}*/}
+          {/*      qrCode={optionsStore.joinUsQrCode || undefined}*/}
+          {/*    />*/}
+          {/*  </PopoverContent>*/}
+          {/*</Popover>*/}
+
+          {/* 问题反馈 */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                className="iconfont flex h-7 w-7 text-[#757575]! cursor-pointer items-center justify-center rounded-[8px] transition-colors hover:bg-(--bg-tertiary)"
+                onClick={handleFeedbackClick}
+              >
+                &#xe64e;
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">问题反馈</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </aside>
   )
