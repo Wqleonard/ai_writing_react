@@ -34,6 +34,7 @@ const MWorkSpace = lazy(() => import('@/layout/MWorkSpace'))
 // Mobile pages
 const MLandingPage = lazy(() => import('@/m-pages/landing'))
 const MChatPage = lazy(() => import("@/m-pages/workspace/chat"));
+const MInspirationPage = lazy(() => import("@/m-pages/workspace/inspiration"));
 const MNotesPage = lazy(() => import("@/m-pages/workspace/notes"));
 const MNotesDetailPage = lazy(() => import("@/m-pages/workspace/notes-detail"));
 const MMinePage = lazy(() => import("@/m-pages/workspace/mine"));
@@ -181,6 +182,11 @@ const routes: RouteObject[] = [
                 path: 'chat',
                 element: <MChatPage/>,
                 handle: { title: '移动端对话' },
+              },
+              {
+                path: 'inspiration',
+                element: <MInspirationPage/>,
+                handle: { title: '移动端灵感' },
               },
               {
                 path: 'notes',
