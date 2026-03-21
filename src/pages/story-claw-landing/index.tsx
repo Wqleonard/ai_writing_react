@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -284,6 +285,7 @@ const CtaDownloadButton = () => {
 };
 
 export default function Home() {
+    const navigate = useNavigate();
     const [showContactModal, setShowContactModal] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [showQrCode, setShowQrCode] = useState(false);
@@ -857,10 +859,16 @@ export default function Home() {
                             <span className="ml-2 text-lg font-bold">爆文猫写作版龙虾</span>
                         </div>
                         <div className="flex space-x-6 mb-4 md:mb-0">
-                            <></>
-                            <a href="#" className="hover:text-white transition-colors">隐私政策</a>
-                            <a href="#" className="hover:text-white transition-colors">用户协议</a>
                             <button
+                                type="button"
+                                onClick={() => navigate("/privacy-policy")}
+                                className="hover:text-white transition-colors">隐私政策</button>
+                            <button
+                                type="button"
+                                onClick={() => navigate("/user-agreement")}
+                                className="hover:text-white transition-colors">用户协议</button>
+                            <button
+                                type="button"
                                 onClick={() => setShowContactModal(true)}
                                 className="hover:text-white transition-colors">联系我们</button>
                         </div>

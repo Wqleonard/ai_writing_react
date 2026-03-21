@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import penIcon from "@/assets/landing_image/pen-icon.svg";
 import vectorIcon from "@/assets/landing_image/vector.svg";
@@ -21,6 +22,7 @@ export function HeroSection({
   onScriptClick,
   onProfessionalClick,
 }: HeroSectionProps) {
+  const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isButtonHovered, setIsButtonHovered] = useState(false);
   const [isProfessionalButtonHovered, setIsProfessionalButtonHovered] =
@@ -93,7 +95,7 @@ export function HeroSection({
         </p>
 
         {/* CTA buttons */}
-        <div className="w-[584px] relative flex flex-row">
+        <div className="min-w-[584px] relative flex flex-row">
           {/* Novice button + dropdown */}
           <div ref={dropdownContainerRef} className="relative flex flex-col">
             <button
@@ -255,11 +257,13 @@ export function HeroSection({
               一分钟连接QQ、飞书开始码字
             </div>
           </div>
-          <button 
-            className="mr-5 shrink-0 ml-2 bg-white h-fit custom-button rounded-xl px-4 py-3 font-bold text-sm"
+          <button
+            type="button"
+            className="mr-5 shrink-0 ml-2 bg-white h-fit custom-btn rounded-xl px-4 py-3 font-bold text-sm"
+            onClick={() => navigate("/story-claw-landing")}
           >
             前往下载
-            </button>
+          </button>
         </div>
       </div>
 
