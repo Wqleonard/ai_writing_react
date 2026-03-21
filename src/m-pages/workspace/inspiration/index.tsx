@@ -541,7 +541,7 @@ const MInspirationPage = () => {
         setLoading(false);
       }
     }, 260);
-  }, [balance, fetchInspirationCards, ideaInput, lastInspirationWord, loading, status]);
+  }, [fetchInspirationCards, ideaInput, lastInspirationWord, loading, status, totalPoint]);
 
   const fetchCardDetail = useCallback(
     async (inspirationTheme: string) => {
