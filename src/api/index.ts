@@ -564,7 +564,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     const fullUrl = `${baseURL}${url}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      Accept: "text/event-stream",
+      // Accept: "text/event-stream",
       "Cache-Control": "no-cache",
       ...(((config?.headers as any) || {}) as Record<string, string>),
     };
