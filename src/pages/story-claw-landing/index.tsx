@@ -1,11 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import COVER from "@/assets/images/story_claw_landing/cover.png";
-import FEATURE_OPEN_AND_USE from "@/assets/images/story_claw_landing/feature-open-and-use.png";
-import FEATURE_TASK_EXECUTION from "@/assets/images/story_claw_landing/feature-task-execution.png";
-import FEATURE_EDITOR from "@/assets/images/story_claw_landing/feature-editor.png";
-import FEATURE_REMOTE_SECURITY from "@/assets/images/story_claw_landing/feature-remote-security.png";
+import COVER from "@/assets/images/story_claw_landing/cover.webp";
+import FEATURE_OPEN_AND_USE from "@/assets/images/story_claw_landing/feature-open-and-use.webp";
+import FEATURE_TASK_EXECUTION from "@/assets/images/story_claw_landing/feature-task-execution.webp";
+import FEATURE_EDITOR from "@/assets/images/story_claw_landing/feature-editor.webp";
+import FEATURE_REMOTE_SECURITY from "@/assets/images/story_claw_landing/feature-remote-security.webp";
+import STORY_CLAW_LOGO from "@/assets/images/story_claw_landing/story-claw-logo.webp";
+import STORY_CLAW_ICON from "@/assets/images/story_claw_landing/story-claw-icon.webp";
+import WECHAT_GROUP_QR from "@/assets/images/story_claw_landing/wechat-group-qr.webp";
+import FEISHU_QR from "@/assets/images/story_claw_landing/feishu-qr.webp";
+import WECHAT_WORK_QR from "@/assets/images/story_claw_landing/wechat-work-qr.webp";
 import GONGAN from "@/assets/images/gongan.png";
 import {
   Download,
@@ -15,22 +20,10 @@ import {
   FileText,
   PenTool,
   Lightbulb,
-  Smartphone,
   X,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-
-const COLORS = {
-  primary: "rgb(212, 0, 0)",
-  secondary: "rgb(255, 209, 0)",
-  primaryLight: "rgba(212, 0, 0, 0.1)",
-  secondaryLight: "rgba(255, 209, 0, 0.1)",
-  text: "rgb(31, 31, 31)",
-  textLight: "rgb(102, 102, 102)",
-  background: "rgb(255, 255, 255)",
-  cardBg: "rgb(255, 255, 255)",
-};
 
 const getOS = () => {
   const userAgent = window.navigator.userAgent.toLowerCase();
@@ -40,109 +33,6 @@ const getOS = () => {
   if (userAgent.indexOf("win") !== -1) return "windows";
 
   return "other";
-};
-
-const DownloadButton = ({
-  className = "",
-  label = "立即下载",
-}: {
-  className?: string;
-  label?: string;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [os, setOs] = useState("other");
-
-  useEffect(() => {
-    setOs(getOS());
-  }, []);
-
-  const toggleDropdown = () => {
-    setIsOpen(!isOpen);
-  };
-
-  return (
-    <div className="relative inline-block">
-      <motion.button
-        className={`px-4 py-2 bg-[#d40000] text-white rounded-full hover:bg-[#b00000] transition-colors flex items-center justify-center ${className}`}
-        whileHover={{
-          scale: 1.02,
-        }}
-        whileTap={{
-          scale: 0.98,
-        }}
-        onClick={toggleDropdown}
-      >
-        <Download className="w-4 h-4 mr-2" />
-        {label}
-        {isOpen ? <ChevronUp className="w-4 h-4 ml-2" /> : <></>}
-      </motion.button>
-      {isOpen && (
-        <motion.div
-          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-9999 overflow-hidden"
-          initial={{
-            opacity: 0,
-            y: -10,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          exit={{
-            opacity: 0,
-            y: -10,
-          }}
-          transition={{
-            duration: 0.2,
-          }}
-        >
-          <div className="p-3 border-b border-gray-100 bg-gray-50">
-            <p className="text-sm font-medium text-gray-700">选择版本下载</p>
-          </div>
-          <div className="divide-y divide-gray-100">
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-800">Mac 版本</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    适用于 macOS 10.14 及以上
-                  </p>
-                </div>
-                {os === "mac" && (
-                  <span className="bg-[#d40000] text-white text-xs px-2 py-0.5 rounded-full">
-                    适合您的设备
-                  </span>
-                )}
-              </div>
-            </a>
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-800">Windows 版本</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    适用于 Windows 10 及以上
-                  </p>
-                </div>
-                {os === "windows" && (
-                  <span className="bg-[#d40000] text-white text-xs px-2 py-0.5 rounded-full">
-                    适合您的设备
-                  </span>
-                )}
-              </div>
-            </a>
-          </div>
-          <div className="p-2 text-center">
-            <p className="text-xs text-gray-500">更新日期: 2026-03-20</p>
-          </div>
-        </motion.div>
-      )}
-    </div>
-  );
 };
 
 const HeroDownloadButton = () => {
@@ -377,9 +267,10 @@ export default function Home() {
       >
         <div className="flex items-center space-x-1">
           <img
-            src="https://lf-code-agent.coze.cn/obj/x-ai-cn/attachment/3894913543964963/客户端logo_20260319111723.png"
+            src={STORY_CLAW_LOGO}
             alt="AutoClaw Logo"
             className="h-8 rounded-sm w-auto"
+            loading="lazy"
           />
           <h1 className="ml-2 font-bold text-gray-800 text-xl">
             爆文猫写作版龙虾
@@ -423,9 +314,10 @@ export default function Home() {
               >
                 <div className="w-48 h-48 bg-white p-2 rounded-lg shadow-lg">
                   <img
-                    src="https://space.coze.cn/api/coze_space/gen_image?image_size=square&prompt=WeChat%20group%20QR%20code%2C%20literary%20community&sign=491990c366e31c00afe9243cf40feb6a"
+                    src={WECHAT_GROUP_QR}
                     alt="养虾社群二维码"
                     className="w-full h-full object-contain"
+                    loading="lazy"
                   />
                 </div>
                 <p className="text-center text-xs text-gray-600 mt-2">
@@ -463,9 +355,9 @@ export default function Home() {
       <section className="relative overflow-hidden bg-linear-to-br from-[#fff0f0] to-[#fff9ed] pt-36 pb-24 md:pt-56 md:pb-48 lg:pt-72 lg:pb-64">
         <div className="absolute inset-0 bg-linear-to-br from-[#fff0f0] to-[#fff9ed]"></div>
         <div className="max-w-[80%] mx-auto -mt-20 px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="flex flex-col md:flex-row justify-center items-center gap-40">
+          <div className="flex flex-col md:flex-row justify-center items-center gap-20">
             <motion.div
-              className="md:w-120 text-center md:text-left mb-10 md:mb-0"
+              className="w-120 text-center md:text-left mb-10 md:mb-0"
               initial={{
                 opacity: 0,
                 y: 20,
@@ -480,9 +372,10 @@ export default function Home() {
             >
               <div className="flex items-center justify-center md:justify-start mb-4">
                 <img
-                  src="https://lf-code-agent.coze.cn/obj/x-ai-cn/267088422146/attachment/_Image_20260320101942.png"
+                  src={STORY_CLAW_ICON}
                   alt="龙虾icon"
                   className="h-20 w-auto mr-3"
+                  loading="lazy"
                 />
               </div>
               <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight text-[#d40000]">
@@ -513,7 +406,7 @@ export default function Home() {
               </div>
             </motion.div>
             <motion.div
-              className="md:w-1/2 flex justify-center"
+              className="flex justify-center"
               initial={{
                 opacity: 0,
                 scale: 0.9,
@@ -527,14 +420,11 @@ export default function Home() {
                 delay: 0.3,
               }}
             >
-              <div className="relative">
-                <img
-                  src={COVER}
-                  alt="爆文猫写作版龙虾应用界面"
-                  className="w-full max-w-full h-auto rounded-2xl shadow-2xl"
-                />
-                <></>
-              </div>
+              <img
+                src={COVER}
+                alt="爆文猫写作版龙虾应用界面"
+                className="w-200 max-w-full h-auto"
+              />
             </motion.div>
           </div>
         </div>
@@ -596,6 +486,7 @@ export default function Home() {
                     src={FEATURE_OPEN_AND_USE}
                     alt="开箱即用零门槛"
                     className="w-full h-auto rounded-xl shadow-lg cursor-zoom-in transition-transform duration-200 hover:scale-[1.02]"
+                    loading="lazy"
                     onClick={() =>
                       setPreviewImage({
                         src: FEATURE_OPEN_AND_USE,
@@ -683,6 +574,7 @@ export default function Home() {
                     src={FEATURE_TASK_EXECUTION}
                     alt="自动整理本地文章"
                     className="w-full h-auto rounded-xl shadow-lg cursor-zoom-in transition-transform duration-200 hover:scale-[1.02]"
+                    loading="lazy"
                     onClick={() =>
                       setPreviewImage({
                         src: FEATURE_TASK_EXECUTION,
@@ -762,6 +654,7 @@ export default function Home() {
                     src={FEATURE_EDITOR}
                     alt="专属协作编辑器"
                     className="w-full h-auto rounded-xl shadow-lg cursor-zoom-in transition-transform duration-200 hover:scale-[1.02]"
+                    loading="lazy"
                     style={{
                       backgroundColor: "transparent",
                     }}
@@ -844,6 +737,7 @@ export default function Home() {
                     src={FEATURE_REMOTE_SECURITY}
                     alt="远程控制与安全"
                     className="w-full h-auto rounded-xl shadow-lg cursor-zoom-in transition-transform duration-200 hover:scale-[1.02]"
+                    loading="lazy"
                     onClick={() =>
                       setPreviewImage({
                         src: FEATURE_REMOTE_SECURITY,
@@ -1063,9 +957,10 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-2 mb-4 md:mb-0 w-50">
               <img
-                src="https://lf-code-agent.coze.cn/obj/x-ai-cn/attachment/3894913543964963/客户端logo_20260319111723.png"
+                src={STORY_CLAW_LOGO}
                 alt="爆文猫写作版龙虾Logo"
                 className="h-8 w-auto rounded-sm"
+                loading="lazy"
               />
               <span className="ml-2 text-lg font-bold">爆文猫写作版龙虾</span>
             </div>
@@ -1096,29 +991,34 @@ export default function Home() {
           </div>
         </div>
         <div className="flex shrink-0 w-full max-w-screen flex-col items-center pb-10">
-        <div className="flex flex-col items-center justify-center mt-5">
-          <p className="font-YaHei m-0 text-sm leading-[1.32] text-[#999]">
-            © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
-          </p>
-          <a
-            href="https://beian.miit.gov.cn/"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2.5 text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00]"
-          >
-            浙ICP备17039406号-19
-          </a>
-          <a
-            href="https://beian.mps.gov.cn/#/query/webSearch?code=33060402002057"
-            rel="noreferrer"
-            target="_blank"
-            className="mt-2.5 flex items-center text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00]"
-          >
-            <img src={GONGAN} alt="" className="mr-2 size-4 object-cover" loading="lazy" />
-            <span>浙公网安备33060402002057号</span>
-          </a>
+          <div className="flex flex-col items-center justify-center mt-5">
+            <p className="font-YaHei m-0 text-sm leading-[1.32] text-[#999]">
+              © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
+            </p>
+            <a
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2.5 text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00]"
+            >
+              浙ICP备17039406号-19
+            </a>
+            <a
+              href="https://beian.mps.gov.cn/#/query/webSearch?code=33060402002057"
+              rel="noreferrer"
+              target="_blank"
+              className="mt-2.5 flex items-center text-sm leading-[1.32] text-[#999] no-underline transition-colors duration-300 hover:text-[#efaf00]"
+            >
+              <img
+                src={GONGAN}
+                alt=""
+                className="mr-2 size-4 object-cover"
+                loading="lazy"
+              />
+              <span>浙公网安备33060402002057号</span>
+            </a>
+          </div>
         </div>
-      </div>
       </footer>
       {}
       {previewImage && (
@@ -1142,6 +1042,7 @@ export default function Home() {
               src={previewImage.src}
               alt={previewImage.alt}
               className="w-full h-full max-h-[90vh] object-contain rounded-xl shadow-2xl bg-white"
+              loading="lazy"
             />
           </div>
         </div>
@@ -1190,9 +1091,10 @@ export default function Home() {
                 <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
                   {}
                   <img
-                    src="https://space.coze.cn/api/coze_space/gen_image?image_size=square&prompt=Feishu%20QR%20code%2C%20business%20communication&sign=747f2860c770e73c201167a915993917"
+                    src={FEISHU_QR}
                     alt="飞书二维码"
                     className="w-full h-full object-contain"
+                    loading="lazy"
                   />
                 </div>
                 <p className="text-sm text-gray-600">飞书</p>
@@ -1201,9 +1103,10 @@ export default function Home() {
                 <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
                   {}
                   <img
-                    src="https://space.coze.cn/api/coze_space/gen_image?image_size=square&prompt=WeChat%20Work%20QR%20code%2C%20business%20communication&sign=3439f23d63a5175492b22b8c39b7a8d4"
+                    src={WECHAT_WORK_QR}
                     alt="企业微信二维码"
                     className="w-full h-full object-contain"
+                    loading="lazy"
                   />
                 </div>
                 <p className="text-sm text-gray-600">企业微信</p>
