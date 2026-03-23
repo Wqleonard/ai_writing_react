@@ -128,10 +128,7 @@ const InspirationCard = ({
         className="w-full h-full object-cover rounded-lg"
       />
       {data.title && (
-        <div className="absolute bottom-0 left-0 w-full h-3/5 rounded-b-lg bg-linear-to-b from-transparent via-black/15 to-black/50 backdrop-blur-6 mask-gradient-bottom pointer-events-none" />
-      )}
-      {data.title && (
-        <div className="absolute bottom-0 left-0 right-0 p-5 pb-6 text-white">
+        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-b from-black/0 to-black/30 p-5 pb-6 text-white">
           <div className="text-[40px] font-bold">{data.title}</div>
           <div className="mt-5 line-clamp-2 text-2xl">{data.summary}</div>
         </div>
