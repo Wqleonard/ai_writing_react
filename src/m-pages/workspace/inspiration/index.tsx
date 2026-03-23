@@ -26,7 +26,8 @@ import DEFAULT_CARD_IMAGE from "@/assets/images/m_ins/card_cover.png";
 import CAT_HAND from '@/assets/images/m_ins/cat_hand.png';
 import "./card.less";
 
-const COST_PER_REROLL = 10;
+const COST_PER_REROLL = 60;
+const COST_PER_DETAIL = 1;
 const SWIPE_THRESHOLD = 28;
 const CARD_WIDTH_PX = 380;
 // 左右卡片与中间卡片的水平间距（rem）：值越小越紧密
@@ -70,9 +71,6 @@ interface InspirationCardProps {
   onClick: (data: InspirationIdea) => void;
 }
 
-import TEST1 from "@/assets/images/m_ins/test1.jpg";
-import TEST2 from "@/assets/images/m_ins/test2.jpg";
-import TEST3 from "@/assets/images/m_ins/test3.jpg";
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
@@ -85,27 +83,6 @@ const EMPTY_CARD_DATA = {
   tag: "",
   image: "",
 };
-
-const INSPIRATION_CARDS: InspirationIdea[] = [
-  {
-    title: "玻璃海公约",
-    summary: "海底城市重启投票前夜，档案员发现被抹去的第零条。",
-    tag: "#科幻",
-    image: TEST1,
-  },
-  {
-    title: "雾屿邮差",
-    summary: "守岛邮差在无名信件里，解锁雾屿沉睡的秘密。",
-    tag: "#悬疑",
-    image: TEST2,
-  },
-  {
-    title: "雨夜备忘录",
-    summary: "旧手机凌晨自动发来未来短信，主角被迫提前破局。",
-    tag: "#都市脑洞",
-    image: TEST3,
-  },
-];
 
 const createEmptyCards = () => [
   EMPTY_CARD_DATA,
@@ -193,11 +170,13 @@ const MInspirationPage = () => {
   const [pawHit, setPawHit] = useState(false);
   const [buttonHit, setButtonHit] = useState(false);
   const [lastInspirationWord, setLastInspirationWord] = useState("");
+  const [optimisticPointCost, setOptimisticPointCost] = useState(0);
 
   const [InspirationCardData, setInspirationCardData] =
     useState<InspirationIdea[]>(createEmptyCards);
   const [carouselOffset, setCarouselOffset] = useState(1);
   const [dragPreviewOffset, setDragPreviewOffset] = useState(0);
+  const availablePoint = Math.max(0, totalPoint - optimisticPointCost);
 
   const headline = useMemo(() => {
     if (status === "loading") return "加载中...";
@@ -221,6 +200,7 @@ const MInspirationPage = () => {
   const suppressCardClickRef = useRef(false);
   const snapTimerRef = useRef<number | null>(null);
   const detailRequestIdRef = useRef(0);
+  const balanceInitRef = useRef(false);
 
   const normalizeCarouselOffset = useCallback(
     (value: number) => {
@@ -429,7 +409,13 @@ const MInspirationPage = () => {
   }, [InspirationCardData.length]);
 
   useEffect(() => {
-    refreshBalance();
+    setOptimisticPointCost(0);
+  }, []);
+
+  useEffect(() => {
+    if (balanceInitRef.current) return;
+    balanceInitRef.current = true;
+    void refreshBalance();
   }, [refreshBalance]);
 
   const fetchInspirationCards = useCallback(async (seed: string) => {
@@ -482,7 +468,6 @@ const MInspirationPage = () => {
       setLastInspirationWord(inspirationWord);
       setInspirationCardData(cardsWithImages);
       setStatus("ready");
-      await refreshBalance();
       return true;
     } catch (error) {
       console.error("获取灵感卡片失败:", error);
@@ -491,24 +476,33 @@ const MInspirationPage = () => {
       setInspirationCardData(createEmptyCards());
       return false;
     }
-  }, [refreshBalance]);
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
+    if (availablePoint < COST_PER_REROLL) {
+      mtoast.error("灵感余额不足");
+      return;
+    }
+
+    setOptimisticPointCost((prev) => prev + COST_PER_REROLL);
     setLoading(true);
     setHasGenerated(true);
     setStatus("loading");
 
     try {
-      await fetchInspirationCards(ideaInput.trim());
+      const success = await fetchInspirationCards(ideaInput.trim());
+      if (!success) {
+        setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_REROLL));
+      }
     } finally {
       setLoading(false);
     }
-  }, [fetchInspirationCards, ideaInput, loading]);
+  }, [availablePoint, fetchInspirationCards, ideaInput, loading]);
 
   const handleReroll = useCallback(async () => {
     if (loading || status === "loading" || status === "rerolling") return;
-    if (totalPoint < COST_PER_REROLL) {
+    if (availablePoint < COST_PER_REROLL) {
       mtoast.error("灵感余额不足");
       return;
     }
@@ -523,6 +517,7 @@ const MInspirationPage = () => {
     setShowPaw(true);
     setPawHit(false);
     setButtonHit(false);
+    setOptimisticPointCost((prev) => prev + COST_PER_REROLL);
     window.requestAnimationFrame(() => {
       setPawHit(true);
     });
@@ -536,19 +531,22 @@ const MInspirationPage = () => {
       setLoading(true);
       setStatus("loading");
       try {
-        await fetchInspirationCards(seed);
+        const success = await fetchInspirationCards(seed);
+        if (!success) {
+          setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_REROLL));
+        }
       } finally {
         setLoading(false);
       }
     }, 260);
-  }, [fetchInspirationCards, ideaInput, lastInspirationWord, loading, status, totalPoint]);
+  }, [availablePoint, fetchInspirationCards, ideaInput, lastInspirationWord, loading, status]);
 
   const fetchCardDetail = useCallback(
     async (inspirationTheme: string) => {
       const inspirationWord = lastInspirationWord || ideaInput.trim();
       if (!inspirationWord) {
         mtoast.error("缺少灵感关键词，暂无法重新生成详情");
-        return;
+        return false;
       }
 
       const requestId = detailRequestIdRef.current + 1;
@@ -569,17 +567,18 @@ const MInspirationPage = () => {
               }
             : prev,
         );
-        await refreshBalance();
+        return true;
       } catch (error) {
         console.error("获取灵感详情失败:", error);
         mtoast.error("获取详情失败，请稍后重试");
+        return false;
       } finally {
         if (detailRequestIdRef.current === requestId) {
           setInsDetailLoading(false);
         }
       }
     },
-    [ideaInput, lastInspirationWord, refreshBalance],
+    [ideaInput, lastInspirationWord],
   );
 
   const handleCardClick = useCallback(
@@ -590,7 +589,12 @@ const MInspirationPage = () => {
       }
       if (!cardData.title) return;
       if (loading) return;
+      if (availablePoint < COST_PER_DETAIL) {
+        mtoast.error("灵感余额不足");
+        return;
+      }
 
+      setOptimisticPointCost((prev) => prev + COST_PER_DETAIL);
       setInsDetailData({
         ...cardData,
         roleInfo: "",
@@ -599,9 +603,12 @@ const MInspirationPage = () => {
         worldSetting: "",
       });
       setOpenInsDetail(true);
-      await fetchCardDetail(cardData.title);
+      const success = await fetchCardDetail(cardData.title);
+      if (!success) {
+        setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_DETAIL));
+      }
     },
-    [fetchCardDetail, loading],
+    [availablePoint, fetchCardDetail, loading],
   );
 
   const handleRegenerateDetail = useCallback(async () => {
@@ -730,7 +737,7 @@ const MInspirationPage = () => {
                 </div>
                 <div className="">
                   <Iconfont unicode="&#xe60c;" className="text-[28px] mr-2" />
-                  <span className="text-[28px]">{COST_PER_REROLL}/{totalPoint}</span>
+                  <span className="text-[28px]">{COST_PER_REROLL}/{availablePoint}</span>
                 </div>
               </div>
             </div>
