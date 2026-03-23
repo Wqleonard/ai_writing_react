@@ -12,6 +12,7 @@ import WECHAT_GROUP_QR from "@/assets/images/story_claw_landing/wechat-group-qr.
 import FEISHU_QR from "@/assets/images/story_claw_landing/feishu-qr.webp";
 import WECHAT_WORK_QR from "@/assets/images/story_claw_landing/wechat-work-qr.webp";
 import GONGAN from "@/assets/images/gongan.png";
+import { useLatestDownloads } from "./download";
 import {
   Download,
   Book,
@@ -35,9 +36,32 @@ const getOS = () => {
   return "other";
 };
 
-const HeroDownloadButton = () => {
+type DownloadState = ReturnType<typeof useLatestDownloads>;
+
+const getMacDownloadUrl = (downloadState: DownloadState) => {
+  if (downloadState.auto.platform === "mac" && downloadState.auto.url) {
+    return downloadState.auto.url;
+  }
+  return downloadState.links.macArm64 || downloadState.links.macX64;
+};
+
+const getWindowsDownloadUrl = (downloadState: DownloadState) => {
+  if (downloadState.auto.platform === "win" && downloadState.auto.url) {
+    return downloadState.auto.url;
+  }
+  return downloadState.links.winX64 || downloadState.links.winArm64;
+};
+
+const openDownloadUrl = (url?: string) => {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
+const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
+  const macDownloadUrl = getMacDownloadUrl(downloadState);
+  const windowsDownloadUrl = getWindowsDownloadUrl(downloadState);
 
   useEffect(() => {
     setOs(getOS());
@@ -45,6 +69,10 @@ const HeroDownloadButton = () => {
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
+  };
+  const handleDownload = (url?: string) => {
+    openDownloadUrl(url);
+    setIsOpen(false);
   };
 
   return (
@@ -90,9 +118,11 @@ const HeroDownloadButton = () => {
             <p className="text-sm font-medium text-gray-700">选择版本下载</p>
           </div>
           <div className="divide-y divide-gray-100">
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
+            <button
+              type="button"
+              onClick={() => handleDownload(macDownloadUrl)}
+              disabled={!macDownloadUrl}
+              className={`block w-full text-left px-4 py-3 transition-colors ${macDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -107,10 +137,12 @@ const HeroDownloadButton = () => {
                   </span>
                 )}
               </div>
-            </a>
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownload(windowsDownloadUrl)}
+              disabled={!windowsDownloadUrl}
+              className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -125,18 +157,26 @@ const HeroDownloadButton = () => {
                   </span>
                 )}
               </div>
-            </a>
+            </button>
           </div>
-          <></>
+          <div className="p-2 text-center text-xs text-gray-500">
+            {downloadState.loading
+              ? "正在加载最新版本..."
+              : downloadState.error
+                ? "下载地址加载失败，请稍后重试"
+                : `Win ${downloadState.versionWin || "-"} / Mac ${downloadState.versionMac || "-"}`}
+          </div>
         </motion.div>
       )}
     </div>
   );
 };
 
-const CtaDownloadButton = () => {
+const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
+  const macDownloadUrl = getMacDownloadUrl(downloadState);
+  const windowsDownloadUrl = getWindowsDownloadUrl(downloadState);
 
   useEffect(() => {
     setOs(getOS());
@@ -144,6 +184,10 @@ const CtaDownloadButton = () => {
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
+  };
+  const handleDownload = (url?: string) => {
+    openDownloadUrl(url);
+    setIsOpen(false);
   };
 
   return (
@@ -189,9 +233,11 @@ const CtaDownloadButton = () => {
             <p className="text-sm font-medium text-gray-700">选择版本下载</p>
           </div>
           <div className="divide-y divide-gray-100">
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
+            <button
+              type="button"
+              onClick={() => handleDownload(macDownloadUrl)}
+              disabled={!macDownloadUrl}
+              className={`block w-full text-left px-4 py-3 transition-colors ${macDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -206,10 +252,12 @@ const CtaDownloadButton = () => {
                   </span>
                 )}
               </div>
-            </a>
-            <a
-              href="#"
-              className={`block w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownload(windowsDownloadUrl)}
+              disabled={!windowsDownloadUrl}
+              className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -224,9 +272,15 @@ const CtaDownloadButton = () => {
                   </span>
                 )}
               </div>
-            </a>
+            </button>
           </div>
-          <></>
+          <div className="p-2 text-center text-xs text-gray-500">
+            {downloadState.loading
+              ? "正在加载最新版本..."
+              : downloadState.error
+                ? "下载地址加载失败，请稍后重试"
+                : `Win ${downloadState.versionWin || "-"} / Mac ${downloadState.versionMac || "-"}`}
+          </div>
         </motion.div>
       )}
     </div>
@@ -235,6 +289,13 @@ const CtaDownloadButton = () => {
 
 export default function Home() {
   const navigate = useNavigate();
+  const downloadState = useLatestDownloads();
+  const instantDownloadUrl =
+    downloadState.auto.url ||
+    downloadState.links.winX64 ||
+    downloadState.links.winArm64 ||
+    downloadState.links.macArm64 ||
+    downloadState.links.macX64;
   const [showContactModal, setShowContactModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
     src: string;
@@ -256,6 +317,10 @@ export default function Home() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleInstantExperience = () => {
+    openDownloadUrl(instantDownloadUrl);
+  };
 
   return (
     <div
@@ -328,7 +393,7 @@ export default function Home() {
           </div>
           {}
           <motion.button
-            className="px-4 py-2 bg-white text-[#d40000] border border-[#d40000] rounded-lg hover:bg-[#fff0f0] transition-colors"
+            className="px-4 py-2 cursor-pointer bg-white text-[#d40000] border border-[#d40000] rounded-lg hover:bg-[#fff0f0] transition-colors"
             whileHover={{
               scale: 1.02,
             }}
@@ -339,7 +404,14 @@ export default function Home() {
             使用指南
           </motion.button>
           <motion.button
-            className="px-4 py-2 bg-[#d40000] text-white rounded-lg hover:bg-[#b00000] transition-colors"
+            type="button"
+            onClick={handleInstantExperience}
+            disabled={!instantDownloadUrl}
+            className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+              instantDownloadUrl
+                ? "bg-[#d40000] text-white hover:bg-[#b00000]"
+                : "bg-[#d40000]/50 text-white/80 cursor-not-allowed"
+            }`}
             whileHover={{
               scale: 1.02,
             }}
@@ -347,7 +419,7 @@ export default function Home() {
               scale: 0.98,
             }}
           >
-            立即体验
+            立即下载
           </motion.button>
         </div>
       </header>
@@ -390,7 +462,7 @@ export default function Home() {
                 免编程、免配置，开箱即用。
               </p>
               <div className="flex flex-col sm:flex-row justify-center md:justify-start space-y-4 sm:space-y-0 sm:space-x-4">
-                <HeroDownloadButton />
+                <HeroDownloadButton downloadState={downloadState} />
                 <motion.button
                   className="px-8 py-3 bg-white text-[#d40000] border-2 border-[#d40000] font-semibold rounded-full flex items-center justify-center hover:bg-[#fff0f0] transition-all"
                   whileHover={{
@@ -946,7 +1018,7 @@ export default function Home() {
             <p className="text-xl mb-8 max-w-2xl mx-auto text-white/90">
               随时随地，爆文猫写作版龙虾帮你高效写作，开启全新的创作体验！
             </p>
-            <CtaDownloadButton />
+            <CtaDownloadButton downloadState={downloadState} />
             <p className="mt-4 text-white/70">支持 Mac / Win 双平台</p>
           </motion.div>
         </div>
