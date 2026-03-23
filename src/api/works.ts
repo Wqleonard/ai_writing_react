@@ -123,6 +123,59 @@ const postInspirationStream = (
   );
 };
 
+interface PostCanvasChoicesStreamData {
+  assistantId?: "canvas_chat" | "canvas";
+  prompt: string;
+  model?: string;
+  time?: string;
+  type?: "auto" | "manual";
+  files?: string | Record<string, string>;
+}
+
+const postCanvasAgentStream = (
+  data: PostCanvasChoicesStreamData,
+  onData: (data: any) => void,
+  onError: (error: any) => void,
+  onComplete: () => void,
+  config?: RequestConfig
+) => {
+  return apiClient.postStream(
+    "/api/works/canvas",
+    data,
+    onData,
+    onError,
+    onComplete,
+    config
+  );
+};
+
+const postCanvasChoicesStream = (
+  data: PostCanvasChoicesStreamData,
+  onData: (data: any) => void,
+  onError: (error: any) => void,
+  onComplete: () => void,
+  config?: RequestConfig
+) => {
+  const now = data.time ?? new Date().toLocaleString("sv-SE").replace("T", " ");
+  const serializedFiles =
+    typeof data.files === "string"
+      ? data.files
+      : JSON.stringify(data.files ?? {});
+  return apiClient.postStream(
+    "/api/works/canvas-chat",
+    {
+      model: "kimi_k2",
+      type: data.type ?? "auto",
+      files: serializedFiles,
+      content: data.prompt
+    },
+    onData,
+    onError,
+    onComplete,
+    config
+  );
+};
+
 const generateInspirationDrawIdReq = (
   workId: string,
   canvas: { nodes: any; edges: any }
@@ -226,6 +279,8 @@ export {
   generateInspirationReqNew,
   generateInspirationImageReq,
   postInspirationStream,
+  postCanvasAgentStream,
+  postCanvasChoicesStream,
   generateInspirationDrawIdReq,
   saveInspirationCanvasReq,
   updateInspirationDrawReq,
