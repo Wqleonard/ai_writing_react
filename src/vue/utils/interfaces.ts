@@ -696,6 +696,7 @@ export type NoteSourceType =
   | "MINI_APP_CHAT"
   | "MINI_APP_INSPIRATION"
   | "PC_ADD"
+  | "PC_CANVAS"
   | "PC_NOVEL_DECONSTRUCT"
   | "PC_CHAT_MODE"
   | "PC_INSPIRATION_DRAW"
@@ -707,6 +708,7 @@ export const NOTE_SOURCE_MAP: Record<NoteSourceType, string> = {
   MINI_APP_CHAT: "小程序-对话",
   MINI_APP_INSPIRATION: "小程序-灵感",
   PC_ADD: "PC端-手动添加",
+  PC_CANVAS: "PC端-无限画布",
   PC_NOVEL_DECONSTRUCT: "PC端-拆书仿写",
   PC_CHAT_MODE: "PC端-仅回答",
   PC_INSPIRATION_DRAW: "PC端-灵感画布",

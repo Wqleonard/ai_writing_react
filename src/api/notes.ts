@@ -5,6 +5,7 @@ export type NoteSourceType =
   | "MINI_APP_CHAT"
   | "MINI_APP_INSPIRATION"
   | "PC_ADD"
+  | "PC_CANVAS"
   | "PC_NOVEL_DECONSTRUCT"
   | "PC_CHAT_MODE"
   | "PC_INSPIRATION_DRAW"
