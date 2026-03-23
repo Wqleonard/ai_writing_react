@@ -253,8 +253,7 @@ export function HeroSection({
           <div className="text-white">
             <div className="text-xl leading-6">爆文猫写作龙虾来了！</div>
             <div className="text-xs leading-4 mt-1">
-              点击安装爆文猫专为写作定制的本地龙虾应用，开箱即用让内容创作更轻松。
-              一分钟连接QQ、飞书开始码字
+              StoryClaw专为写作而生，本地下载无需配置， 一分钟连接QQ 飞书 微信开始码字创作。
             </div>
           </div>
           <button
