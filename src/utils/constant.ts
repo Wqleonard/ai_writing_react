@@ -46,5 +46,7 @@ export const ORDER_CODE_VALUE: Record<string, string> = {
   INSPIRATION_THEME: '画布创作-灵感选题',
   INSPIRATION_INTRODUCTION: '画布创作-故事梗概',
   INSPIRATION_STORY_SETTING: '画布创作-故事设定',
-  INSPIRATION_STORY_OUTLINE: '画布创作-大纲'
+  INSPIRATION_STORY_OUTLINE: '画布创作-大纲',
+  INSPIRATION_IMAGE: '画布创作-灵感卡片',
+  INSPIRATION_INTRODUCTION_DETAIL: '画布创作-卡片详情'
 }

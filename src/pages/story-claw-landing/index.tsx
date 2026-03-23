@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import COVER from "@/assets/images/story_claw_landing/cover.webp";
 import FEATURE_OPEN_AND_USE from "@/assets/images/story_claw_landing/feature-open-and-use.webp";
 import FEATURE_TASK_EXECUTION from "@/assets/images/story_claw_landing/feature-task-execution.webp";
@@ -70,7 +71,12 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
   };
-  const handleDownload = (url?: string) => {
+  const handleDownload = (platform: "mac" | "windows", url?: string) => {
+    if (platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      setIsOpen(false);
+      return;
+    }
     openDownloadUrl(url);
     setIsOpen(false);
   };
@@ -120,9 +126,8 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
           <div className="divide-y divide-gray-100">
             <button
               type="button"
-              onClick={() => handleDownload(macDownloadUrl)}
-              disabled={!macDownloadUrl}
-              className={`block w-full text-left px-4 py-3 transition-colors ${macDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
+              onClick={() => handleDownload("mac", macDownloadUrl)}
+              className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -140,7 +145,7 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
             </button>
             <button
               type="button"
-              onClick={() => handleDownload(windowsDownloadUrl)}
+              onClick={() => handleDownload("windows", windowsDownloadUrl)}
               disabled={!windowsDownloadUrl}
               className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
@@ -185,7 +190,12 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
   };
-  const handleDownload = (url?: string) => {
+  const handleDownload = (platform: "mac" | "windows", url?: string) => {
+    if (platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      setIsOpen(false);
+      return;
+    }
     openDownloadUrl(url);
     setIsOpen(false);
   };
@@ -235,9 +245,8 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
           <div className="divide-y divide-gray-100">
             <button
               type="button"
-              onClick={() => handleDownload(macDownloadUrl)}
-              disabled={!macDownloadUrl}
-              className={`block w-full text-left px-4 py-3 transition-colors ${macDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
+              onClick={() => handleDownload("mac", macDownloadUrl)}
+              className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -255,7 +264,7 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
             </button>
             <button
               type="button"
-              onClick={() => handleDownload(windowsDownloadUrl)}
+              onClick={() => handleDownload("windows", windowsDownloadUrl)}
               disabled={!windowsDownloadUrl}
               className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
@@ -319,6 +328,10 @@ export default function Home() {
   }, []);
 
   const handleInstantExperience = () => {
+    if (downloadState.auto.platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      return;
+    }
     openDownloadUrl(instantDownloadUrl);
   };
 
