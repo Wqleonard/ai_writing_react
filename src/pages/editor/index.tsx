@@ -22,7 +22,7 @@ import { AgentCustomMessageRenderer } from "@/components/AgentCustomMessageRende
 import { TodosFixedPanel } from "@/components/TodosFixedPanel/TodosFixedPanel";
 import { AssociationSelectorDialog } from "@/components/AssociationSelectorDialog";
 import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
-import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvas/InsCanvas";
+import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvasV2/InsCanvas";
 import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
@@ -67,7 +67,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Checkbox } from "@/components/ui/Checkbox";
+import { Switch } from "@/components/ui/Switch";
 import { Input } from "@/components/ui/Input";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -303,8 +303,12 @@ const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string,
 /** 画布 tab 下与 ChatHeader tab 同一排的操作按钮，由 InsCanvas 通过 ref 提供 API */
 function CanvasToolbar({
                          api,
+                         autoSyncDirectory,
+                         onAutoSyncDirectoryChange,
                        }: {
   api: InsCanvasApi | null
+  autoSyncDirectory: boolean
+  onAutoSyncDirectoryChange: (checked: boolean) => void
 }) {
   if (!api) return null;
   const canSaveCanvas = !!api.inspirationDrawId;
@@ -344,6 +348,16 @@ function CanvasToolbar({
       >
         <span className="iconfont">&#xe936;</span>
       </Button>
+      <div className="flex items-center gap-1">
+        <Switch
+          checked={autoSyncDirectory}
+          onCheckedChange={onAutoSyncDirectoryChange}
+          className="h-4 w-6 cursor-pointer"
+          thumbClassName="size-2 data-[state=checked]:translate-x-3"
+          title={"自动同步目录"}
+        />
+        <span className="text-xs text-[#6b7280]">自动同步目录</span>
+      </div>
     </div>
   );
 }
@@ -978,15 +992,34 @@ const MarkdownEditorPage = () => {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [restoringVersionId, setRestoringVersionId] = useState<string>("");
   const [isChangesPanelVisible, setIsChangesPanelVisible] = useState(false);
+  const [autoSyncCanvasDirectory, setAutoSyncCanvasDirectory] = useState(true);
   const centerRequiredRem = CENTER_EDITOR_MIN_REM + (isChangesPanelVisible ? CHANGES_PANEL_WIDTH_REM : 0);
   const [fileChangesMap, setFileChangesMap] = useState<FileChangesMap>({});
   // 用 ref 持有最新值，避免 chat 回调把这些字段放进依赖后频繁重建
   const treeDataRef = useRef<TreeNodeLike[]>(treeData as TreeNodeLike[]);
   const workInfoStageRef = useRef(workInfo.stage);
+  const lastCanvasSyncedKeysRef = useRef<string[]>([]);
   useEffect(() => {
     treeDataRef.current = treeData as TreeNodeLike[];
     workInfoStageRef.current = workInfo.stage;
   }, [treeData, workInfo.stage]);
+
+  const handleCanvasAutoSyncDirectory = useCallback(
+    (canvasFiles: Record<string, string>) => {
+      const currentServerData = useEditorStore.getState().serverData;
+      const keysToRemove = new Set(lastCanvasSyncedKeysRef.current);
+      const withoutCanvasSync = Object.fromEntries(
+        Object.entries(currentServerData).filter(([key]) => !keysToRemove.has(key))
+      );
+      const mergedFiles = {
+        ...withoutCanvasSync,
+        ...canvasFiles,
+      };
+      lastCanvasSyncedKeysRef.current = Object.keys(canvasFiles);
+      setServerData(mergedFiles);
+    },
+    [setServerData]
+  );
 
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
     try {
@@ -2754,10 +2787,10 @@ const MarkdownEditorPage = () => {
                       </div>
                       <label className="flex items-center justify-between">
                         <span className="text-sm">首行缩进</span>
-                        <Checkbox
+                        <Switch
                           checked={editorSettings.textIndentEnabled}
-                          onCheckedChange={(checked) =>
-                            setEditorSettings((prev) => ({ ...prev, textIndentEnabled: checked === true }))
+                          onCheckedChange={(checked: boolean) =>
+                            setEditorSettings((prev) => ({ ...prev, textIndentEnabled: checked }))
                           }
                         />
                       </label>
@@ -2979,6 +3012,8 @@ const MarkdownEditorPage = () => {
               activeTab === "canvas" ? (
                 <CanvasToolbar
                   api={insCanvasRef.current}
+                  autoSyncDirectory={autoSyncCanvasDirectory}
+                  onAutoSyncDirectoryChange={setAutoSyncCanvasDirectory}
                 />
               ) : null
             }
@@ -2991,6 +3026,8 @@ const MarkdownEditorPage = () => {
                   workId={workId}
                   onCreateHere={handleCanvasCreateHere}
                   onCreateNew={handleCanvasCreateNew}
+                  autoSyncDirectory={autoSyncCanvasDirectory}
+                  onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
                   onMessage={(type, msg) => {
                     if (type === "success") toast.success(msg);
                     else if (type === "error") toast.error(msg);
