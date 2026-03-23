@@ -131,13 +131,13 @@ export default function MLandingPage() {
                 <span className="text-[28px] text-white leading-10">立即试用</span>
                 <span className="iconfont text-[28px]! text-white leading-10">&#xe642;</span>
               </div>
-              <div
-                className="rounded-full h-19 w-60 bg-[#eaa801] flex items-center justify-center gap-2 active:opacity-90 cursor-pointer"
-                onClick={copyWebsite}
-              >
-                <span className="text-[28px] text-white leading-10">网页版试用</span>
-                <span className="iconfont text-[28px]! text-white leading-10">&#xe613;</span>
-              </div>
+              {/*<div*/}
+              {/*  className="rounded-full h-19 w-60 bg-[#eaa801] flex items-center justify-center gap-2 active:opacity-90 cursor-pointer"*/}
+              {/*  onClick={copyWebsite}*/}
+              {/*>*/}
+              {/*  <span className="text-[28px] text-white leading-10">网页版试用</span>*/}
+              {/*  <span className="iconfont text-[28px]! text-white leading-10">&#xe613;</span>*/}
+              {/*</div>*/}
             </div>
           </div>
         </div>
@@ -283,7 +283,7 @@ export default function MLandingPage() {
         </section>
 
         {/* 角色轮播图 */}
-        <section className="mt-20 w-full px-25">
+        <section className="mt-20 w-full px-20">
           <MRoleCarousel roles={ROLE_DATA} />
         </section>
 

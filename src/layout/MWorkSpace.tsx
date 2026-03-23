@@ -16,6 +16,12 @@ const tabBar: TabBar[] = [
     route:'/m/workspace/chat'
   },
   {
+    label: '灵感',
+    name: 'm-workspace-inspiration',
+    icon: '\ue637',
+    route:'/m/workspace/inspiration'
+  },
+  {
     label: '笔记',
     name: 'm-workspace-notes',
     icon: '\ue644',
@@ -45,31 +51,39 @@ export default function MWorkSpace() {
   }
 
   return (
-    <div className="h-[100dvh] overflow-hidden flex flex-col bg-[#f3f3f3]">
+    <div className="h-dvh overflow-hidden flex flex-col bg-[#f3f3f3]">
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <Outlet />
       </div>
-      <div className="flex justify-between shrink-0 w-full h-35 px-17 pt-5 bg-white">
+      <div className="flex justify-between shrink-0 w-full h-35 px-8 pt-5 bg-white">
         {tabBar.map((tab) => (
           <div
             key={tab.name}
             className={cn(
-              'flex flex-col text-xl items-center cursor-pointer transition-opacity active:opacity-70',
-              isActive(tab) ? 'text-[#fa9e00]' : 'text-gray-600'
+              'flex flex-col text-xl items-center cursor-pointer transition-opacity active:opacity-70 min-w-0 flex-1',
+              isActive(tab) && tab.name !== 'm-workspace-inspiration' ? 'text-[#fa9e00]' : 'text-gray-600'
             )}
             onClick={() => handleTabClick(tab)}
           >
             <div
               className={cn(
                 'iconfont text-[44px]!',
-                isActive(tab) ? 'text-[#fa9e00]' : 'text-gray-600'
+                isActive(tab) && tab.name === 'm-workspace-inspiration'
+                  ? 'text-transparent bg-clip-text bg-linear-to-r from-[#efaf00] to-[#ff9500]'
+                  : isActive(tab)
+                    ? 'text-[#fa9e00]'
+                    : 'text-gray-600'
               )}
             >
               {tab.icon}
             </div>
             <div
               className={cn(
-                isActive(tab) ? 'text-[#fa9e00]' : 'text-gray-600'
+                isActive(tab) && tab.name === 'm-workspace-inspiration'
+                  ? 'text-transparent bg-clip-text bg-linear-to-r from-[#efaf00] to-[#ff9500]'
+                  : isActive(tab)
+                    ? 'text-[#fa9e00]'
+                    : 'text-gray-600'
               )}
             >
               {tab.label}

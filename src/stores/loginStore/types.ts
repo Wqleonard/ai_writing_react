@@ -41,6 +41,10 @@ export interface LoginState {
   loginDialogRequest: number
   sendIdeaTourShow: boolean
   missionGroup: GuideTask[]
+  dailyBalance: number
+  dailyBalanceLimit: number
+  fixedBalance: number
+  isLoadingBalance: boolean
 }
 
 export interface LoginActions {
@@ -62,6 +66,7 @@ export interface LoginActions {
   makeRandomAvatar: (token: string) => AvatarData
   renderAvatarFromData: (avatarData: AvatarData, pixelSize?: number, size?: number) => string
   setSendIdeaTourShow: (show: boolean) => void
+  refreshBalance: () => Promise<void>
   updateNewbieMission: () => Promise<void>
   completeNewbieMissionByCode: (code: string) => Promise<boolean>
   getNewbieMissionProgressPercent: () => string

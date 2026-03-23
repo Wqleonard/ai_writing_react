@@ -13,7 +13,7 @@ interface RoleCarouselProps {
 }
 
 const ITEM_WIDTH_REM = 12.5
-const ITEM_SPACING_REM = 5
+const ITEM_SPACING_REM = 1
 const ROLE_COPIES = 3
 
 export default function MRoleCarousel({ roles }: RoleCarouselProps) {
@@ -95,7 +95,7 @@ export default function MRoleCarousel({ roles }: RoleCarouselProps) {
   }, [])
 
   useEffect(() => {
-    startAutoPlay()
+    // startAutoPlay()
     return () => pauseAutoPlay()
   }, [startAutoPlay, pauseAutoPlay])
 
