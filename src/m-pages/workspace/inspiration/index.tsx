@@ -780,7 +780,7 @@ const MInspirationPage = () => {
                     className="w-full h-auto min-h-80 object-cover"
                   />
                   {insDetailData?.title && (
-                    <div className="absolute bottom-0 left-0 right-0 p-5 pb-6 text-white">
+                    <div className="absolute bottom-0 left-0 right-0 bg-linear-to-b from-black/0 to-black/30 p-5 pb-6 text-white">
                       <div className="text-[40px] font-bold">
                         {insDetailData.title}
                       </div>
