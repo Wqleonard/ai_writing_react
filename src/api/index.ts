@@ -96,6 +96,29 @@ function applyAuthOrVisitorHeader(headers: Record<string, string>, token: string
   if (visitorId) headers["X-Visitor-Id"] = visitorId;
 }
 
+let tokenExpiredHandling = false;
+
+function defaultTokenExpiredHandler() {
+  if (typeof window === "undefined") return;
+  if (tokenExpiredHandling) return;
+  tokenExpiredHandling = true;
+
+  // 懒加载 store，避免 api 层和 store 的静态循环依赖
+  void import("@/stores/loginStore")
+    .then(({ useLoginStore }) => {
+      useLoginStore.getState().logout();
+    })
+    .catch(() => {
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userInfo");
+      } catch {
+        // ignore
+      }
+      window.location.href = "/";
+    });
+}
+
 export function createApiClient(options: ApiClientOptions = {}) {
   const {
     baseURL = defaultBaseURL(),
@@ -116,7 +139,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
   const handleTokenExpired = () => {
     onWarnMessage?.("登录已过期，请重新登录");
-    onTokenExpired?.();
+    (onTokenExpired ?? defaultTokenExpiredHandler)();
   };
 
   // 请求拦截器
