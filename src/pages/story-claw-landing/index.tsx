@@ -9,9 +9,10 @@ import FEATURE_EDITOR from "@/assets/images/story_claw_landing/feature-editor.we
 import FEATURE_REMOTE_SECURITY from "@/assets/images/story_claw_landing/feature-remote-security.webp";
 import STORY_CLAW_LOGO from "@/assets/images/story_claw_landing/story-claw-logo.webp";
 import STORY_CLAW_ICON from "@/assets/images/story_claw_landing/story-claw-icon.webp";
-import WECHAT_GROUP_QR from "@/assets/images/story_claw_landing/wechat-group-qr.webp";
-import FEISHU_QR from "@/assets/images/story_claw_landing/feishu-qr.webp";
-import WECHAT_WORK_QR from "@/assets/images/story_claw_landing/wechat-work-qr.webp";
+// import WECHAT_GROUP_QR from "@/assets/images/story_claw_landing/wechat-group-qr.webp";
+// import FEISHU_QR from "@/assets/images/story_claw_landing/feishu-qr.webp";
+import WECHAT_WORK_QR from "@/assets/images/story_claw_landing/wechat_work.png";
+
 import GONGAN from "@/assets/images/gongan.png";
 import { useLatestDownloads } from "./download";
 import {
@@ -39,30 +40,9 @@ const getOS = () => {
 
 type DownloadState = ReturnType<typeof useLatestDownloads>;
 
-const getMacDownloadUrl = (downloadState: DownloadState) => {
-  if (downloadState.auto.platform === "mac" && downloadState.auto.url) {
-    return downloadState.auto.url;
-  }
-  return downloadState.links.macArm64 || downloadState.links.macX64;
-};
-
-const getWindowsDownloadUrl = (downloadState: DownloadState) => {
-  if (downloadState.auto.platform === "win" && downloadState.auto.url) {
-    return downloadState.auto.url;
-  }
-  return downloadState.links.winX64 || downloadState.links.winArm64;
-};
-
-const openDownloadUrl = (url?: string) => {
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
-};
-
 const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
-  const macDownloadUrl = getMacDownloadUrl(downloadState);
-  const windowsDownloadUrl = getWindowsDownloadUrl(downloadState);
 
   useEffect(() => {
     setOs(getOS());
@@ -71,13 +51,8 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
   };
-  const handleDownload = (platform: "mac" | "windows", url?: string) => {
-    if (platform === "mac") {
-      toast.info("Mac 版本敬请期待");
-      setIsOpen(false);
-      return;
-    }
-    openDownloadUrl(url);
+  const handleDownload = (platform: "mac" | "windows") => {
+    toast.info(platform === "mac" ? "Mac 版本敬请期待" : "Windows 版本敬请期待");
     setIsOpen(false);
   };
 
@@ -126,7 +101,7 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
           <div className="divide-y divide-gray-100">
             <button
               type="button"
-              onClick={() => handleDownload("mac", macDownloadUrl)}
+              onClick={() => handleDownload("mac")}
               className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
@@ -145,9 +120,8 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
             </button>
             <button
               type="button"
-              onClick={() => handleDownload("windows", windowsDownloadUrl)}
-              disabled={!windowsDownloadUrl}
-              className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
+              onClick={() => handleDownload("windows")}
+              className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -180,8 +154,6 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
 const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
-  const macDownloadUrl = getMacDownloadUrl(downloadState);
-  const windowsDownloadUrl = getWindowsDownloadUrl(downloadState);
 
   useEffect(() => {
     setOs(getOS());
@@ -190,13 +162,8 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
   };
-  const handleDownload = (platform: "mac" | "windows", url?: string) => {
-    if (platform === "mac") {
-      toast.info("Mac 版本敬请期待");
-      setIsOpen(false);
-      return;
-    }
-    openDownloadUrl(url);
+  const handleDownload = (platform: "mac" | "windows") => {
+    toast.info(platform === "mac" ? "Mac 版本敬请期待" : "Windows 版本敬请期待");
     setIsOpen(false);
   };
 
@@ -245,7 +212,7 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
           <div className="divide-y divide-gray-100">
             <button
               type="button"
-              onClick={() => handleDownload("mac", macDownloadUrl)}
+              onClick={() => handleDownload("mac")}
               className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "mac" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
@@ -264,9 +231,8 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
             </button>
             <button
               type="button"
-              onClick={() => handleDownload("windows", windowsDownloadUrl)}
-              disabled={!windowsDownloadUrl}
-              className={`block w-full text-left px-4 py-3 transition-colors ${windowsDownloadUrl ? "hover:bg-gray-50 cursor-pointer" : "cursor-not-allowed opacity-60"} ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
+              onClick={() => handleDownload("windows")}
+              className={`block w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 cursor-pointer ${os === "windows" ? "bg-[#fff0f0]" : ""}`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -299,12 +265,6 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
 export default function Home() {
   const navigate = useNavigate();
   const downloadState = useLatestDownloads();
-  const instantDownloadUrl =
-    downloadState.auto.url ||
-    downloadState.links.winX64 ||
-    downloadState.links.winArm64 ||
-    downloadState.links.macArm64 ||
-    downloadState.links.macX64;
   const [showContactModal, setShowContactModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
     src: string;
@@ -328,11 +288,7 @@ export default function Home() {
   }, []);
 
   const handleInstantExperience = () => {
-    if (downloadState.auto.platform === "mac") {
-      toast.info("Mac 版本敬请期待");
-      return;
-    }
-    openDownloadUrl(instantDownloadUrl);
+    toast.info("Windows / Mac 版本敬请期待");
   };
 
   return (
@@ -392,7 +348,7 @@ export default function Home() {
               >
                 <div className="w-48 h-48 bg-white p-2 rounded-lg shadow-lg">
                   <img
-                    src={WECHAT_GROUP_QR}
+                    src={WECHAT_WORK_QR}
                     alt="养虾社群二维码"
                     className="w-full h-full object-contain"
                     loading="lazy"
@@ -407,6 +363,13 @@ export default function Home() {
           {}
           <motion.button
             className="px-4 py-2 cursor-pointer bg-white text-[#d40000] border border-[#d40000] rounded-lg hover:bg-[#fff0f0] transition-colors"
+            onClick={() =>
+              window.open(
+                "https://icnirh1t37sj.feishu.cn/wiki/Oujqwmwz4iIvHKkoXDPcrKmxnNc",
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
             whileHover={{
               scale: 1.02,
             }}
@@ -419,12 +382,7 @@ export default function Home() {
           <motion.button
             type="button"
             onClick={handleInstantExperience}
-            disabled={!instantDownloadUrl}
-            className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-              instantDownloadUrl
-                ? "bg-[#d40000] text-white hover:bg-[#b00000]"
-                : "bg-[#d40000]/50 text-white/80 cursor-not-allowed"
-            }`}
+            className="px-4 py-2 rounded-lg transition-colors cursor-pointer bg-[#d40000] text-white hover:bg-[#b00000]"
             whileHover={{
               scale: 1.02,
             }}
@@ -484,6 +442,13 @@ export default function Home() {
                   whileTap={{
                     scale: 0.98,
                   }}
+                  onClick={() =>
+                    window.open(
+                      "https://icnirh1t37sj.feishu.cn/wiki/Oujqwmwz4iIvHKkoXDPcrKmxnNc",
+                      "_blank",
+                      "noopener,noreferrer",
+                    )
+                  }
                 >
                   <Book className="w-5 h-5 mr-2" />
                   查看使用指南
@@ -1147,7 +1112,7 @@ export default function Home() {
               opacity: 0,
               scale: 0.9,
             }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl"
+            className="bg-white rounded-2xl p-6 max-w-80 w-full mx-4 shadow-2xl"
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">联系我们</h3>
@@ -1171,8 +1136,8 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="flex flex-col items-center">
+            <div className="grid grid-cols-1 gap-6">
+              {/* <div className="flex flex-col items-center">
                 <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
                   {}
                   <img
@@ -1183,7 +1148,7 @@ export default function Home() {
                   />
                 </div>
                 <p className="text-sm text-gray-600">飞书</p>
-              </div>
+              </div> */}
               <div className="flex flex-col items-center">
                 <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
                   {}
