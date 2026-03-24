@@ -23,7 +23,7 @@ import { Iconfont } from "@/components/Iconfont";
 import { cn } from "@/lib/utils";
 
 import DEFAULT_CARD_IMAGE from "@/assets/images/m_ins/card_cover.png";
-import CAT_HAND from '@/assets/images/m_ins/cat_hand.png';
+import CAT_HAND from "@/assets/images/m_ins/cat_hand.png";
 import "./card.less";
 
 const COST_PER_REROLL = 60;
@@ -75,7 +75,12 @@ import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { selectDailyBalance, selectDailyBalanceLimit, selectFixedBalance, useLoginStore } from "@/stores/loginStore";
+import {
+  selectDailyBalance,
+  selectDailyBalanceLimit,
+  selectFixedBalance,
+  useLoginStore,
+} from "@/stores/loginStore";
 
 const EMPTY_CARD_DATA = {
   title: "",
@@ -150,9 +155,8 @@ const MInspirationPage = () => {
   const [ideaInput, setIdeaInput] = useState("");
 
   const [openInsDetail, setOpenInsDetail] = useState(false);
-  const [insDetailData, setInsDetailData] = useState<InspirationDetailData | null>(
-    null,
-  );
+  const [insDetailData, setInsDetailData] =
+    useState<InspirationDetailData | null>(null);
   const [insDetailLoading, setInsDetailLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
 
@@ -282,7 +286,8 @@ const MInspirationPage = () => {
         ) {
           return;
         }
-        pointerAxisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
+        pointerAxisRef.current =
+          Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
       }
 
       if (pointerAxisRef.current !== "x") return;
@@ -304,7 +309,10 @@ const MInspirationPage = () => {
       if (pointerIdRef.current !== event.pointerId) return;
 
       const deltaX = event.clientX - pointerStartXRef.current;
-      const elapsedMs = Math.max(1, performance.now() - pointerStartAtRef.current);
+      const elapsedMs = Math.max(
+        1,
+        performance.now() - pointerStartAtRef.current,
+      );
       const velocityX = deltaX / elapsedMs;
       const shouldSlide =
         pointerAxisRef.current === "x" &&
@@ -355,7 +363,9 @@ const MInspirationPage = () => {
       const depth = (Math.cos(angle) + 1) / 2;
       const sideStrength = Math.min(1, Math.abs(sin));
       const x = sin * CAROUSEL_RADIUS_X_REM;
-      const y = (1 - depth) * CAROUSEL_RADIUS_Y_REM - sideStrength * CAROUSEL_SIDE_LIFT_Y_REM;
+      const y =
+        (1 - depth) * CAROUSEL_RADIUS_Y_REM -
+        sideStrength * CAROUSEL_SIDE_LIFT_Y_REM;
       const scale = 0.76 + depth * 0.24;
       const rotateY = -sin * 58;
       const zLift = sideStrength * CAROUSEL_SIDE_Z_LIFT_REM;
@@ -482,7 +492,9 @@ const MInspirationPage = () => {
     try {
       const seed = ideaInput.trim();
       const req: any = await getInspirationCardsReq(seed);
-      const inspirations = Array.isArray(req?.inspirations) ? req.inspirations : [];
+      const inspirations = Array.isArray(req?.inspirations)
+        ? req.inspirations
+        : [];
       const inspirationWord = req?.inspirationWord || seed;
       const first = inspirations[0];
 
@@ -492,7 +504,9 @@ const MInspirationPage = () => {
         return;
       }
 
-      const imageReq: any = await getInspirationCardsImageReq(inspirationWord, [first]);
+      const imageReq: any = await getInspirationCardsImageReq(inspirationWord, [
+        first,
+      ]);
       const firstImage = Array.isArray(imageReq)
         ? (imageReq[0]?.imageUrl ?? "")
         : "";
@@ -580,7 +594,14 @@ const MInspirationPage = () => {
         setLoading(false);
       }
     }, 260);
-  }, [availablePoint, fetchInspirationCards, ideaInput, lastInspirationWord, loading, status]);
+  }, [
+    availablePoint,
+    fetchInspirationCards,
+    ideaInput,
+    lastInspirationWord,
+    loading,
+    status,
+  ]);
 
   const fetchCardDetail = useCallback(
     async (inspirationTheme: string) => {
@@ -594,7 +615,10 @@ const MInspirationPage = () => {
       detailRequestIdRef.current = requestId;
       setInsDetailLoading(true);
       try {
-        const req: any = await getInspirationDetail(inspirationWord, inspirationTheme);
+        const req: any = await getInspirationDetail(
+          inspirationWord,
+          inspirationTheme,
+        );
         const detail = req?.data ?? req ?? {};
         if (detailRequestIdRef.current !== requestId) return;
         setInsDetailData((prev) =>
@@ -708,8 +732,6 @@ const MInspirationPage = () => {
     }
   }, [insDetailData, noteSaving]);
 
-
-
   return (
     <div className="w-full flex flex-col overflow-x-hidden h-full overflow-y-auto bg-[#f3f3f3]">
       <div className="flex-1 min-h-0 px-9 flex flex-col">
@@ -740,8 +762,8 @@ const MInspirationPage = () => {
         </div>
       </div>
 
-      <div className="px-10 py-12 pb-20 h-[460px] flex items-center justify-center">
-        {(!hasGenerated && !loading) && (
+      <div className="px-10 py-12 pb-20 h-[460px] flex items-center justify-center relative overflow-hidden">
+        {!hasGenerated && !loading && (
           <div className="mt-14 rounded-[53px] w-full bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] px-8 py-8 min-h-[220px]">
             <textarea
               value={ideaInput}
@@ -765,11 +787,11 @@ const MInspirationPage = () => {
         )}
 
         {/* 重置灵感按钮 */}
-        {(hasGenerated && !loading) && (
+        {hasGenerated && !loading && (
           <button
             type="button"
             className={cn(
-              "relative size-[308px] p-5 rounded-full overflow-hidden bg-[linear-gradient(135deg,#ffbb00,#ffa001)] transition-transform duration-150",
+              "size-[308px] p-5 rounded-full overflow-hidden bg-[linear-gradient(135deg,#ffbb00,#ffa001)] transition-transform duration-150",
               buttonHit ? "scale-[0.96]" : "scale-100",
             )}
             onClick={handleReroll}
@@ -786,21 +808,21 @@ const MInspirationPage = () => {
                 </div>
               </div>
             </div>
-            <img
-              src={CAT_HAND}
-              alt=""
-              aria-hidden="true"
-              className={cn(
-                "absolute left-1/2 -translate-x-1/2 bottom-0 w-120 pointer-events-none select-none transition-all duration-300 ease-out",
-                showPaw
-                  ? pawHit
-                    ? "-translate-y-[250px] -rotate-6 opacity-100"
-                    : "translate-y-0 rotate-6 opacity-100"
-                  : "translate-y-6 rotate-6 opacity-0",
-              )}
-            />
           </button>
         )}
+        <img
+          src={CAT_HAND}
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            "inspiration-paw absolute left-1/2 top-60 w-120 pointer-events-none select-none",
+            showPaw
+              ? pawHit
+                ? "inspiration-paw--hit"
+                : "inspiration-paw--show"
+              : "",
+          )}
+        />
       </div>
 
       <Dialog
@@ -885,7 +907,9 @@ const MInspirationPage = () => {
               <Button
                 className="w-106 h-26 text-[40px] font-bold text-white rounded-full disabled:opacity-50"
                 onClick={handleAddToNote}
-                disabled={noteSaving || !insDetailData?.title || insDetailLoading}
+                disabled={
+                  noteSaving || !insDetailData?.title || insDetailLoading
+                }
               >
                 <Iconfont unicode="&#xe64c;" className="text-[32px] mr-2" />
                 <span>{noteSaving ? "添加中..." : "添加到笔记"}</span>
@@ -900,9 +924,9 @@ const MInspirationPage = () => {
               </LinkButton>
             </div>
           </div>
-          <div 
-          className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn" 
-          onClick={() => setOpenInsDetail(false)}
+          <div
+            className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn"
+            onClick={() => setOpenInsDetail(false)}
           >
             <Iconfont unicode="&#xe633;" className="text-[28px] text-white" />
           </div>

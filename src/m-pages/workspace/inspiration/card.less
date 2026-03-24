@@ -15,3 +15,21 @@
 .inspiration-card--third3d {
   transform-origin: right center;
 }
+
+.inspiration-paw {
+  transform: translateX(-50%) translateY(3rem) rotate(0deg);
+  opacity: 0;
+  transition: transform 180ms ease-out, opacity 180ms linear;
+  will-change: transform, opacity;
+}
+
+.inspiration-paw--show {
+  transform: translateX(-50%) translateY(0.75rem) rotate(0deg);
+  opacity: 1;
+}
+
+.inspiration-paw--hit {
+  transform: translateX(-50%) translateY(-9.5rem) rotate(0deg);
+  opacity: 1;
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms linear;
+}
