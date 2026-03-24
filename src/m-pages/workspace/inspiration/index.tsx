@@ -68,7 +68,7 @@ interface InspirationCardProps {
   style: CSSProperties;
   side3dClassName?: string;
   isActive: boolean;
-  onClick: (data: InspirationIdea) => void;
+  onClick: (data: InspirationIdea, isActive: boolean) => void;
 }
 
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
@@ -102,7 +102,7 @@ const InspirationCard = ({
   return (
     <div
       className={cn(
-        "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
+        "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 overflow-hidden p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
         hasData && "cursor-pointer",
         side3dClassName,
       )}
@@ -111,14 +111,12 @@ const InspirationCard = ({
       tabIndex={0}
       aria-label="抽取灵感卡"
       onClick={() => {
-        if (!hasData) return;
-        onClick(data);
+        onClick(data, isActive);
       }}
       onKeyDown={(event) => {
-        if (!hasData) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onClick(data);
+          onClick(data, isActive);
         }
       }}
     >
@@ -164,7 +162,7 @@ const MInspirationPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
-  const [showPaw, setShowPaw] = useState(false);
+  const [showPaw, setShowPaw] = useState(true);
   const [pawHit, setPawHit] = useState(false);
   const [buttonHit, setButtonHit] = useState(false);
   const [lastInspirationWord, setLastInspirationWord] = useState("");
@@ -476,6 +474,51 @@ const MInspirationPage = () => {
     }
   }, []);
 
+  const handleGenerateSingleCenterCard = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    setStatus("loading");
+
+    try {
+      const seed = ideaInput.trim();
+      const req: any = await getInspirationCardsReq(seed);
+      const inspirations = Array.isArray(req?.inspirations) ? req.inspirations : [];
+      const inspirationWord = req?.inspirationWord || seed;
+      const first = inspirations[0];
+
+      if (!first?.inspirationTheme) {
+        mtoast.error("暂未获取到灵感内容");
+        setStatus("idle");
+        return;
+      }
+
+      const imageReq: any = await getInspirationCardsImageReq(inspirationWord, [first]);
+      const firstImage = Array.isArray(imageReq)
+        ? (imageReq[0]?.imageUrl ?? "")
+        : "";
+
+      setInspirationCardData((prev) => {
+        const next = [...prev];
+        if (!next[activeCardIndex]) return prev;
+        next[activeCardIndex] = {
+          title: first.inspirationTheme || "",
+          summary: first.referenceStyle || "",
+          tag: "",
+          image: firstImage,
+        };
+        return next;
+      });
+      setLastInspirationWord(inspirationWord);
+      setStatus("ready");
+    } catch (error) {
+      console.error("点击空白卡片生成灵感失败:", error);
+      mtoast.error("生成灵感失败，请稍后重试");
+      setStatus("idle");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCardIndex, ideaInput, loading]);
+
   const handleGenerate = useCallback(async () => {
     if (loading) return;
     if (availablePoint < COST_PER_REROLL) {
@@ -580,12 +623,17 @@ const MInspirationPage = () => {
   );
 
   const handleCardClick = useCallback(
-    async (cardData: InspirationIdea) => {
+    async (cardData: InspirationIdea, isActive: boolean) => {
       if (suppressCardClickRef.current) {
         suppressCardClickRef.current = false;
         return;
       }
-      if (!cardData.title) return;
+      if (!cardData.title) {
+        if (isActive) {
+          await handleGenerateSingleCenterCard();
+        }
+        return;
+      }
       if (loading) return;
       if (availablePoint < COST_PER_DETAIL) {
         mtoast.error("灵感余额不足");
@@ -606,7 +654,7 @@ const MInspirationPage = () => {
         setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_DETAIL));
       }
     },
-    [availablePoint, fetchCardDetail, loading],
+    [availablePoint, fetchCardDetail, handleGenerateSingleCenterCard, loading],
   );
 
   const handleRegenerateDetail = useCallback(async () => {
@@ -733,9 +781,8 @@ const MInspirationPage = () => {
                 <div className="size-25 leading-25 text-center">
                   <Iconfont unicode="&#xe66f;" className="text-[96px]" />
                 </div>
-                <div className="">
-                  <Iconfont unicode="&#xe60c;" className="text-[28px] mr-2" />
-                  <span className="text-[28px]">{COST_PER_REROLL}/{availablePoint}</span>
+                <div className="mt-3">
+                  <span className="text-[32px]">重新生成</span>
                 </div>
               </div>
             </div>
@@ -744,7 +791,7 @@ const MInspirationPage = () => {
               alt=""
               aria-hidden="true"
               className={cn(
-                "absolute left-1/2 -translate-x-1/2 bottom-[-350px] w-120 pointer-events-none select-none transition-all duration-300 ease-out",
+                "absolute left-1/2 -translate-x-1/2 bottom-0 w-120 pointer-events-none select-none transition-all duration-300 ease-out",
                 showPaw
                   ? pawHit
                     ? "-translate-y-[250px] -rotate-6 opacity-100"
@@ -768,9 +815,9 @@ const MInspirationPage = () => {
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[calc(100vw-80px)] h-[calc(100vh-400px)] p-0 rounded-[36px] overflow-hidden"
+          className="w-[calc(100vw-80px)] h-[calc(100vh-200px)] p-0 rounded-[36px] overflow-hidden"
         >
-          <div className="flex flex-col h-[calc(100vh-400px)]">
+          <div className="flex flex-col h-[calc(100vh-200px)]">
             <ScrollArea className="flex-1 min-h-0">
               <div>
                 <div className="relative h-fit">
