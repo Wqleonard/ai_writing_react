@@ -18,6 +18,7 @@ import LOGO from '@/assets/images/logo.png'
 import { Button } from '@/components/ui/Button';
 import { Iconfont } from '@/components/Iconfont';
 import { mtoast } from '@/components/ui/toast';
+import './index.css'
 
 interface ChatHistory {
   sessionId: string
@@ -33,6 +34,7 @@ interface ChatHistoryGroup {
 }
 
 export default function MChatPage() {
+  const noticeText = '移动版仅提供基础功能，访问 baowenmao.com 体验完整版，释放全部创作潜能！'
   const [showChat, setShowChat] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [chatHistoryList, setChatHistoryList] = useState<ChatHistory[]>([])
@@ -332,6 +334,17 @@ export default function MChatPage() {
         <div />
       </div>
 
+      <div className="relative flex items-center w-[calc(100%+72px)] h-14 bg-[#d9d9d9] -ml-9 overflow-hidden">
+        <div className="flex items-center w-max shrink-0 whitespace-nowrap animate-notice-marquee">
+          {[0, 1].map((item) => (
+            <div key={item} className="flex items-center gap-2 px-5">
+              <span className="iconfont text-[28px]! text-[#8d8d8d]">&#xe604;</span>
+              <span className="text-[28px]! text-[#8d8d8d] whitespace-nowrap">{noticeText}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {!showChat ? (
         /* 初始状态 - 显示热点和输入框 */
         <div className="flex-1 flex flex-col">
@@ -354,6 +367,7 @@ export default function MChatPage() {
                 <div
                   key={topic.name + index}
                   className="flex items-center  py-2.5 border-b border-gray-200 cursor-pointer last:border-none active:bg-gray-50"
+                  onClick={() => setInputValue(topic.name)}
                 >
                   <div className="leading-12 text-gray-500">
                     <span
@@ -376,7 +390,7 @@ export default function MChatPage() {
             </div>
           </div>
 
-          {/* 输入框 */}
+          {/* 输入框 */} 
           <div className="w-full py-18">
             <div className="w-full h-27 px-5 rounded-full bg-white flex items-center gap-2">
               <input
@@ -406,7 +420,7 @@ export default function MChatPage() {
               <div key={index}>
                 {chatItem.role === 'human' ? (
                   <div className="w-full flex flex-row-reverse">
-                    <div className="max-w-144 text-wrap px-9 py-6 bg-[#efaf00] text-white text-[32px] rounded-[30px] rounded-ee-md! whitespace-pre-wrap break-words">
+                    <div className="max-w-xl text-wrap px-9 py-6 bg-[#efaf00] text-white text-[32px] rounded-[30px] rounded-ee-md! whitespace-pre-wrap break-words">
                       {parseMessageContent(chatItem.content)}
                     </div>
                   </div>
