@@ -31,6 +31,7 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
   import SummaryCardNode from "./components/SummaryCardNode";
   import SettingCardNode from "./components/SettingCardNode";
   import OutlineCardNode from "./components/OutlineCardNode";
+  import OutlineSettingCardNode from "./components/OutlineSettingCardNode";
   import RoleGroupNode from "./components/RoleGroupNode";
   import InitCarousel from "./components/InitCarousel";
   import InitWorkDialog from "./components/InitWorkDialog";
@@ -49,13 +50,14 @@ import { Iconfont } from "../Iconfont";
 import { saveInspirationCanvasReq } from "@/api/works";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, MapPin, X } from "lucide-react";
 import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
   const nodeTypes = {
     mainCard: MainCardNode,
     summaryCard: SummaryCardNode,
     settingCard: SettingCardNode,
     outlineCard: OutlineCardNode,
+    outlineSettingCard: OutlineSettingCardNode,
     roleGroup: RoleGroupNode,
   };
 
@@ -259,6 +261,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     };
   };
 
+  type DialogReferenceCard = {
+    nodeId: string;
+    title: string;
+    content: string;
+    filePath: string;
+    label: string;
+  };
+
   const AUTO_CARD_FIELD_LABELS: Record<string, string> = {
     synopsis: "梗概",
     summary: "梗概",
@@ -407,6 +417,67 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       head: sections[0] ?? "",
       middle: sections.slice(1, -1),
       tail: sections.length > 1 ? (sections[sections.length - 1] ?? "") : "",
+    };
+  };
+
+  const collectPartialPanelMessagesById = (
+    value: unknown,
+    orderedIds: Set<string>,
+    contentById: Map<string, string>
+  ) => {
+    let changed = false;
+
+    const visit = (input: unknown) => {
+      if (!input) return;
+      if (Array.isArray(input)) {
+        input.forEach(visit);
+        return;
+      }
+      if (typeof input !== "object") return;
+
+      const record = input as Record<string, unknown>;
+      const messageId = getTextValue(record.id).trim();
+      const messageContent = getTextValue(record.content).trim();
+      const messageType = getTextValue(record.type).trim().toLowerCase();
+      const messageName = getTextValue(record.name).trim().toLowerCase();
+
+      if (
+        messageId &&
+        messageContent &&
+        messageType !== "tool" &&
+        messageName !== "read_file" &&
+        messageName !== "generate_image" &&
+        messageName !== "think_tool"
+      ) {
+        if (!orderedIds.has(messageId)) {
+          orderedIds.add(messageId);
+          changed = true;
+        }
+        if (contentById.get(messageId) !== messageContent) {
+          contentById.set(messageId, messageContent);
+          changed = true;
+        }
+      }
+
+      Object.values(record).forEach(visit);
+    };
+
+    visit(value);
+    return changed;
+  };
+
+  const getPanelTextsFromMessageMap = (
+    orderedIds: Set<string>,
+    contentById: Map<string, string>
+  ) => {
+    const contents = Array.from(orderedIds)
+      .map((id) => contentById.get(id)?.trim() ?? "")
+      .filter(Boolean);
+
+    return {
+      detail: contents[0] ?? "",
+      body: contents[1] ?? "",
+      footer: contents[2] ?? "",
     };
   };
 
@@ -773,6 +844,46 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     return Array.from(result.values());
   };
 
+  const extractCreationIdeaFileContent = (value: unknown): string => {
+    if (!value) return "";
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const text = extractCreationIdeaFileContent(item);
+        if (text) return text;
+      }
+      return "";
+    }
+    if (typeof value !== "object") return "";
+
+    const record = value as {
+      tools?: {
+        files?: Record<string, unknown>;
+      };
+      tool_calls?: Array<{
+        name?: string;
+        args?: { file_path?: string; content?: string };
+      }>;
+    } & Record<string, unknown>;
+
+    const directContent = getTextValue(record.tools?.files?.["/创作想法.md"]).trim();
+    if (directContent) return directContent;
+
+    if (Array.isArray(record.tool_calls)) {
+      for (const toolCall of record.tool_calls) {
+        if (getTextValue(toolCall?.name) !== "write_file") continue;
+        if (getTextValue(toolCall?.args?.file_path) !== "/创作想法.md") continue;
+        const content = getTextValue(toolCall?.args?.content).trim();
+        if (content) return content;
+      }
+    }
+
+    for (const nested of Object.values(record)) {
+      const text = extractCreationIdeaFileContent(nested);
+      if (text) return text;
+    }
+    return "";
+  };
+
   const getLatestWriteFiles = (filesByPath: Map<string, CanvasWriteFileCall>): CanvasWriteFileCall[] => {
     return Array.from(filesByPath.values());
   };
@@ -988,12 +1099,34 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       : node.data?.image
         ? [String(node.data.image)]
         : [];
-    const sections = [`# ${title}`];
+    const bodyHasHeading = /^\s*#{1,6}\s+.+/.test(body);
+    const sections = bodyHasHeading ? [] : [`# ${title}`];
     if (body) sections.push(body);
     if (rawImages.length > 0) {
       sections.push(rawImages.map((url, idx) => `![${title}-${idx + 1}](${url})`).join("\n\n"));
     }
     return sections.join("\n\n").trim();
+  };
+
+  const shouldSyncCanvasNode = (node: CustomNode) => {
+    if (!node || node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
+
+    const title = String(node.data?.title ?? "").trim();
+    const content = String(node.data?.content ?? "").trim();
+    const image = String(node.data?.image ?? "").trim();
+    const images = Array.isArray((node.data as { images?: unknown[] })?.images)
+      ? ((node.data as { images?: unknown[] }).images ?? []).filter(Boolean)
+      : [];
+    const hasMedia = Boolean(image) || images.length > 0;
+    const isStreaming = Boolean((node.data as any)?.isStreaming);
+    const isPendingGenerate = Boolean((node.data as any)?.pendingGenerate);
+    const isPlaceholderDraft =
+      Boolean((node.data as any)?.isBlankDraft) || Boolean((node.data as any)?.isBlankBrainstormDraft);
+
+    if (isStreaming || isPendingGenerate || isPlaceholderDraft) return false;
+    if (content || hasMedia) return true;
+
+    return false;
   };
 
   const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
@@ -1019,17 +1152,22 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     topLevelNodes.forEach((node, index) => {
       if (node.type === "roleGroup") {
+        const syncableChildren = nodes
+          .filter((child) => child.parentId === node.id && child.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE)
+          .filter(shouldSyncCanvasNode)
+          .sort(sortCanvasNodes)
+        if (!syncableChildren.length) return;
+
         const directoryName = getCanvasDirectoryName(node.data?.label);
         const childNameCount = ensureDirectory(directoryName);
-        nodes
-          .filter((child) => child.parentId === node.id)
-          .sort(sortCanvasNodes)
-          .forEach((child, childIndex) => {
-            const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
-            result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(child);
-          });
+        syncableChildren.forEach((child, childIndex) => {
+          const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
+          result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(child);
+        });
         return;
       }
+
+      if (!shouldSyncCanvasNode(node)) return;
 
       const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
       const fileNameCount = ensureDirectory(directoryName);
@@ -1043,7 +1181,13 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
   const CARD_LAYOUT_GAP_X = 28;
   const CARD_LAYOUT_GAP_Y = 36;
   const INFO_COLUMN_GAP_X = 72;
-
+  const OUTLINE_GROUP_SETTINGS_CARD_WIDTH = 600;
+  const OUTLINE_GROUP_SETTINGS_CARD_HEIGHT = 420;
+  const OUTLINE_GROUP_HORIZONTAL_PADDING = 20;
+  const OUTLINE_GROUP_SETTINGS_TOP = 56;
+  const OUTLINE_GROUP_SETTINGS_BOTTOM_GAP = 24;
+  const OUTLINE_GROUP_SETTINGS_NODE_TYPE = "outlineSettingCard";
+  const OUTLINE_GROUP_DEFAULT_TOP = 56;
   const getCanvasNodeLayoutSize = (node: CustomNode) => {
     const measuredWidth = Number((node as any)?.measured?.width ?? (node as any)?.dimensions?.width ?? 0);
     const measuredHeight = Number((node as any)?.measured?.height ?? (node as any)?.dimensions?.height ?? 0);
@@ -1058,11 +1202,114 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     }
 
     const label = String(node.data?.label ?? "").trim();
+    if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) {
+      return { width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH, height: OUTLINE_GROUP_SETTINGS_CARD_HEIGHT };
+    }
     if (node.type === "settingCard" && label === "角色") return { width: 300, height: 450 };
     if (node.type === "outlineCard") return { width: 260, height: 260 };
     if (node.type === "settingCard") return { width: 260, height: 220 };
     if (node.type === "roleGroup") return { width: 340, height: 526 };
     return { width: 260, height: 220 };
+  };
+
+  const getOutlineGroupCardsTop = (hasSettingsNode: boolean) =>
+    hasSettingsNode
+      ? OUTLINE_GROUP_SETTINGS_TOP +
+        OUTLINE_GROUP_SETTINGS_CARD_HEIGHT +
+        OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
+      : OUTLINE_GROUP_DEFAULT_TOP;
+
+  const compactOutlineGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
+    if (!groupId) return currentNodes;
+
+    const groupNode = currentNodes.find((node) => node.id === groupId);
+    if (!groupNode) return currentNodes;
+
+    const hasSettingsNode = currentNodes.some(
+      (node) => node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
+    );
+    const outlineChildren = currentNodes
+      .filter((node) => node.parentId === groupId && node.type === "outlineCard")
+      .sort((a, b) => {
+        const ay = Number(a.position?.y ?? 0);
+        const by = Number(b.position?.y ?? 0);
+        if (ay !== by) return ay - by;
+        return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+      });
+
+    const cardWidth = 300;
+    const cardHeight = 260;
+    const gapX = 20;
+    const gapY = 24;
+    const cols = 3;
+    const groupPadding = OUTLINE_GROUP_HORIZONTAL_PADDING;
+    const groupPaddingTop = getOutlineGroupCardsTop(hasSettingsNode);
+    const minGroupWidth = hasSettingsNode
+      ? OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2
+      : 340;
+
+    const nextPositionById = new Map<string, { x: number; y: number }>();
+    outlineChildren.forEach((node, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      nextPositionById.set(node.id, {
+        x: groupPadding + col * (cardWidth + gapX),
+        y: groupPaddingTop + row * (cardHeight + gapY),
+      });
+    });
+
+    const totalCount = outlineChildren.length;
+    const rows = totalCount > 0 ? Math.ceil(totalCount / cols) : 0;
+    const colsUsed = totalCount > 0 ? Math.min(cols, totalCount) : 1;
+    const nextGroupWidth = Math.max(
+      minGroupWidth,
+      groupPadding * 2 + colsUsed * cardWidth + Math.max(0, colsUsed - 1) * gapX
+    );
+    const nextGroupHeight = hasSettingsNode
+      ? Math.max(
+          OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding,
+          totalCount > 0
+            ? groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
+            : OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding
+        )
+      : totalCount > 0
+        ? groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
+        : groupPaddingTop + groupPadding;
+
+    let changed = false;
+    const nextNodes = currentNodes.map((node) => {
+      if (node.id === groupId) {
+        const currentWidth = Number((node.style as any)?.width ?? 0);
+        const currentHeight = Number((node.style as any)?.height ?? 0);
+        if (currentWidth === nextGroupWidth && currentHeight === nextGroupHeight) {
+          return node;
+        }
+        changed = true;
+        return {
+          ...node,
+          style: {
+            ...(node.style ?? {}),
+            width: nextGroupWidth,
+            height: nextGroupHeight,
+          } as any,
+        };
+      }
+
+      const nextPosition = nextPositionById.get(node.id);
+      if (!nextPosition) return node;
+      const currentX = Number(node.position?.x ?? 0);
+      const currentY = Number(node.position?.y ?? 0);
+      if (currentX === nextPosition.x && currentY === nextPosition.y) {
+        return node;
+      }
+      changed = true;
+      return {
+        ...node,
+        position: nextPosition,
+      };
+    });
+
+    return changed ? nextNodes : currentNodes;
   };
 
   const getCanvasNodeRight = (node: CustomNode) => node.position.x + getCanvasNodeLayoutSize(node).width;
@@ -1080,6 +1327,22 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const leftX = Math.min(...topLevelNodes.map((node) => node.position.x));
     const maxBottom = Math.max(...topLevelNodes.map(getCanvasNodeBottom));
     return { x: leftX, y: maxBottom + CARD_LAYOUT_GAP_Y };
+  };
+
+  const getStandaloneNextRightInsertPosition = (currentNodes: CustomNode[]) => {
+    const topLevelNodes = currentNodes.filter((node) => !node.parentId);
+    if (!topLevelNodes.length) {
+      return { x: 360, y: 180 };
+    }
+
+    const rightmostNode = topLevelNodes.reduce((currentMax, node) =>
+      getCanvasNodeRight(node) > getCanvasNodeRight(currentMax) ? node : currentMax
+    );
+
+    return {
+      x: getCanvasNodeRight(rightmostNode) + CARD_LAYOUT_GAP_X,
+      y: rightmostNode.position.y,
+    };
   };
 
   const getLinkedCardPosition = (
@@ -1167,6 +1430,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const edgesRef = useRef<CustomEdge[]>(initialEdges);
     const hasIdeaRef = useRef(false);
     const layoutRequestIdRef = useRef(0);
+    const canvasNodeIdSeqRef = useRef(0);
     const [inspirationDrawId, setInspirationDrawId] = useState(initialInspirationDrawId);
     const [ideaContent, setIdeaContent] = useState("");
     const [ideaPlaceholderIndex, setIdeaPlaceholderIndex] = useState(0);
@@ -1185,15 +1449,23 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const [reqPanelDetail, setReqPanelDetail] = useState<string>("");
     const [reqPanelBodyDetail, setReqPanelBodyDetail] = useState<string>("");
     const [reqPanelFooterDetail, setReqPanelFooterDetail] = useState<string>("");
+    const [creationIdeaContent, setCreationIdeaContent] = useState<string>("");
+    const reqPanelDetailRef = useRef("");
+    const reqPanelBodyDetailRef = useRef("");
+    const reqPanelFooterDetailRef = useRef("");
+    const creationIdeaContentRef = useRef("");
     const [reqPanelAction, setReqPanelAction] = useState<ReqPanelAction | null>(null);
+    const [latestGeneratedNodeId, setLatestGeneratedNodeId] = useState("");
+    const latestGeneratedNodeIdRef = useRef("");
+    const locateHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const generatedWriteFilesRef = useRef<Record<string, string>>({});
+    const preparedContextFilesRef = useRef<Record<string, string> | undefined>(undefined);
     const [smartSuggestionsActive, setSmartSuggestionsActive] = useState(false);
     const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestionItem[]>([]);
     const [pendingSuggestionIdea, setPendingSuggestionIdea] = useState("");
-    const [dialogCardPreview, setDialogCardPreview] = useState<{
-      title: string;
-      content: string;
-    } | null>(null);
+    const [dialogCardPreviews, setDialogCardPreviews] = useState<DialogReferenceCard[]>([]);
     const [inputDockResetKey, setInputDockResetKey] = useState(0);
+    const [outlineCompletionCelebrationVisible, setOutlineCompletionCelebrationVisible] = useState(false);
     // 允许在“尚无节点”时也进入画布视图（例如 smart 空输入的推荐列表）
     const [forceCanvasView, setForceCanvasView] = useState(false);
     const [initWorkDialogShow, setInitWorkDialogShow] = useState(false);
@@ -1207,15 +1479,109 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     // 脑洞生成进度（0~100），用于卡片 loading UI
     const brainstormProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const brainstormProgressValueRef = useRef(0);
+    const loadingProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const loadingProgressValueRef = useRef(0);
+    const loadingProgressNodeIdsRef = useRef<string[]>([]);
+    const outlineCompletionCelebrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const outlineCompletionMessageRef = useRef<HTMLDivElement | null>(null);
+    const outlineCompletionConfettiFrameRef = useRef<number | null>(null);
     const handleGenerateInsRef = useRef<
       | ((
           requestType: "auto" | "manual",
           ideaOverride?: string,
           outputTypeOverride?: CanvasOutputType,
-          sourceNodeId?: string
+          sourceNodeId?: string,
+          filesOverride?: Record<string, string>
         ) => void | Promise<void>)
       | null
     >(null);
+
+    const getNextCanvasNodeId = useCallback((prefix: string) => {
+      canvasNodeIdSeqRef.current += 1;
+      return `${prefix}-${Date.now()}-${canvasNodeIdSeqRef.current}`;
+    }, []);
+
+    const launchOutlineCompletionConfetti = useCallback(() => {
+      const messageRect = outlineCompletionMessageRef.current?.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
+      const originX = messageRect
+        ? Math.min(1, Math.max(0, (messageRect.left + messageRect.width / 2) / viewportWidth))
+        : 0.5;
+      const originY = messageRect
+        ? Math.min(1, Math.max(0, (messageRect.top - 8) / viewportHeight))
+        : 0.8;
+
+      void import("canvas-confetti")
+        .then(({ default: confetti }) => {
+          confetti({
+            particleCount: 150,
+            angle: 90,
+            spread: 70,
+            startVelocity: 30,
+            decay: 0.9,
+            origin: { x: originX, y: originY },
+            colors: ["#ff5252", "#ff4081", "#7c4dff", "#64b5f6", "#4caf50"],
+            ticks: 200,
+            gravity: 0.8,
+          });
+        })
+        .catch(() => undefined);
+    }, []);
+
+    const triggerOutlineCompletionCelebration = useCallback(() => {
+      if (outlineCompletionCelebrationTimerRef.current) {
+        clearTimeout(outlineCompletionCelebrationTimerRef.current);
+        outlineCompletionCelebrationTimerRef.current = null;
+      }
+      setOutlineCompletionCelebrationVisible(true);
+      outlineCompletionCelebrationTimerRef.current = setTimeout(() => {
+        outlineCompletionCelebrationTimerRef.current = null;
+        setOutlineCompletionCelebrationVisible(false);
+      }, 5200);
+    }, [launchOutlineCompletionConfetti]);
+
+    useEffect(() => {
+      nodesRef.current = nodes;
+      edgesRef.current = edges;
+    }, [nodes, edges]);
+
+    useEffect(() => {
+      return () => {
+        if (outlineCompletionCelebrationTimerRef.current) {
+          clearTimeout(outlineCompletionCelebrationTimerRef.current);
+          outlineCompletionCelebrationTimerRef.current = null;
+        }
+        if (outlineCompletionConfettiFrameRef.current !== null) {
+          cancelAnimationFrame(outlineCompletionConfettiFrameRef.current);
+          outlineCompletionConfettiFrameRef.current = null;
+        }
+        if (loadingProgressTimerRef.current) {
+          clearInterval(loadingProgressTimerRef.current);
+          loadingProgressTimerRef.current = null;
+        }
+      };
+    }, []);
+
+    useEffect(() => {
+      if (!outlineCompletionCelebrationVisible) return;
+
+      const firstFrame = requestAnimationFrame(() => {
+        const secondFrame = requestAnimationFrame(() => {
+          outlineCompletionConfettiFrameRef.current = null;
+          launchOutlineCompletionConfetti();
+        });
+        outlineCompletionConfettiFrameRef.current = secondFrame;
+      });
+      outlineCompletionConfettiFrameRef.current = firstFrame;
+
+      return () => {
+        if (outlineCompletionConfettiFrameRef.current !== null) {
+          cancelAnimationFrame(outlineCompletionConfettiFrameRef.current);
+          outlineCompletionConfettiFrameRef.current = null;
+        }
+      };
+    }, [launchOutlineCompletionConfetti, outlineCompletionCelebrationVisible]);
 
     useEffect(() => {
       setNodes((prev) => {
@@ -1248,6 +1614,94 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         }
       }
     }, [setNodes]);
+
+    const stopLoadingProgress = useCallback((finalValue?: number) => {
+      if (loadingProgressTimerRef.current) {
+        clearInterval(loadingProgressTimerRef.current);
+        loadingProgressTimerRef.current = null;
+      }
+      if (typeof finalValue === "number") {
+        const ids = loadingProgressNodeIdsRef.current;
+        if (ids.length) {
+          setNodes((prev) =>
+            prev.map((node) =>
+              ids.includes(node.id)
+                ? { ...node, data: { ...(node.data as any), progress: finalValue } }
+                : node
+            )
+          );
+        }
+        loadingProgressValueRef.current = finalValue;
+      }
+      loadingProgressNodeIdsRef.current = [];
+    }, [setNodes]);
+
+    const startLoadingProgressForNodes = useCallback((nodeIds: string[]) => {
+      const normalizedIds = Array.from(
+        new Set(nodeIds.map((id) => getTextValue(id)).filter(Boolean))
+      );
+      if (!normalizedIds.length) return;
+
+      if (loadingProgressNodeIdsRef.current.length === 0) {
+        loadingProgressValueRef.current = 0;
+      }
+
+      loadingProgressNodeIdsRef.current = Array.from(
+        new Set([...loadingProgressNodeIdsRef.current, ...normalizedIds])
+      );
+
+      const currentProgress = loadingProgressValueRef.current;
+      if (currentProgress > 0) {
+        setNodes((prev) =>
+          prev.map((node) =>
+            loadingProgressNodeIdsRef.current.includes(node.id)
+              ? {
+                  ...node,
+                  data: {
+                    ...(node.data as any),
+                    progress: Math.max(
+                      currentProgress,
+                      Number((node.data as any)?.progress ?? 0)
+                    ),
+                  },
+                }
+              : node
+          )
+        );
+      }
+
+      if (!loadingProgressTimerRef.current) {
+        loadingProgressTimerRef.current = setInterval(() => {
+          const cur = loadingProgressValueRef.current;
+          const next = Math.min(92, cur + (cur < 30 ? 3 : cur < 70 ? 2 : 1));
+          if (next === cur) return;
+          loadingProgressValueRef.current = next;
+          const ids = loadingProgressNodeIdsRef.current;
+          if (!ids.length) return;
+          setNodes((prev) =>
+            prev.map((node) =>
+              ids.includes(node.id)
+                ? { ...node, data: { ...(node.data as any), progress: next } }
+                : node
+            )
+          );
+        }, 120);
+      }
+    }, [setNodes]);
+
+    const finishLoadingProgressForNode = useCallback((nodeId?: string, finalValue = 100) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      if (!normalizedNodeId) return;
+
+      loadingProgressNodeIdsRef.current = loadingProgressNodeIdsRef.current.filter(
+        (id) => id !== normalizedNodeId
+      );
+      if (!loadingProgressNodeIdsRef.current.length && loadingProgressTimerRef.current) {
+        clearInterval(loadingProgressTimerRef.current);
+        loadingProgressTimerRef.current = null;
+        loadingProgressValueRef.current = finalValue;
+      }
+    }, []);
 
     useEffect(() => {
       const timer = window.setInterval(() => {
@@ -1311,7 +1765,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const outputButtonLabel = useMemo(
       () =>
         canvasOutputType === "auto"
-          ? "脑洞"
+          ? "自动"
           : OUTPUT_TYPE_OPTIONS.find((item) => item.key === canvasOutputType)?.label ?? "自动",
       [canvasOutputType]
     );
@@ -1325,9 +1779,363 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       setSettingsPopoverOpen(true);
     }, []);
 
+    const syncReqPanelTextRefs = useCallback((
+      detail: string,
+      body: string,
+      footer: string
+    ) => {
+      reqPanelDetailRef.current = detail;
+      reqPanelBodyDetailRef.current = body;
+      reqPanelFooterDetailRef.current = footer;
+      setReqPanelDetail(detail);
+      setReqPanelBodyDetail(body);
+      setReqPanelFooterDetail(footer);
+    }, []);
+
+    const resetReqPanelTextRefs = useCallback(() => {
+      syncReqPanelTextRefs("", "", "");
+    }, [syncReqPanelTextRefs]);
+
+    const syncCreationIdeaContent = useCallback((content: string) => {
+      const normalizedContent = content.trim();
+      creationIdeaContentRef.current = normalizedContent;
+      setCreationIdeaContent(normalizedContent);
+    }, []);
+
+    const mergeCreationIdeaIntoFiles = useCallback((files?: Record<string, string>) => {
+      const latestCreationIdea =
+        creationIdeaContentRef.current.trim() || creationIdeaContent.trim();
+      if (!latestCreationIdea) return files;
+      return {
+        ...(files || {}),
+        "/创作想法.md": latestCreationIdea,
+      };
+    }, [creationIdeaContent]);
+
+    const syncReqPanelWithCreationIdea = useCallback((
+      detail: string,
+      body: string,
+      footer: string,
+      nextCreationIdea?: string
+    ) => {
+      const resolvedCreationIdea =
+        typeof nextCreationIdea === "string"
+          ? nextCreationIdea.trim()
+          : (creationIdeaContentRef.current.trim() || creationIdeaContent.trim());
+      syncReqPanelTextRefs(detail, resolvedCreationIdea || body, footer);
+    }, [creationIdeaContent, syncReqPanelTextRefs]);
+
+    const resetGenerationSettings = useCallback(() => {
+      setIdeaContent("");
+      setGenerateMode("smart");
+      setCanvasModeCategory("smart");
+      setSettingsPopoverOpen(false);
+      setActiveSettingsSection("mode");
+      setCanvasOutputType("auto");
+      setCanvasModelType("max");
+    }, []);
+
+    const { zoomIn, zoomOut, setCenter, getViewport, getNode } = useReactFlow();
+
+    const rememberLatestGeneratedNode = useCallback((nodeId?: string) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      latestGeneratedNodeIdRef.current = normalizedNodeId;
+      setLatestGeneratedNodeId(normalizedNodeId);
+    }, []);
+
+    const buildDialogReferenceFilePath = useCallback((
+      filePath: string,
+      label: string,
+      title: string,
+      nodeId: string
+    ) => {
+      const normalizedFilePath = getTextValue(filePath).trim();
+      if (normalizedFilePath) {
+        return normalizedFilePath.startsWith("/") ? normalizedFilePath : `/${normalizedFilePath}`;
+      }
+      const safeLabel = (label || "引用卡片").replace(/[\\:*?"<>|]/g, "-").trim() || "引用卡片";
+      const safeTitle = (title || safeLabel).replace(/[\\:*?"<>|]/g, "-").trim() || safeLabel;
+      return `/[${safeLabel}]/${safeTitle}-${nodeId}.md`;
+    }, []);
+
+    const mergeFileRecords = useCallback((
+      ...sources: Array<Record<string, string> | undefined>
+    ) => {
+      const merged: Record<string, string> = {};
+      sources.forEach((source) => {
+        if (!source) return;
+        Object.entries(source).forEach(([filePath, fileContent]) => {
+          const normalizedPath = getTextValue(filePath).trim();
+          if (!normalizedPath) return;
+          merged[normalizedPath] = getTextValue(fileContent);
+        });
+      });
+      return Object.keys(merged).length > 0 ? merged : undefined;
+    }, []);
+
+    const persistGeneratedWriteFiles = useCallback((writeFiles: CanvasWriteFileCall[]) => {
+      if (!writeFiles.length) return;
+      writeFiles.forEach((item) => {
+        const filePath = getTextValue(item.filePath).trim();
+        if (!filePath) return;
+        generatedWriteFilesRef.current[filePath] = getTextValue(item.content);
+      });
+    }, []);
+
+    const getDialogReferenceSnapshot = useCallback((nodeId: string) => {
+      const currentNode = nodesRef.current.find((node) => node.id === nodeId);
+      if (!currentNode) return null;
+
+      const label = getTextValue(currentNode.data?.label) || "卡片";
+      const title =
+        getTextValue((currentNode.data as any)?.title) ||
+        getTextValue(currentNode.data?.inspirationTheme) ||
+        label;
+      const filePath = buildDialogReferenceFilePath(
+        getTextValue((currentNode.data as any)?.filePath),
+        label,
+        title,
+        nodeId
+      );
+      const content =
+        getTextValue(currentNode.data?.content) ||
+        generatedWriteFilesRef.current[filePath] ||
+        generatedWriteFilesRef.current[filePath.replace(/^\//, "")] ||
+        "";
+
+      return {
+        nodeId,
+        label,
+        title,
+        filePath,
+        content,
+      };
+    }, [buildDialogReferenceFilePath]);
+
+    const getDialogReferenceFiles = useCallback((items: DialogReferenceCard[]) => {
+      const files: Record<string, string> = {};
+      items.forEach((item) => {
+        const snapshot = getDialogReferenceSnapshot(item.nodeId);
+        if (!snapshot?.filePath || !snapshot.content.trim()) return;
+        files[snapshot.filePath] = snapshot.content;
+      });
+      return Object.keys(files).length > 0 ? files : undefined;
+    }, [getDialogReferenceSnapshot]);
+
+    const getAbsoluteNodePosition = useCallback((nodeId: string) => {
+      const latestNodes = nodesRef.current;
+      const nodeMap = new Map(latestNodes.map((node) => [node.id, node]));
+      const visit = (currentNodeId: string): { x: number; y: number } => {
+        const currentNode = nodeMap.get(currentNodeId);
+        if (!currentNode) return { x: 0, y: 0 };
+        const parentPosition = currentNode.parentId
+          ? visit(currentNode.parentId)
+          : { x: 0, y: 0 };
+        return {
+          x: parentPosition.x + (currentNode.position?.x ?? 0),
+          y: parentPosition.y + (currentNode.position?.y ?? 0),
+        };
+      };
+      return visit(nodeId);
+    }, []);
+
+    const resolveLocateTargetNodeId = useCallback((nodeId: string) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      if (!normalizedNodeId) return "";
+
+      const latestNodes = nodesRef.current;
+      const targetNode = latestNodes.find((node) => node.id === normalizedNodeId);
+      if (!targetNode) return normalizedNodeId;
+
+      const parentGroupId =
+        getTextValue(targetNode.parentId) ||
+        getTextValue((targetNode.data as any)?.roleGroupId) ||
+        getTextValue((targetNode.data as any)?.outlineGroupId);
+      if (!parentGroupId) return normalizedNodeId;
+
+      const parentGroupNode = latestNodes.find(
+        (node) => node.id === parentGroupId && node.type === "roleGroup"
+      );
+      return parentGroupNode?.id || normalizedNodeId;
+    }, []);
+
+    const focusCanvasNode = useCallback((
+      nodeId: string,
+      options?: { zoom?: number; duration?: number }
+    ) => {
+      const normalizedNodeId = resolveLocateTargetNodeId(nodeId);
+      if (!normalizedNodeId) return;
+
+      const latestNodes = nodesRef.current;
+      const targetNode = latestNodes.find((node) => node.id === normalizedNodeId);
+      const internalNode = getNode(normalizedNodeId) as any;
+      if (!targetNode && !internalNode) return;
+
+      const absolutePosition =
+        internalNode?.internals?.positionAbsolute ||
+        internalNode?.positionAbsolute ||
+        getAbsoluteNodePosition(normalizedNodeId);
+      const width = Number(
+        internalNode?.measured?.width ??
+        internalNode?.width ??
+        (targetNode as any)?.measured?.width ??
+        (targetNode as any)?.style?.width ??
+        300
+      );
+      const height = Number(
+        internalNode?.measured?.height ??
+        internalNode?.height ??
+        (targetNode as any)?.measured?.height ??
+        (targetNode as any)?.style?.height ??
+        240
+      );
+
+      setNodes((prev) =>
+        prev.map((node) =>
+          node.id === normalizedNodeId
+            ? { ...node, data: { ...node.data, highlighted: true } as any }
+            : node
+        )
+      );
+
+      if (locateHighlightTimerRef.current) {
+        clearTimeout(locateHighlightTimerRef.current);
+      }
+      locateHighlightTimerRef.current = setTimeout(() => {
+        locateHighlightTimerRef.current = null;
+        setNodes((prev) =>
+          prev.map((node) =>
+            node.id === normalizedNodeId
+              ? { ...node, data: { ...node.data, highlighted: false } as any }
+              : node
+          )
+        );
+      }, 1800);
+
+      void setCenter(
+        (absolutePosition?.x ?? 0) + width / 2,
+        (absolutePosition?.y ?? 0) + height / 2,
+        { zoom: options?.zoom ?? 0.95, duration: options?.duration ?? 500 } as any
+      );
+    }, [getAbsoluteNodePosition, getNode, resolveLocateTargetNodeId, setCenter, setNodes]);
+
+    const focusNewlyCreatedBlankNode = useCallback((nodeId?: string) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      if (!normalizedNodeId) return;
+
+      rememberLatestGeneratedNode(normalizedNodeId);
+      window.setTimeout(() => {
+        focusCanvasNode(normalizedNodeId, { zoom: 0.95, duration: 500 });
+      }, 0);
+    }, [focusCanvasNode, rememberLatestGeneratedNode]);
+
+    const connectReferenceNodesToTargets = useCallback((
+      sourceNodeIds: string[],
+      targetNodeIds: string[]
+    ) => {
+      const normalizedSourceIds = Array.from(
+        new Set(sourceNodeIds.map((id) => getTextValue(id)).filter(Boolean))
+      );
+      const normalizedTargetIds = Array.from(
+        new Set(targetNodeIds.map((id) => getTextValue(id)).filter(Boolean))
+      );
+      if (!normalizedSourceIds.length || !normalizedTargetIds.length) return;
+
+      setEdges((prev) => {
+        const existingPairs = new Set(
+          (prev as CustomEdge[]).map((edge) => `${edge.source}->${edge.target}`)
+        );
+        const next = [...prev] as CustomEdge[];
+        let changed = false;
+
+        normalizedSourceIds.forEach((sourceId) => {
+          normalizedTargetIds.forEach((targetId) => {
+            if (!sourceId || !targetId || sourceId === targetId) return;
+            const pairKey = `${sourceId}->${targetId}`;
+            if (existingPairs.has(pairKey)) return;
+            existingPairs.add(pairKey);
+            next.push(createDirectedCanvasEdge(sourceId, targetId));
+            changed = true;
+          });
+        });
+
+        if (changed) {
+          edgesRef.current = next;
+          return next;
+        }
+        return prev;
+      });
+    }, [setEdges]);
+
+    const resolveContextReferenceNodeId = useCallback((nodeId: string) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      if (!normalizedNodeId) return "";
+
+      const latestNodes = nodesRef.current;
+      const latestEdges = edgesRef.current as CustomEdge[];
+      const currentNode = latestNodes.find((node) => node.id === normalizedNodeId);
+      if (!currentNode) return normalizedNodeId;
+
+      if (currentNode.parentId) {
+        const groupSourceId = latestEdges.find((edge) => edge.target === currentNode.parentId)?.source;
+        if (groupSourceId) return groupSourceId;
+      }
+
+      const directParentId = latestEdges.find((edge) => edge.target === normalizedNodeId)?.source;
+      return directParentId || normalizedNodeId;
+    }, []);
+
+    const appendDialogReferenceByNodeId = useCallback((nodeId: string) => {
+      const snapshot = getDialogReferenceSnapshot(nodeId);
+      if (!snapshot) return null;
+
+      let added = false;
+      setDialogCardPreviews((prev) => {
+        if (prev.some((item) => item.nodeId === nodeId)) return prev;
+        added = true;
+        return [
+          ...prev,
+          {
+            nodeId,
+            title: `${snapshot.label}卡片`,
+            content: snapshot.content,
+            filePath: snapshot.filePath,
+            label: snapshot.label,
+          },
+        ];
+      });
+
+      return { snapshot, added };
+    }, [getDialogReferenceSnapshot]);
+
+    const appendDialogReferencesByNodeIds = useCallback((nodeIds: string[]) => {
+      let addedCount = 0;
+      let duplicateCount = 0;
+      let firstSnapshot: ReturnType<typeof getDialogReferenceSnapshot> | null = null;
+
+      nodeIds.forEach((nodeId) => {
+        const appended = appendDialogReferenceByNodeId(nodeId);
+        if (!appended) return;
+        if (!firstSnapshot) {
+          firstSnapshot = appended.snapshot;
+        }
+        if (appended.added) {
+          addedCount += 1;
+        } else {
+          duplicateCount += 1;
+        }
+      });
+
+      return { addedCount, duplicateCount, firstSnapshot };
+    }, [appendDialogReferenceByNodeId, getDialogReferenceSnapshot]);
+
     useEffect(() => {
       return () => {
         stopBrainstormProgress();
+        if (locateHighlightTimerRef.current) {
+          clearTimeout(locateHighlightTimerRef.current);
+          locateHighlightTimerRef.current = null;
+        }
       };
     }, [stopBrainstormProgress]);
 
@@ -1349,7 +2157,6 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     }, [tree]);
 
   
-    const { zoomIn, zoomOut, setCenter, getViewport } = useReactFlow();
     const { layout: dagreLayout } = useDagreLayout();
   
     const msg = useCallback(
@@ -1557,7 +2364,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       (nodeId: string, options?: { skipLayout?: boolean }) => {
         if (nodeId === "1") return;
         const toDelete = collectChildren(nodeId);
-        setNodes((nds) => nds.filter((n) => !toDelete.has(n.id)));
+        const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+        const outlineGroupId =
+          targetNode?.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
+            ? getTextValue(targetNode.parentId)
+            : "";
+        setNodes((nds) => {
+          const filtered = nds.filter((n) => !toDelete.has(n.id));
+          const nextNodes = outlineGroupId
+            ? compactOutlineGroupNodes(filtered as CustomNode[], outlineGroupId)
+            : filtered;
+          nodesRef.current = nextNodes as CustomNode[];
+          return nextNodes;
+        });
         setEdges((eds) =>
           (eds as CustomEdge[]).filter(
             (e) => !toDelete.has(e.source) && !toDelete.has(e.target)
@@ -2006,31 +2825,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const focusRoleGroup = useCallback(
       (groupId: string) => {
-        const groupNode = nodes.find((node) => node.id === groupId);
-        if (!groupNode) return;
-        const width = Number((groupNode as any)?.style?.width ?? 360);
-        const height = Number((groupNode as any)?.style?.height ?? 520);
-        const centerX = (groupNode.position?.x ?? 0) + width / 2;
-        const centerY = (groupNode.position?.y ?? 0) + height / 2;
-        setNodes((prev) =>
-          prev.map((node) =>
-            node.id === groupId
-              ? { ...node, data: { ...node.data, highlighted: true } as any }
-              : node
-          )
-        );
-        window.setTimeout(() => {
-          setNodes((prev) =>
-            prev.map((node) =>
-              node.id === groupId
-                ? { ...node, data: { ...node.data, highlighted: false } as any }
-                : node
-            )
-          );
-        }, 1800);
-        void setCenter(centerX, centerY, { zoom: 0.9, duration: 500 } as any);
+        focusCanvasNode(groupId, { zoom: 0.9, duration: 500 });
       },
-      [nodes, setCenter, setNodes]
+      [focusCanvasNode]
     );
 
     const appendRoleCardsToGroup = useCallback(
@@ -2051,7 +2848,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const source = latestNodes.find((node) => node.id === sourceNodeId);
         if (!source || !roleCards.length) return { groupId: "", roleNodeIds: [] as string[] };
 
-        const groupId = source.parentId || `role-group-${sourceNodeId}`;
+        const isSourceRoleGroup = source.type === "roleGroup";
+        const groupId = isSourceRoleGroup ? source.id : source.parentId || `role-group-${sourceNodeId}`;
         const roleCardWidth = 300;
         const roleCardHeight = 450;
         const gapX = 20;
@@ -2061,20 +2859,25 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const groupPadding = 20;
         const minGroupWidth = 340;
         const existingGroup = latestNodes.find((node) => node.id === groupId);
-        const groupSourceId =
-          source.parentId
+        const groupSourceId = isSourceRoleGroup
+          ? (latestEdges.find((edge) => edge.target === groupId)?.source ?? "")
+          : source.parentId
             ? (latestEdges.find((edge) => edge.target === groupId)?.source ?? sourceNodeId)
             : sourceNodeId;
+        const groupSourceNode =
+          (groupSourceId ? latestNodes.find((node) => node.id === groupSourceId) : undefined) ?? source;
         const groupPosition = existingGroup
           ? existingGroup.position
-          : getLinkedCardPosition(groupSourceId, latestNodes, latestEdges, "attribute");
+          : getLinkedCardPosition(groupSourceId || sourceNodeId, latestNodes, latestEdges, "attribute");
         const groupX = groupPosition.x;
         const groupY = groupPosition.y;
-        const roleNodeIds = roleCards.map((_, index) => `role-${Date.now()}-${index}`);
+        const roleNodeIds = roleCards.map(() => getNextCanvasNodeId("role"));
 
         setNodes((prev) => {
           const currentSource = prev.find((node) => node.id === sourceNodeId);
-          if (!currentSource) return prev;
+          const currentGroupSource =
+            (groupSourceId ? prev.find((node) => node.id === groupSourceId) : undefined) ?? currentSource;
+          if (!currentSource || !currentGroupSource) return prev;
           const existingRoles = prev.filter((node) => (node.data as any)?.roleGroupId === groupId);
           const startIndex = existingRoles.length;
           const roleNodes = roleCards.map((item, index) => {
@@ -2103,11 +2906,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 expandable: true,
                 allowTitleEdit: true,
                 allowImageUpload: true,
-                inspirationWord: currentSource.data?.inspirationWord,
-                inspirationTheme: currentSource.data?.inspirationTheme,
-                shortSummary: currentSource.data?.shortSummary,
-                storySetting: currentSource.data?.storySetting,
-                inspirationDrawId: currentSource.data?.inspirationDrawId ?? inspirationDrawId,
+                inspirationWord: currentGroupSource.data?.inspirationWord,
+                inspirationTheme: currentGroupSource.data?.inspirationTheme,
+                shortSummary: currentGroupSource.data?.shortSummary,
+                storySetting: currentGroupSource.data?.storySetting,
+                inspirationDrawId: currentGroupSource.data?.inspirationDrawId ?? inspirationDrawId,
                 skipAutoStream: item.skipAutoStream ?? false,
               } as any,
             } as CustomNode;
@@ -2156,7 +2959,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         setEdges((prev) => {
           const next = [...prev];
           const groupEdgeId = `e${groupSourceId}-${groupId}`;
-          if (!next.some((edge) => edge.id === groupEdgeId)) {
+          if (groupSourceId && !next.some((edge) => edge.id === groupEdgeId)) {
             next.push({
               id: groupEdgeId,
               source: groupSourceId,
@@ -2172,51 +2975,106 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
         return { groupId, roleNodeIds };
       },
-      [hasIdea, inspirationDrawId, setNodes, setEdges]
+      [getNextCanvasNodeId, hasIdea, inspirationDrawId, setNodes, setEdges]
     );
 
     const appendOutlineSettingsToGroup = useCallback(
-      (sourceNodeId: string) => {
-        if (!nodes.find((node) => node.id === sourceNodeId)) return { groupId: "" };
+      (
+        sourceNodeId: string,
+        options?: {
+          files?: Record<string, string>;
+          title?: string;
+        }
+      ) => {
+        const latestNodes = nodesRef.current;
+        const latestEdges = edgesRef.current as CustomEdge[];
+        if (!latestNodes.find((node) => node.id === sourceNodeId)) return { groupId: "", settingsNodeId: "" };
 
         const groupId = `outline-group-${sourceNodeId}`;
-        const groupWidth = 340;
-        const groupHeight = 180;
-        const existingGroup = nodes.find((node) => node.id === groupId);
+        const settingsNodeId = `${groupId}-settings`;
+        const groupWidth = OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2;
+        const groupHeight =
+          OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + OUTLINE_GROUP_HORIZONTAL_PADDING;
+        const existingGroup = latestNodes.find((node) => node.id === groupId);
+        const existingSettingsNode = latestNodes.find((node) => node.id === settingsNodeId);
         const groupPosition = existingGroup
           ? existingGroup.position
-          : getLinkedCardPosition(sourceNodeId, nodes, edges as CustomEdge[], "attribute");
+          : getLinkedCardPosition(sourceNodeId, latestNodes, latestEdges, "attribute");
 
-        const outlineGroupNode: CustomNode | null = existingGroup
-          ? null
-          : ({
+        setNodes((prev) => {
+          const next = [...prev];
+          const groupIndex = next.findIndex((node) => node.id === groupId);
+          if (groupIndex < 0) {
+            next.push({
               id: groupId,
               type: "roleGroup",
               position: groupPosition,
               draggable: hasIdea,
               dragHandle: ".role-group-drag-handle",
               selectable: true,
-              data: { label: "大纲", outlineSourceId: sourceNodeId, openOutlinePopover: true } as any,
+              data: {
+                label: "大纲",
+                outlineSourceId: sourceNodeId,
+                files: options?.files,
+                title: options?.title,
+              } as any,
               style: { width: groupWidth, height: groupHeight, zIndex: 0 } as any,
             } as any);
-
-        setNodes((prev) => {
-          const next = [...prev];
-          if (!existingGroup && outlineGroupNode) {
-            next.push(outlineGroupNode);
           } else {
-            const idx = next.findIndex((node) => node.id === groupId);
-            if (idx >= 0) {
-              next[idx] = {
-                ...next[idx],
-                data: {
-                  ...next[idx].data,
-                  outlineSourceId: sourceNodeId,
-                  openOutlinePopover: true,
-                } as any,
-              };
-            }
+            next[groupIndex] = {
+              ...next[groupIndex],
+              data: {
+                ...next[groupIndex].data,
+                outlineSourceId: sourceNodeId,
+                files: options?.files,
+                title: options?.title,
+              } as any,
+              style: {
+                ...(next[groupIndex].style ?? {}),
+                width: Math.max(Number((next[groupIndex].style as any)?.width ?? 0), groupWidth),
+                height: Math.max(Number((next[groupIndex].style as any)?.height ?? 0), groupHeight),
+              } as any,
+            };
           }
+
+          const settingsIndex = next.findIndex((node) => node.id === settingsNodeId);
+          const nextSettingsData = {
+            ...(existingSettingsNode?.data ?? {}),
+            label: "大纲设置",
+            outlineSourceId: sourceNodeId,
+            files: options?.files,
+            title: options?.title,
+            outlinePerspective: getTextValue((existingSettingsNode?.data as any)?.outlinePerspective),
+            outlineArticleType: getTextValue((existingSettingsNode?.data as any)?.outlineArticleType),
+            outlineChapterTag:
+              getTextValue((existingSettingsNode?.data as any)?.outlineChapterTag) || "10章",
+            outlineStructure: getTextValue((existingSettingsNode?.data as any)?.outlineStructure),
+          } as any;
+
+          if (settingsIndex < 0) {
+            next.push({
+              id: settingsNodeId,
+              type: OUTLINE_GROUP_SETTINGS_NODE_TYPE,
+              parentId: groupId,
+              extent: "parent" as any,
+              position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
+              draggable: false,
+              selectable: true,
+              data: nextSettingsData,
+            } as CustomNode);
+          } else {
+            next[settingsIndex] = {
+              ...next[settingsIndex],
+              parentId: groupId,
+              extent: "parent" as any,
+              position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
+              draggable: false,
+              selectable: true,
+              data: nextSettingsData,
+            } as CustomNode;
+          }
+
+          nodesRef.current = next;
           return next;
         });
 
@@ -2232,12 +3090,115 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               animated: true,
             });
           }
+          edgesRef.current = next;
           return next;
         });
         setCanvasReady(true);
-        return { groupId };
+        return { groupId, settingsNodeId };
       },
-      [nodes, edges, hasIdea, setEdges, setNodes]
+      [hasIdea, setEdges, setNodes]
+    );
+
+    const getDraftCardSize = useCallback(
+      (key: CanvasCardKey) => {
+        if (key === "summary" || key === "info") {
+          return { width: 600, height: 900 };
+        }
+        if (key === "role" || key === "brainstorm") {
+          return { width: 300, height: 450 };
+        }
+        return { width: 300, height: 260 };
+      },
+      []
+    );
+
+    const getViewportCenteredCanvasPosition = useCallback(
+      (width: number, height: number) => {
+        const containerEl = containerRef.current;
+        if (!containerEl) {
+          return getStandaloneNextRowPosition(nodesRef.current);
+        }
+
+        const viewport = getViewport();
+        const { clientWidth, clientHeight } = containerEl;
+        const centerX = (-viewport.x + clientWidth / 2) / viewport.zoom;
+        const centerY = (-viewport.y + clientHeight / 2) / viewport.zoom;
+
+        return {
+          x: centerX - width / 2,
+          y: centerY - height / 2,
+        };
+      },
+      [getViewport]
+    );
+
+    const isBlankDraftNode = useCallback((node?: CustomNode | null) => {
+      if (!node) return false;
+      const nodeData = (node.data ?? {}) as any;
+      return Boolean(nodeData.isBlankDraft ?? nodeData.isBlankBrainstormDraft);
+    }, []);
+
+    const createStandaloneOutlineSettingsGroup = useCallback(
+      (options?: {
+        files?: Record<string, string>;
+        title?: string;
+        insertPosition?: "center" | "right";
+      }) => {
+        const groupId = getNextCanvasNodeId("outline-group");
+        const settingsNodeId = `${groupId}-settings`;
+        const groupWidth = OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2;
+        const groupHeight =
+          OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + OUTLINE_GROUP_HORIZONTAL_PADDING;
+        const groupPosition = options?.insertPosition === "right"
+          ? getStandaloneNextRightInsertPosition(nodesRef.current)
+          : getViewportCenteredCanvasPosition(groupWidth, groupHeight);
+
+        setCanvasReady(true);
+        setNodes((prev) => {
+          const next = [
+            ...prev,
+            {
+              id: groupId,
+              type: "roleGroup",
+              position: groupPosition,
+              draggable: hasIdea,
+              dragHandle: ".role-group-drag-handle",
+              selectable: true,
+              data: {
+                label: "大纲",
+                outlineSourceId: "",
+                files: options?.files,
+                title: options?.title,
+              } as any,
+              style: { width: groupWidth, height: groupHeight, zIndex: 0 } as any,
+            } as any,
+            {
+              id: settingsNodeId,
+              type: OUTLINE_GROUP_SETTINGS_NODE_TYPE,
+              parentId: groupId,
+              extent: "parent" as any,
+              position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
+              draggable: false,
+              selectable: true,
+              data: {
+                label: "大纲设置",
+                outlineSourceId: "",
+                files: options?.files,
+                title: options?.title,
+                outlinePerspective: "",
+                outlineArticleType: "",
+                outlineChapterTag: "10章",
+                outlineStructure: "",
+              } as any,
+            } as CustomNode,
+          ];
+          nodesRef.current = next;
+          return next;
+        });
+
+        return { groupId, settingsNodeId };
+      },
+      [getNextCanvasNodeId, getViewportCenteredCanvasPosition, hasIdea, setNodes]
     );
 
     const appendOutlineCardsToGroup = useCallback(
@@ -2264,14 +3225,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const gapX = 20;
         const gapY = 24;
         const cols = 3;
-        const groupPaddingTop = 56;
-        const groupPadding = 20;
-        const minGroupWidth = 340;
+        const hasSettingsNode = latestNodes.some(
+          (node) => node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
+        );
+        const groupPaddingTop = getOutlineGroupCardsTop(hasSettingsNode);
+        const groupPadding = OUTLINE_GROUP_HORIZONTAL_PADDING;
+        const minGroupWidth = hasSettingsNode
+          ? OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2
+          : 340;
         const existingGroup = latestNodes.find((node) => node.id === groupId);
         const groupPosition = existingGroup
           ? existingGroup.position
           : getLinkedCardPosition(sourceNodeId, latestNodes, latestEdges, "attribute");
-        const outlineNodeIds = outlineCards.map((_, index) => `outline-group-card-${Date.now()}-${index}`);
+        const outlineNodeIds = outlineCards.map(() => getNextCanvasNodeId("outline-group-card"));
 
         setNodes((prev) => {
           const currentSource = prev.find((node) => node.id === sourceNodeId);
@@ -2320,8 +3286,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             minGroupWidth,
             groupPadding * 2 + colsUsed * cardWidth + Math.max(0, colsUsed - 1) * gapX
           );
-          const nextGroupHeight =
-            groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
+          const nextGroupHeight = hasSettingsNode
+            ? Math.max(
+                OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding,
+                groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
+              )
+            : groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
           const next = [...prev];
           const hasGroup = next.some((node) => node.id === groupId);
           if (!hasGroup) {
@@ -2372,7 +3342,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         setCanvasReady(true);
         return { groupId, outlineNodeIds };
       },
-      [hasIdea, inspirationDrawId, setEdges, setNodes]
+      [getNextCanvasNodeId, hasIdea, inspirationDrawId, setEdges, setNodes]
     );
 
     const createCardByKey = useCallback(
@@ -2389,6 +3359,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           allowImageUpload?: boolean;
           autoEdit?: boolean;
           skipAutoStream?: boolean;
+          insertPosition?: "center" | "right";
         }
       ) => {
         const typeToCreate: CustomNode["type"] =
@@ -2408,13 +3379,24 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   ? "信息"
                   : "大纲";
 
-        const idToCreate = `${typeToCreate}-${Date.now()}`;
+        const idToCreate = getNextCanvasNodeId(typeToCreate);
 
         setCanvasReady(true);
         setNodes((prev) => {
-          const { x, y } = getStandaloneNextRowPosition(prev);
-          const isBlankBrainstormDraft =
-            key === "brainstorm" && !options?.title && !options?.content && !options?.image;
+          const isBlankDraft =
+            !options?.title &&
+            !options?.content &&
+            !options?.image &&
+            !options?.filePath &&
+            !options?.fromApi;
+          const { x, y } = isBlankDraft
+            ? options?.insertPosition === "right"
+              ? getStandaloneNextRightInsertPosition(prev)
+              : getViewportCenteredCanvasPosition(
+                  getDraftCardSize(key).width,
+                  getDraftCardSize(key).height
+                )
+            : getStandaloneNextRowPosition(prev);
           const newNode: CustomNode = {
             id: idToCreate,
             type: typeToCreate,
@@ -2432,7 +3414,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               allowTitleEdit: options?.allowTitleEdit ?? true,
               allowImageUpload: options?.allowImageUpload ?? true,
               autoEdit: options?.autoEdit ?? true,
-              isBlankBrainstormDraft,
+              isBlankDraft,
+              isBlankBrainstormDraft: key === "brainstorm" && isBlankDraft,
               brainstormAiMode: false,
               pendingGenerate: false,
               highlighted: false,
@@ -2443,28 +3426,44 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         });
         return idToCreate;
       },
-      [inspirationDrawId, setNodes]
+      [getDraftCardSize, getNextCanvasNodeId, getViewportCenteredCanvasPosition, inspirationDrawId, setNodes]
     );
 
     const handlePrepareBrainstormCard = useCallback(
       (nodeId: string) => {
-        const currentNode = nodes.find((node) => node.id === nodeId);
+        const currentNode = nodesRef.current.find((node) => node.id === nodeId);
         const containerEl = containerRef.current;
         if (!currentNode || !containerEl) return;
 
+        const normalizedLabel = getTextValue((currentNode.data as any)?.label);
+        const outputType =
+          normalizedLabel === "角色"
+            ? "role"
+            : normalizedLabel === "故事梗概" || normalizedLabel === "梗概"
+              ? "summary"
+              : normalizedLabel === "信息"
+                ? "info"
+                : "brainstorm";
+        const promptSuffix =
+          outputType === "role"
+            ? "角色卡"
+            : outputType === "summary"
+              ? "梗概卡"
+              : outputType === "info"
+                ? "信息卡"
+                : "脑洞";
         const viewport = getViewport();
         const containerRect = containerEl.getBoundingClientRect();
         const dockRect = dockRef.current?.getBoundingClientRect();
-        const cardWidth = 300;
-        const cardHeight = 450;
+        const { width: cardWidth, height: cardHeight } = getDraftCardSize(outputType);
         const gapToDock = 24;
         const dockTop = dockRect?.top ?? (containerRect.top + containerRect.height - 180);
         const targetScreenTop = Math.max(containerRect.top + 24, dockTop - cardHeight - gapToDock);
         const targetScreenLeft = containerRect.left + (containerRect.width - cardWidth) / 2;
         const targetX = (targetScreenLeft - containerRect.left - viewport.x) / viewport.zoom;
         const targetY = (targetScreenTop - containerRect.top - viewport.y) / viewport.zoom;
-        const title = getTextValue((currentNode.data as any)?.title) || "中元节";
-        const brainstormPrompt = `帮我生成${title}脑洞`;
+        const title = getTextValue((currentNode.data as any)?.title) || "";
+        const brainstormPrompt = `帮我生成${title}${promptSuffix}`;
 
         setNodes((prev) =>
           prev.map((node) =>
@@ -2490,9 +3489,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           zoom: 0.9,
           duration: 500,
         } as any);
-        void handleGenerateInsRef.current?.("manual", brainstormPrompt, "brainstorm", nodeId);
+        void handleGenerateInsRef.current?.("manual", brainstormPrompt, outputType, nodeId);
       },
-      [getViewport, nodes, setCenter, setNodes]
+      [getDraftCardSize, getViewport, setCenter, setNodes]
     );
 
     const createLoadingCardByKey = useCallback((key: CanvasCardKey) => {
@@ -2696,6 +3695,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         allowTitleEdit?: boolean;
         allowImageUpload?: boolean;
         autoEdit?: boolean;
+        isBlankDraft?: boolean;
         isBlankBrainstormDraft?: boolean;
         brainstormAiMode?: boolean;
         pendingGenerate?: boolean;
@@ -2740,6 +3740,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   allowTitleEdit: options?.allowTitleEdit ?? true,
                   allowImageUpload: options?.allowImageUpload ?? (key !== "outline" && key !== "info"),
                   autoEdit: options?.autoEdit ?? true,
+                  isBlankDraft: options?.isBlankDraft ?? false,
                   isBlankBrainstormDraft: options?.isBlankBrainstormDraft ?? false,
                   brainstormAiMode: options?.brainstormAiMode ?? false,
                   pendingGenerate: options?.pendingGenerate ?? false,
@@ -2758,6 +3759,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         parentId &&
         nodes.filter((node) => node.parentId === parentId).length <= 1;
 
+      finishLoadingProgressForNode(nodeId, 0);
+
       setNodes((prev) =>
         prev.filter((node) => node.id !== nodeId && (!shouldRemoveParent || node.id !== parentId))
       );
@@ -2766,7 +3769,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           prev.filter((edge) => edge.source !== parentId && edge.target !== parentId)
         );
       }
-    }, [nodes, setEdges, setNodes]);
+    }, [finishLoadingProgressForNode, nodes, setEdges, setNodes]);
 
     const createCardFromOutputType = useCallback(
       (
@@ -2919,10 +3922,18 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         options?: {
           chapterNum?: number;
           requirement?: string;
+          files?: Record<string, string>;
+          title?: string;
         }
       ) => {
-        if (!options) {
-          const result = appendOutlineSettingsToGroup(nodeId);
+        const shouldOpenOutlineConfig =
+          !options ||
+          (!Number.isFinite(Number(options.chapterNum)) && !String(options.requirement ?? "").trim());
+        if (shouldOpenOutlineConfig) {
+          const result = appendOutlineSettingsToGroup(nodeId, {
+            files: options?.files,
+            title: options?.title,
+          });
           if (!result.groupId) {
             msg("warning", "无法创建大纲组");
           }
@@ -2942,19 +3953,40 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const currentNode = nodes.find((node) => node.id === nodeId);
         const contextIdea = [
           `故事梗概标题：${getTextValue((summaryNode.data as any)?.title) || "故事梗概"}`,
-          `当前节点标题：${getTextValue((currentNode?.data as any)?.title) || request.roleCard?.name || "当前节点"}`,
+          `当前节点标题：${
+            getTextValue(options?.title) ||
+            getTextValue((currentNode?.data as any)?.title) ||
+            request.roleCard?.name ||
+            "当前节点"
+          }`,
           `章节数：${chapterNum}`,
           requirement,
         ]
           .filter(Boolean)
           .join("\n");
-        void handleGenerateInsRef.current?.("manual", contextIdea, "outline", nodeId);
+        void handleGenerateInsRef.current?.("manual", contextIdea, "outline", nodeId, options?.files);
       },
       [appendOutlineSettingsToGroup, buildRoleRequestPayload, getNearestSummaryNode, msg, nodes]
     );
 
     const handleGenerateInfoFromContext = useCallback(
-      async (nodeId: string) => {
+      async (
+        nodeId: string,
+        options?: {
+          files?: Record<string, string>;
+          title?: string;
+        }
+      ) => {
+        if (options?.files && Object.keys(options.files).length > 0) {
+          void handleGenerateInsRef.current?.(
+            "manual",
+            getTextValue(options.title) || "角色组",
+            "info",
+            nodeId,
+            options.files
+          );
+          return;
+        }
         const request = buildRoleRequestPayload(nodeId);
         setReqPanelVisible(true);
         setCardKeyLabel("信息");
@@ -3125,14 +4157,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       setInitWorkDialogShow(false);
     }, [generateFiles, currentChain, onCreateNew]);
 
-
-
-
     const handleGenerateIns = useCallback(async (
       requestType: "auto" | "manual" = "auto",
       ideaOverride?: string,
       outputTypeOverride?: CanvasOutputType,
-      sourceNodeId?: string
+      sourceNodeId?: string,
+      filesOverride?: Record<string, string>
     ) => {
       
       if (isLoading) return;
@@ -3146,12 +4176,30 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       const sourceNode = sourceNodeId
         ? nodes.find((node) => node.id === sourceNodeId)
         : undefined;
+      const shouldReuseSourceDraftNode =
+        !isAutoRequest &&
+        Boolean(sourceNodeId) &&
+        isBlankDraftNode(sourceNode) &&
+        cardOutputType !== "outline";
       const sourceNodeFilePath = getTextValue((sourceNode?.data as any)?.filePath);
       const sourceNodeFileContent = getTextValue(sourceNode?.data?.content);
-      const manualRequestFiles =
-        !isAutoRequest && sourceNodeFilePath
-          ? { [sourceNodeFilePath]: sourceNodeFileContent }
-          : undefined;
+      const selectedDialogReferences = [...dialogCardPreviews];
+      const selectedDialogReferenceIds = selectedDialogReferences
+        .map((item) => getTextValue(item.nodeId))
+        .filter(Boolean);
+      const selectedDialogReferenceFiles = getDialogReferenceFiles(selectedDialogReferences);
+      const baseRequestFiles = mergeFileRecords(
+        filesOverride && Object.keys(filesOverride).length > 0
+          ? filesOverride
+          : sourceNodeFilePath
+            ? { [sourceNodeFilePath]: sourceNodeFileContent }
+            : undefined,
+        preparedContextFilesRef.current,
+        selectedDialogReferenceFiles
+      );
+      const requestFiles = mergeCreationIdeaIntoFiles(baseRequestFiles);
+      preparedContextFilesRef.current = undefined;
+      setDialogCardPreviews([]);
       const hasExplicitCardTypeInIdea =
         !isAutoRequest &&
         (
@@ -3169,12 +4217,13 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         setReqPanelVisible(true);
         setSmartSuggestionsActive(false);
         setSmartSuggestions([]);
-        setReqPanelBodyDetail("");
-        setReqPanelFooterDetail("");
+        resetReqPanelTextRefs();
         setReqPanelAction(null);
 
         setForceCanvasView(true);
         setCanvasReady(true);
+        resetGenerationSettings();
+        rememberLatestGeneratedNode("");
 
         if (isAutoRequest) {
           setIsLoading(true);
@@ -3191,17 +4240,41 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           let hasChoiceList = false;
           let hasUpdatesContent = false;
           let hasWriteFileSuggestions = false;
+          const partialPanelOrderedIds = new Set<string>();
+          const partialPanelContentById = new Map<string, string>();
 
           await postCanvasChoicesStream(
             {
               prompt: isAutoEmptyRequest
                 ? "随机生成一个脑洞"
                 : `生成一个关于${trimmedIdea}${outputTypeLabel}卡`,
-              model: isAutoEmptyRequest ? "fast" : "kimi_k2",
+              mode: canvasModelType,
               type: requestType,
+              files: requestFiles,
             },
             (streamData: any) => {
+              if (streamData?.event === "messages/partial") {
+                const changed = collectPartialPanelMessagesById(
+                  streamData?.data,
+                  partialPanelOrderedIds,
+                  partialPanelContentById
+                );
+                if (changed) {
+                  const { detail, body, footer } = getPanelTextsFromMessageMap(
+                    partialPanelOrderedIds,
+                    partialPanelContentById
+                  );
+                  syncReqPanelTextRefs(detail, body, footer);
+                }
+                return;
+              }
               if (streamData?.event !== "updates") return;
+              const latestCreationIdea = extractCreationIdeaFileContent(streamData?.data);
+              if (latestCreationIdea) {
+                syncCreationIdeaContent(latestCreationIdea);
+              }
+              const writeFiles = extractUpdateToolFiles(streamData?.data);
+              persistGeneratedWriteFiles(writeFiles);
               if (!hasWriteFileSuggestions) {
                 const choicesContent = extractChoicesToolFileContent(streamData?.data);
                 if (choicesContent) {
@@ -3218,15 +4291,24 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               const toolFileContent = extractDisplayToolFileContent(streamData?.data);
               const updatesContent =
                 toolFileContent || extractUpdatesMessageContentWithoutReadFile(streamData?.data);
-              if (!updatesContent) return;
+              if (!updatesContent && !latestCreationIdea) return;
 
               hasUpdatesContent = true;
-              const { head, middle, tail } = splitAutoUpdatesContent(updatesContent);
+              const { head, middle, tail } = updatesContent
+                ? splitAutoUpdatesContent(updatesContent)
+                : {
+                    head: reqPanelDetailRef.current || `正在生成${outputTypeLabel}卡，请稍等...`,
+                    middle: [] as string[],
+                    tail: reqPanelFooterDetailRef.current,
+                  };
 
               setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
-              setReqPanelDetail(head || updatesContent);
-              setReqPanelFooterDetail(tail);
-              setReqPanelBodyDetail(middle.join("\n\n"));
+              syncReqPanelWithCreationIdea(
+                head || updatesContent,
+                middle.join("\n\n"),
+                tail,
+                latestCreationIdea
+              );
 
               if (hasWriteFileSuggestions) {
                 setReqPanelAction(null);
@@ -3269,6 +4351,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const { postCanvasChoicesStream } = await import("@/api/works");
           let streamError: any = null;
           let hasChoiceList = false;
+          const partialPanelOrderedIds = new Set<string>();
+          const partialPanelContentById = new Map<string, string>();
           const collectedWriteFilesByPath = new Map<string, CanvasWriteFileCall>();
           const partialWriteFilesByCallId = new Map<string, string>();
           const partialNodeIdsByCallId = new Map<string, string>();
@@ -3318,7 +4402,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               let groupNode = groupId ? next.find((node) => node.id === groupId) : null;
 
               if (!groupNode) {
-                groupId = `${key}-group-loading-${Date.now()}`;
+                groupId = getNextCanvasNodeId(`${key}-group-loading`);
                 standaloneGroupIdsByKey.set(key, groupId);
                 const { x, y } = getStandaloneNextRowPosition(prev);
                 groupNode = {
@@ -3349,7 +4433,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               const idx = existingChildren.length;
               const col = idx % cols;
               const row = Math.floor(idx / cols);
-              createdNodeId = `${key}-group-card-loading-${Date.now()}-${idx}`;
+              createdNodeId = getNextCanvasNodeId(`${key}-group-card-loading`);
 
               next.push({
                 id: createdNodeId,
@@ -3412,6 +4496,10 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const createManualLoadingCard = () => {
             if (!shouldCreateLoadingCard) return "";
 
+            if (shouldReuseSourceDraftNode && sourceNodeId) {
+              return sourceNodeId;
+            }
+
             const commonOptions = {
               title: "",
               content: "",
@@ -3425,7 +4513,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               if (useContextLinkedCreation && sourceNodeId) {
                 return appendRoleCardsToGroup(sourceNodeId, [commonOptions]).roleNodeIds[0] ?? "";
               }
-              return createStandaloneGroupedCardByKey("role", commonOptions);
+            return createStandaloneGroupedCardByKey("role", commonOptions);
             }
 
             if (requestedCardKey === "outline") {
@@ -3463,6 +4551,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const loadingCardId = shouldCreateLoadingCard
             ? createManualLoadingCard()
             : "";
+          if (loadingCardId) {
+            rememberLatestGeneratedNode(loadingCardId);
+            connectReferenceNodesToTargets(selectedDialogReferenceIds, [loadingCardId]);
+            startLoadingProgressForNodes([loadingCardId]);
+          }
           let loadingCardConsumed = false;
           let loadingCardBoundToFinalFile = false;
           const getWriteFileFallbackTitle = (filePath: string, fallback: string) =>
@@ -3489,7 +4582,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             }
 
             if (!nextNodeId && useContextLinkedCreation && sourceNodeId) {
-              if (key === "brainstorm") {
+              if (shouldReuseSourceDraftNode && key === requestedCardKey) {
+                nextNodeId = sourceNodeId;
+              } else if (key === "brainstorm") {
                 nextNodeId = sourceNodeId;
               } else if (key === "summary") {
                 nextNodeId = addSummaryCard(sourceNodeId, {
@@ -3560,6 +4655,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
             if (nextNodeId) {
               streamedNodeIdsByFilePath.set(filePath, nextNodeId);
+              rememberLatestGeneratedNode(nextNodeId);
+              connectReferenceNodesToTargets(selectedDialogReferenceIds, [nextNodeId]);
             }
             return nextNodeId;
           };
@@ -3604,6 +4701,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             const allowImageUpload = key !== "outline" && key !== "info";
             if (!isFinalWrite) {
               const partialContent = getTextValue(item.content);
+              startLoadingProgressForNodes([nodeId]);
               updateLoadingCard(nodeId, key, {
                 title: extractMarkdownTitle(
                   partialContent,
@@ -3617,14 +4715,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 allowTitleEdit: true,
                 allowImageUpload,
                 autoEdit: true,
+                isBlankDraft: false,
                 isBlankBrainstormDraft: false,
-                brainstormAiMode: key === "brainstorm" && nodeId === sourceNodeId,
-                pendingGenerate: key === "brainstorm" && nodeId === sourceNodeId,
-                highlighted: key === "brainstorm" && nodeId === sourceNodeId,
+                brainstormAiMode:
+                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
+                pendingGenerate:
+                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
+                highlighted:
+                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
                 skipAutoStream: true,
               });
               return;
             }
+            finishLoadingProgressForNode(nodeId);
             updateLoadingCard(nodeId, key, {
               title: extractMarkdownTitle(
                 item.content,
@@ -3638,6 +4741,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               allowTitleEdit: true,
               allowImageUpload,
               autoEdit: true,
+              isBlankDraft: false,
               isBlankBrainstormDraft: false,
               brainstormAiMode: false,
               pendingGenerate: false,
@@ -3656,6 +4760,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               ? streamedNodeIdsByFilePath.get(normalizedPath)
               : "";
 
+            finishLoadingProgressForNode(placeholderNodeId);
             updateLoadingCard(placeholderNodeId, key, {
               title: extractMarkdownTitle(item.content, fallbackTitle),
               filePath: normalizedPath,
@@ -3666,6 +4771,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               allowTitleEdit: true,
               allowImageUpload: key !== "outline" && key !== "info",
               autoEdit: true,
+              isBlankDraft: false,
               isBlankBrainstormDraft: false,
               brainstormAiMode: false,
               pendingGenerate: false,
@@ -3696,22 +4802,36 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           await postCanvasChoicesStream(
             {
               prompt:
-                !isAutoRequest && sourceNodeId
+                shouldReuseSourceDraftNode
+                  ? trimmedIdea
+                  : !isAutoRequest && sourceNodeId
                   ? `帮我生成一个${outputTypeLabel}卡`
                   : !isAutoRequest
                     ? (hasExplicitCardTypeInIdea
                         ? trimmedIdea
                         : `帮我生成${trimmedIdea}${outputTypeLabel}卡`)
                     : `生成一个关于${trimmedIdea}${outputTypeLabel}卡`,
-              model: "kimi_k2",
+              mode: canvasModelType,
               type: requestType,
-              files: manualRequestFiles,
+              files: requestFiles,
             },
             (streamData: any) => {
               const isFinalWrite = streamData?.event === "updates";
               const isPartialWrite = streamData?.event === "messages/partial";
               if (!isFinalWrite && !isPartialWrite) return;
               if (isPartialWrite) {
+                const changed = collectPartialPanelMessagesById(
+                  streamData?.data,
+                  partialPanelOrderedIds,
+                  partialPanelContentById
+                );
+                if (changed) {
+                  const { detail, body, footer } = getPanelTextsFromMessageMap(
+                    partialPanelOrderedIds,
+                    partialPanelContentById
+                  );
+                  syncReqPanelTextRefs(detail, body, footer);
+                }
                 const partialWriteFiles = extractPartialWriteFileCalls(streamData?.data);
                 partialWriteFiles.forEach((item) => {
                   const callId = getTextValue(item.callId);
@@ -3737,13 +4857,18 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   extractUpdatesMessageContentWithoutReadFile(streamData?.data)
                 )
                 : "";
+              const latestCreationIdea = isFinalWrite
+                ? extractCreationIdeaFileContent(streamData?.data)
+                : "";
+              if (latestCreationIdea) {
+                syncCreationIdeaContent(latestCreationIdea);
+              }
               if (isFinalWrite) {
                 const choicesContent = extractChoicesWriteFileContent(streamData?.data);
                 if (choicesContent) {
                   const parsedSuggestions = parseChoicesSuggestionItems(choicesContent);
                   if (parsedSuggestions.length) {
-                    setReqPanelDetail("为你生成了一些可选操作，点击下方按钮可直接填入输入框。");
-                    setReqPanelFooterDetail("");
+                    syncReqPanelTextRefs("为你生成了一些可选操作，点击下方按钮可直接填入输入框。", "", "");
                     hasChoiceList = true;
                     setSmartSuggestions(parsedSuggestions);
                     setSmartSuggestionsActive(true);
@@ -3751,6 +4876,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 }
               }
               const writeFiles = extractUpdateToolFiles(streamData?.data);
+              persistGeneratedWriteFiles(writeFiles);
               if (writeFiles.length) {
                 writeFiles.forEach((item) => {
                   const normalizedPath = getTextValue(item.filePath);
@@ -3804,12 +4930,21 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 return;
               }
               if (!isFinalWrite) return;
-              if (updatesContent) {
-                const { head, middle, tail } = splitAutoUpdatesContent(updatesContent);
+              if (updatesContent || latestCreationIdea) {
+                const { head, middle, tail } = updatesContent
+                  ? splitAutoUpdatesContent(updatesContent)
+                  : {
+                      head: reqPanelDetailRef.current,
+                      middle: [] as string[],
+                      tail: reqPanelFooterDetailRef.current,
+                    };
                 setReqPanelTitle(`${outputTypeLabel}卡`);
-                setReqPanelDetail(head || updatesContent);
-                setReqPanelBodyDetail(middle.join("\n\n"));
-                setReqPanelFooterDetail(tail);
+                syncReqPanelWithCreationIdea(
+                  head || updatesContent,
+                  middle.join("\n\n"),
+                  tail,
+                  latestCreationIdea
+                );
               }
             },
             (error: any) => {
@@ -3819,6 +4954,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           );
 
           if (streamError) {
+            stopLoadingProgress();
             if (loadingCardId) removeLoadingCard(loadingCardId);
             throw streamError;
           }
@@ -3869,6 +5005,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   trimmedIdea
                 );
               }
+            }
+            if (effectiveOutputType === "outline") {
+              triggerOutlineCompletionCelebration();
             }
             if (streamedNodeIdsByFilePath.size > 0) {
               setIsLoading(false);
@@ -4064,9 +5203,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             msg("warning", "返回数据格式不正确，请重试");
           }
           setIsLoading(false);
+          stopLoadingProgress();
           return;
         }
       } catch (e: any) {
+        stopLoadingProgress();
         setReqPanelStatus("error");
         setReqPanelDetail(`状态：失败\n原因：${String(e?.message ?? "未知错误")}`);
         msg("error", e.message);
@@ -4084,30 +5225,109 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       createLoadingCardByKey,
       ideaContent,
       isLoading,
+      dialogCardPreviews,
       msg,
       addSettingCard,
       addSummaryCard,
       appendOutlineCardsToGroup,
       appendRoleCardsToGroup,
+      connectReferenceNodesToTargets,
+      getDialogReferenceFiles,
+      mergeFileRecords,
+      persistGeneratedWriteFiles,
       removeLoadingCard,
       startBrainstormPlaceholderBatch,
       updateBrainstormPlaceholderBatch,
       updateLoadingCard,
+      resetGenerationSettings,
+      resetReqPanelTextRefs,
+      syncReqPanelTextRefs,
+      rememberLatestGeneratedNode,
+      startLoadingProgressForNodes,
+      finishLoadingProgressForNode,
+      stopLoadingProgress,
+      triggerOutlineCompletionCelebration,
+      mergeCreationIdeaIntoFiles,
+      syncCreationIdeaContent,
+      syncReqPanelWithCreationIdea,
+      isBlankDraftNode,
     ]);
 
     useEffect(() => {
       handleGenerateInsRef.current = handleGenerateIns;
     }, [handleGenerateIns]);
 
-    const handleGenerateInsFromContext = useCallback(
-      (nodeId: string, outputType: CanvasOutputType) => {
+    const handlePrepareGenerateToDialog = useCallback(
+      (
+        nodeId: string,
+        outputType: CanvasOutputType,
+        options?: {
+          files?: Record<string, string>;
+          title?: string;
+        }
+      ) => {
         const currentNode = nodes.find((node) => node.id === nodeId);
-        const contextIdea = getTextValue((currentNode?.data as any)?.title);
-        if (!contextIdea.trim()) {
+        const contextIdea = getTextValue(options?.title) || getTextValue((currentNode?.data as any)?.title);
+        const hasFiles = Boolean(options?.files && Object.keys(options.files).length > 0);
+        if (!contextIdea.trim() && !hasFiles) {
           msg("warning", "当前卡片暂无可用标题");
           return;
         }
-        void handleGenerateIns("manual", contextIdea, outputType, nodeId);
+        const referenceNodeId = resolveContextReferenceNodeId(nodeId);
+        const appended = appendDialogReferenceByNodeId(referenceNodeId);
+        if (options?.files && Object.keys(options.files).length > 0) {
+          preparedContextFilesRef.current = mergeFileRecords(
+            preparedContextFilesRef.current,
+            options.files
+          );
+        }
+        if (!ideaContent.trim()) {
+          const fallbackTitle = appended?.snapshot?.title || contextIdea || "当前内容";
+          const outputLabel =
+            OUTPUT_TYPE_OPTIONS.find((item) => item.key === outputType)?.label ?? outputType;
+          setIdeaContent(`使用[${fallbackTitle}]生成${outputLabel}卡`);
+        }
+        if (outputType !== "auto") {
+          handleOutputTypeChange(outputType);
+        }
+        setForceCanvasView(true);
+        setCanvasReady(true);
+        msg("success", "已加入对话引用，请发送开始生成");
+      },
+      [
+        appendDialogReferenceByNodeId,
+        handleOutputTypeChange,
+        ideaContent,
+        mergeFileRecords,
+        msg,
+        nodes,
+        resolveContextReferenceNodeId,
+      ]
+    );
+
+    const handleGenerateInsFromContext = useCallback(
+      (
+        nodeId: string,
+        outputType: CanvasOutputType,
+        options?: {
+          files?: Record<string, string>;
+          title?: string;
+        }
+      ) => {
+        const currentNode = nodes.find((node) => node.id === nodeId);
+        const contextIdea = getTextValue(options?.title) || getTextValue((currentNode?.data as any)?.title);
+        const hasFiles = Boolean(options?.files && Object.keys(options.files).length > 0);
+        if (!contextIdea.trim() && !hasFiles) {
+          msg("warning", "当前卡片暂无可用标题");
+          return;
+        }
+        void handleGenerateIns(
+          "manual",
+          contextIdea || "角色组",
+          outputType,
+          nodeId,
+          options?.files
+        );
       },
       [handleGenerateIns, msg, nodes]
     );
@@ -4183,22 +5403,67 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const handleAddCardToDialog = useCallback(
       (nodeId: string) => {
-        const currentNode = nodes.find((node) => node.id === nodeId);
-        if (!currentNode) return;
-        const cardType = getTextValue(currentNode.data?.label) || "卡片";
-        const cardContent = getTextValue(currentNode.data?.content);
-        const theme =
-          getTextValue((currentNode.data as any)?.title) ||
-          getTextValue(currentNode.data?.inspirationTheme) ||
-          cardType;
-        setDialogCardPreview({
-          title: `${cardType}卡片`,
-          content: cardContent,
-        });
-        setIdeaContent(`使用[${cardType}卡片]，生成 ${theme}信息`);
-        msg("success", "已添加到对话");
+        const appended = appendDialogReferenceByNodeId(nodeId);
+        if (!appended) return;
+        const { snapshot, added } = appended;
+        const cardType = snapshot.label;
+
+        if (!ideaContent.trim()) {
+          setIdeaContent(`使用[${cardType}卡片]，生成 ${snapshot.title}信息`);
+        }
+        msg(added ? "success" : "warning", added ? "已添加到对话" : "该卡片已在引用列表中");
       },
-      [msg, nodes]
+      [appendDialogReferenceByNodeId, ideaContent, msg]
+    );
+
+    const handleAddGroupToDialog = useCallback(
+      (groupNodeId: string) => {
+        const normalizedGroupNodeId = getTextValue(groupNodeId);
+        if (!normalizedGroupNodeId) return;
+
+        const latestNodes = nodesRef.current;
+        const childNodes = latestNodes
+          .filter((node) => {
+            if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
+            const roleGroupId = getTextValue((node.data as any)?.roleGroupId);
+            const outlineGroupId = getTextValue((node.data as any)?.outlineGroupId);
+            const parentId = getTextValue(node.parentId);
+            return (
+              roleGroupId === normalizedGroupNodeId ||
+              outlineGroupId === normalizedGroupNodeId ||
+              parentId === normalizedGroupNodeId
+            );
+          })
+          .sort((a, b) => {
+            const ay = Number(a.position?.y ?? 0);
+            const by = Number(b.position?.y ?? 0);
+            if (ay !== by) return ay - by;
+            return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+          });
+
+        if (childNodes.length === 0) {
+          msg("warning", "当前卡片组暂无可引用卡片");
+          return;
+        }
+
+        const result = appendDialogReferencesByNodeIds(childNodes.map((node) => node.id));
+        if (!result) return;
+
+        const groupNode = latestNodes.find((node) => node.id === normalizedGroupNodeId);
+        const groupLabel = getTextValue((groupNode?.data as any)?.label) || "卡片";
+
+        if (!ideaContent.trim()) {
+          setIdeaContent(`使用[${groupLabel}卡片组]生成信息卡`);
+        }
+
+        if (result.addedCount > 0) {
+          msg("success", `已添加 ${result.addedCount} 张卡片到对话`);
+          return;
+        }
+
+        msg("warning", result.duplicateCount > 0 ? "该卡片组已在引用列表中" : "当前卡片组暂无可引用卡片");
+      },
+      [appendDialogReferencesByNodeIds, ideaContent, msg]
     );
 
     const addNewCanvas = useCallback(() => {
@@ -4226,11 +5491,17 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       setReqPanelDetail("");
       setReqPanelBodyDetail("");
       setReqPanelFooterDetail("");
+      setCreationIdeaContent("");
+      creationIdeaContentRef.current = "";
+      generatedWriteFilesRef.current = {};
+      preparedContextFilesRef.current = undefined;
+      setLatestGeneratedNodeId("");
+      latestGeneratedNodeIdRef.current = "";
       setReqPanelAction(null);
       setSmartSuggestionsActive(false);
       setSmartSuggestions([]);
       setPendingSuggestionIdea("");
-      setDialogCardPreview(null);
+      setDialogCardPreviews([]);
       setInitWorkDialogShow(false);
       setHistoryDialogShow(false);
       setMoreActionsOpen(false);
@@ -4326,6 +5597,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       () => ({
         handleMainCardCreate,
         handleAddCardToDialog,
+        handleAddGroupToDialog,
+        handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         handleGroupDelete: deleteNode,
         handleGenerateIns: handleGenerateInsFromContext,
@@ -4363,6 +5636,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       [
         handleMainCardCreate,
         handleAddCardToDialog,
+        handleAddGroupToDialog,
+        handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         deleteNode,
         handleGenerateInsFromContext,
@@ -4428,23 +5703,55 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           : reqPanelStatus === "error"
             ? `${cardKeyLabel || "脑洞"}喵出错了`
             : reqPanelTitle || (showInit ? "智能喵" : `${cardKeyLabel || "脑洞"}`);
+    const panelTitleBackgroundImage = useMemo(() => {
+      if (panelTitleText.includes("梗概")) {
+        return "linear-gradient(90deg, #DBEAFE 0%, rgba(219,234,254,0) 100%)";
+      }
+      if (panelTitleText.includes("角色")) {
+        return "linear-gradient(90deg, #E2FEDB 0%, rgba(226,254,219,0) 100%)";
+      }
+      if (panelTitleText.includes("大纲")) {
+        return "linear-gradient(90deg, #F9DBFE 0%, rgba(249,219,254,0) 100%)";
+      }
+      if (panelTitleText.includes("智能")) {
+        return "linear-gradient(90deg, #E5E7EB 0%, rgba(229,231,235,0) 100%)";
+      }
+      return "linear-gradient(90deg, #F9EECE 0%, rgba(249,238,206,0) 100%)";
+    }, [panelTitleText]);
+    const panelTitleIconColor = useMemo(() => {
+      if (panelTitleText.includes("梗概")) {
+        return "#3B82F6";
+      }
+      if (panelTitleText.includes("角色")) {
+        return "#5AF63B";
+      }
+      if (panelTitleText.includes("大纲")) {
+        return "#ED3BF6";
+      }
+      if (panelTitleText.includes("智能")) {
+        return "#737373 ";
+      }
+      return "#EFAF00";
+    }, [panelTitleText]);
 
-    const panelDetailText =
-      reqPanelDetail ||
-      (reqPanelStatus === "loading"
-        ? "你已经明确表示要创作一个填充类型的故事，正在根据需求提供故事选题，请稍等..."
+    const panelDetailText = (reqPanelStatus === "loading"
+        ? (ideaContent.trim()
+            ? `你想要创建一个${ideaContent.trim()}题材的内容，听起来很炫，让我想想...`
+            : "呼~ 正在为您生成三个随机脑洞，请稍等。。")
         : reqPanelStatus === "success"
           ? `灵感大开！已经生成了${cardKeyLabel || "脑洞"}，快在画布中查看吧`
           : "");
-    const panelBodyText =
-      reqPanelBodyDetail || (reqPanelFooterDetail ? "" : panelDetailText);
 
     const panelFooterText = reqPanelFooterDetail || "";
     const shouldForceExpandReqPanel =
       smartSuggestionsActive && reqPanelStatus === "success" && smartSuggestions.length > 0;
-    const isReqPanelExpanded = shouldForceExpandReqPanel || reqPanelExpanded;
+    useEffect(() => {
+      if (shouldForceExpandReqPanel) {
+        setReqPanelExpanded(true);
+      }
+    }, [shouldForceExpandReqPanel]);
+    const isReqPanelExpanded = reqPanelExpanded;
     const toggleReqPanelExpanded = () => {
-      if (shouldForceExpandReqPanel) return;
       setReqPanelExpanded((v) => !v);
     };
     const inputTriggerRequestType: "auto" | "manual" =
@@ -4459,24 +5766,46 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         <div
           className={cn(
             "relative w-full rounded-[21px] border border-[#f3f4f6] bg-white px-[15px] pt-[12px] shadow-[0px_22px_44px_0px_rgba(0,0,0,0.1)]",
-            dialogCardPreview ? "min-h-[8.5rem]" : "h-[clamp(5rem,12vh,6.125rem)]"
+            dialogCardPreviews.length > 0 ? "min-h-[8.5rem]" : "h-[clamp(5rem,12vh,6.125rem)]"
           )}
         >
-          {dialogCardPreview ? (
-            <div className="relative mb-2 h-[50px] w-[80px] overflow-hidden rounded-[10px] bg-[#EEEEEE] px-2 py-1">
-              <button
-                type="button"
-                className="absolute right-1 top-1 inline-flex size-3 items-center justify-center rounded-full text-[#737373] hover:bg-black/5 hover:text-[#000000]"
-                aria-label="关闭卡片预览"
-                onClick={() => setDialogCardPreview(null)}
-              >
-                <X className="size-[10px]" />
-              </button>
-              <div className="truncate text-[12px] font-medium leading-4 text-[#000000]">
-                {dialogCardPreview.title}
-              </div>
-              <div className="mt-0.5 overflow-hidden text-[10px] leading-3 text-[#737373]">
-                {dialogCardPreview.content}
+          {dialogCardPreviews.length > 0 ? (
+            <div
+              className="nowheel mb-2 max-h-[3rem] overflow-y-auto overscroll-contain"
+              onWheel={(e) => {
+                e.stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <div className="flex flex-wrap gap-2 pr-5">
+                {dialogCardPreviews.map((item) => (
+                  <div
+                    key={item.nodeId}
+                    className="relative h-[50px] w-[80px] overflow-hidden rounded-[10px] bg-[#EEEEEE] px-2 py-1"
+                  >
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1 inline-flex size-3 items-center justify-center rounded-full text-[#737373] hover:bg-black/5 hover:text-[#000000]"
+                      aria-label="关闭卡片预览"
+                      onClick={() => {
+                        setDialogCardPreviews((prev) => prev.filter((card) => card.nodeId !== item.nodeId));
+                      }}
+                    >
+                      <X className="size-[10px]" />
+                    </button>
+                    <div className="truncate text-[12px] font-medium leading-4 text-[#000000]">
+                      {item.title}
+                    </div>
+                    <div className="mt-0.5 overflow-hidden text-[10px] leading-3 text-[#737373]">
+                      {item.content}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
@@ -4677,6 +6006,21 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         )}
       >
         <div className="pointer-events-none flex w-full max-w-[500px] flex-col">
+          {outlineCompletionCelebrationVisible ? (
+            <div className="pointer-events-none mb-3 flex justify-center">
+              <div className="relative w-full overflow-hidden px-4 py-3">
+                <div
+                  ref={outlineCompletionMessageRef}
+                  className="relative flex flex-col items-center text-center ins-celebration-pop"
+                >
+                  <p className="mt-2 text-[13px] leading-5 text-[#374151]">
+                    <span className="mr-1 inline-block ins-celebration-emoji">🎉</span>
+                    恭喜您已经完成一篇小说的伟大摄像，点击左上角-&gt;写作可以定制化代写正文哦~
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {reqPanelVisible && (
             <div
               className={cn(
@@ -4709,14 +6053,38 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 <div className="min-w-0 flex-1">
                   <div
                     className="truncate inline-flex w-fit rounded-sm flex gap-1 items-center px-2 py-0.5 text-[13px] font-semibold text-[#111]"
-                    style={{ backgroundImage: "linear-gradient(90deg, #F9EECE 0%, rgba(249,238,206,0) 100%)" }}
+                    style={{ backgroundImage: panelTitleBackgroundImage }}
                   >
-                    <img src={naodongmiao} alt="脑洞喵" className="w-4 h-4" />
+                    {/* <img src={naodongmiao} alt="脑洞喵" className="w-4 h-4" /> */}
+                    <span
+                      style={{
+                        color: panelTitleIconColor,
+                      }}
+                    >
+                      <Iconfont unicode="&#xe789;" />
+                    </span>
                     {panelTitleText}
                   </div>
-                  {panelDetailText ? (
+                  {panelDetailText || latestGeneratedNodeId ? (
                     <div className="mt-0.5 flex items-center gap-2 text-[12px] text-[#6b7280]">
-                      <span className="truncate">{panelDetailText}</span>
+                      {panelDetailText ? (
+                        <span className="min-w-0 flex-1 truncate">{panelDetailText}</span>
+                      ) : (
+                        <span className="min-w-0 flex-1" />
+                      )}
+                      {latestGeneratedNodeId ? (
+                        <button
+                          type="button"
+                          className="shrink-0 inline-flex items-center gap-1 text-black transition-opacity hover:opacity-80"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            focusCanvasNode(latestGeneratedNodeId);
+                          }}
+                        >
+                          <MapPin className="size-3 text-black" />
+                          <span>定位</span>
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                   {reqPanelAction ? (
@@ -4742,7 +6110,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 <Iconfont
                   unicode={isReqPanelExpanded ? "&#xeaa1;" : "&#xeaa6;"}
                   className={cn(
-                    "shrink-0 text-[#6b7280] transition-transform duration-300",
+                    "shrink-0 text-[#6b7280] transition-transform cursor-pointer duration-300",
                     isReqPanelExpanded ? "rotate-0" : "rotate-0"
                   )}
                 />
@@ -4760,9 +6128,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   autoScroll={reqPanelStatus === "loading"}
                   className="w-full rounded-[14px]"
                 >
-                  {panelBodyText ? (
+                  {reqPanelBodyDetail ? (
                     <div className="px-3 py-2 text-[12px] leading-5 text-[#111]">
-                      <MarkdownRenderer content={panelBodyText} />
+                      <MarkdownRenderer content={reqPanelBodyDetail} />
                     </div>
                   ) : null}
                   {smartSuggestionsActive && reqPanelStatus === "success" && smartSuggestions.length > 0 ? (
@@ -4909,8 +6277,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 <MiniMap
                   pannable={!showInit}
                   zoomable={!showInit}
-                  // 上移一点，避免和右下角缩放按钮重叠
-                  style={{ bottom: 48 }}
+                  // 放到左下角缩放控件上方
+                  style={{ left: 5, right: "auto", bottom: 64 }}
                 />
                 <div className="pointer-events-auto absolute bottom-4 left-4 z-50 flex items-center rounded-[12px] border border-[#e5e7eb] bg-white/90 px-2 py-1 text-xs shadow-sm backdrop-blur">
                   <Button
@@ -4986,7 +6354,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  className="size-9 rounded-full border border-[#e5e7eb] bg-white text-[#111] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]"
+                  className="size-9 rounded-[7px] border border-[#e5e7eb] bg-white text-[#111] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]"
                   aria-label={moreActionsOpen ? "收起更多操作" : "展开更多操作"}
                   title={moreActionsOpen ? "收起" : "更多"}
                 >
@@ -5001,40 +6369,59 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               >
                 <div className="flex flex-col gap-2">
                   <Button
-                    className="w-[180px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
+                    className="w-[155px] h-[40px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
                     onClick={() => {
                       setMoreActionsOpen(false);
-                      createCardByKey("brainstorm");
+                      setForceCanvasView(true);
+                      const nodeId = createCardByKey("brainstorm", { insertPosition: "right" });
+                      focusNewlyCreatedBlankNode(nodeId);
                     }}
                   >
                     脑洞卡
                   </Button>
                   <Button
-                    className="w-[180px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
+                    className="w-[155px] h-[40px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
                     onClick={() => {
                       setMoreActionsOpen(false);
-                      createCardByKey("summary");
+                      setForceCanvasView(true);
+                      const nodeId = createCardByKey("summary", { insertPosition: "right" });
+                      focusNewlyCreatedBlankNode(nodeId);
                     }}
                   >
                     故事梗概卡
                   </Button>
                   <Button
-                    className="w-[180px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
+                    className="w-[155px] h-[40px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
                     onClick={() => {
                       setMoreActionsOpen(false);
-                      createCardByKey("role");
+                      setForceCanvasView(true);
+                      const nodeId = createCardByKey("role", { insertPosition: "right" });
+                      focusNewlyCreatedBlankNode(nodeId);
                     }}
                   >
                     角色卡
                   </Button>
                   <Button
-                    className="w-[180px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
+                    className="w-[155px] h-[40px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
                     onClick={() => {
                       setMoreActionsOpen(false);
-                      createCardByKey("outline");
+                      setForceCanvasView(true);
+                      const result = createStandaloneOutlineSettingsGroup({ insertPosition: "right" });
+                      focusNewlyCreatedBlankNode(result.groupId);
                     }}
                   >
                     大纲卡
+                  </Button>
+                  <Button
+                    className="w-[155px] h-[40px] rounded-[12px] bg-white px-3 py-2 text-left text-[12px] font-medium text-[#111] shadow-[0px_6px_18px_0px_rgba(0,0,0,0.10)] hover:bg-[#f5f5f5]"
+                    onClick={() => {
+                      setMoreActionsOpen(false);
+                      setForceCanvasView(true);
+                      const nodeId = createCardByKey("info", { insertPosition: "right" });
+                      focusNewlyCreatedBlankNode(nodeId);
+                    }}
+                  >
+                    空白信息卡
                   </Button>
                 </div>
               </PopoverContent>
@@ -5096,6 +6483,45 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           @keyframes ins-skeleton-shimmer {
             100% {
               transform: translateX(100%);
+            }
+          }
+
+          .ins-celebration-pop {
+            animation: ins-celebration-pop 520ms cubic-bezier(0.22, 1, 0.36, 1);
+          }
+
+          .ins-celebration-emoji {
+            transform-origin: 50% 70%;
+            animation: ins-celebration-emoji-spin 1.2s ease-in-out infinite;
+          }
+
+          @keyframes ins-celebration-pop {
+            0% {
+              opacity: 0;
+              transform: translateY(10px) scale(0.96);
+            }
+            60% {
+              opacity: 1;
+              transform: translateY(0) scale(1.02);
+            }
+            100% {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+
+          @keyframes ins-celebration-emoji-spin {
+            0%, 100% {
+              transform: rotate(0deg) scale(1);
+            }
+            25% {
+              transform: rotate(-16deg) scale(1.06);
+            }
+            50% {
+              transform: rotate(14deg) scale(1.1);
+            }
+            75% {
+              transform: rotate(-10deg) scale(1.04);
             }
           }
 
