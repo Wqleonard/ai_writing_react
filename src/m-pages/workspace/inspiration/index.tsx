@@ -837,9 +837,9 @@ const MInspirationPage = () => {
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[calc(100vw-80px)] h-[calc(100vh-200px)] p-0 rounded-[36px] overflow-hidden"
+          className="w-[calc(100vw-80px)] h-[calc(100dvh-200px)] p-0 rounded-[36px] overflow-hidden"
         >
-          <div className="flex flex-col h-[calc(100vh-200px)]">
+          <div className="flex flex-col h-[calc(100dvh-200px)]">
             <ScrollArea className="flex-1 min-h-0">
               <div>
                 <div className="relative h-fit">
