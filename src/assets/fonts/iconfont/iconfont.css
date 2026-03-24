@@ -1,8 +1,8 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5101523 */
-  src: url('iconfont.woff2?t=1773736708253') format('woff2'),
-       url('iconfont.woff?t=1773736708253') format('woff'),
-       url('iconfont.ttf?t=1773736708253') format('truetype');
+  src: url('iconfont.woff2?t=1774358514632') format('woff2'),
+       url('iconfont.woff?t=1774358514632') format('woff'),
+       url('iconfont.ttf?t=1774358514632') format('truetype');
 }
 
 .iconfont {
@@ -10,6 +10,50 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-warning:before {
+  content: "\e655";
+}
+
+.icon-sparkles_fill:before {
+  content: "\e6d9";
+}
+
+.icon-Fire:before {
+  content: "\e664";
+}
+
+.icon-fangkuai:before {
+  content: "\e650";
+}
+
+.icon-tupian:before {
+  content: "\e67f";
+}
+
+.icon-robot:before {
+  content: "\e87d";
+}
+
+.icon-danao:before {
+  content: "\e651";
+}
+
+.icon-shipin:before {
+  content: "\e652";
+}
+
+.icon-dagang-:before {
+  content: "\e653";
+}
+
+.icon-xiaoshuogenggai:before {
+  content: "\e654";
+}
+
+.icon-Ghost:before {
+  content: "\e789";
 }
 
 .icon-fujiancopy:before {

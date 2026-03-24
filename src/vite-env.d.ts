@@ -4,3 +4,23 @@
 declare const __API_BASE_URL__: string;
 declare const __VITE_MODE__: string;
 
+declare module "canvas-confetti" {
+  type ConfettiOptions = {
+    particleCount?: number;
+    angle?: number;
+    spread?: number;
+    startVelocity?: number;
+    decay?: number;
+    origin?: {
+      x?: number;
+      y?: number;
+    };
+    colors?: string[];
+    ticks?: number;
+    gravity?: number;
+  };
+
+  const confetti: (options?: ConfettiOptions) => Promise<null> | null;
+  export default confetti;
+}
+
