@@ -7,11 +7,24 @@ type DeleteNodeOptions = {
 export interface InsCanvasHandlers {
   handleMainCardCreate: (nodeId: string) => void;
   handleAddCardToDialog: (nodeId: string) => void;
+  handleAddGroupToDialog: (groupNodeId: string) => void;
+  handlePrepareGenerateToDialog: (
+    nodeId: string,
+    outputType: "auto" | "brainstorm" | "role" | "summary" | "outline" | "info",
+    options?: {
+      files?: Record<string, string>;
+      title?: string;
+    }
+  ) => void;
   handlePrepareBrainstormCard: (nodeId: string) => void;
   handleGroupDelete: (nodeId: string, options?: DeleteNodeOptions) => void;
   handleGenerateIns: (
     nodeId: string,
-    outputType: "auto" | "brainstorm" | "role" | "summary" | "outline" | "info"
+    outputType: "auto" | "brainstorm" | "role" | "summary" | "outline" | "info",
+    options?: {
+      files?: Record<string, string>;
+      title?: string;
+    }
   ) => void;
 
   handleRoleExpandRandom: (nodeId: string) => void;
@@ -21,9 +34,17 @@ export interface InsCanvasHandlers {
     options?: {
       chapterNum?: number;
       requirement?: string;
+      files?: Record<string, string>;
+      title?: string;
     }
   ) => void;
-  handleGenerateInfoFromContext: (nodeId: string) => void;
+  handleGenerateInfoFromContext: (
+    nodeId: string,
+    options?: {
+      files?: Record<string, string>;
+      title?: string;
+    }
+  ) => void;
 
   // 可从任意节点派生创建新卡片；opts 仅部分场景使用（如“脑洞 -> 生成角色/梗概”）
   handleSummaryAdd: (
@@ -87,6 +108,8 @@ export interface InsCanvasHandlers {
 const defaultValue: InsCanvasHandlers = {
   handleMainCardCreate: () => {},
   handleAddCardToDialog: () => {},
+  handleAddGroupToDialog: () => {},
+  handlePrepareGenerateToDialog: () => {},
   handlePrepareBrainstormCard: () => {},
   handleGroupDelete: () => {},
   handleGenerateIns: () => {},

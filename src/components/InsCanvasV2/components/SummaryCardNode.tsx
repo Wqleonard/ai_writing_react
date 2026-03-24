@@ -3,7 +3,7 @@ import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext"
 
 export default function SummaryCardNode(props: any) {
   const handlers = useInsCanvasHandlers();
-  const cardLabel = props?.data?.label ?? "故事梗概";
+  const cardLabel = props?.data?.label ?? "梗概";
   const generateLabel = props?.data?.generateLabel ?? "生成故事设定";
   return (
     <EditableFlowCard

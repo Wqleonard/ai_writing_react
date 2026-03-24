@@ -1,16 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { Handle, Position, useNodes, useReactFlow } from "@xyflow/react";
 import { Trash2, Pencil, Plus, Copy, MessageSquarePlus, Sparkles, Notebook } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { AutoScrollArea } from "@/components/AutoScrollArea/AutoScrollArea";
-import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
 import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import type { CustomNodeData } from "@/components/InsCanvasV2/types";
 import type { PostStreamData } from "@/api";
 import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
 import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext";
 import { addNote } from "@/api/notes";
+import { Iconfont } from "@/components/Iconfont";
 // React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
 // 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
 const startedStreamNodeIds = new Set<string>();
@@ -68,13 +75,14 @@ export default function EditableFlowCard({
   onUpdate,
   onExpand,
 }: EditableFlowCardProps) {
+  const allNodes = useNodes();
   const { updateNode, updateNodeData, setNodes, setEdges, getEdges, getNodes } = useReactFlow();
   const canvasHandlers = useInsCanvasHandlers();
   const { getCanvasSessionId } = canvasHandlers;
-  const { confirm, confirmDialog } = useConfirmDialog();
   const allowTitleEdit = Boolean((data as any)?.allowTitleEdit);
   const allowImageUpload = Boolean((data as any)?.allowImageUpload);
   const [isEditing, setIsEditing] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editContent, setEditContent] = useState(data.content || "[写作思路]");
   const [editLabel, setEditLabel] = useState<string>(() => String((data as any)?.title ?? ""));
   const editLabelRef = useRef(editLabel);
@@ -162,6 +170,7 @@ export default function EditableFlowCard({
 
   // 非流式时由 React 渲染；流式时仅用 ref，不触发重渲染，用户可正常滚动内容区
   const bodyContent = editContent || (isStreaming ? "生成中..." : "");
+
   const displayedContent = isEditing ? editContent : bodyContent;
   const titleText = String((data as any)?.title ?? "");
   const images: string[] = useMemo(() => {
@@ -181,20 +190,31 @@ export default function EditableFlowCard({
   const isFromApi = Boolean((data as any)?.fromApi);
   const hasAnyApiData =
     Boolean(titleText.trim()) || Boolean(String(data.content || "").trim()) || images.length > 0;
+  const hasCardContent = Boolean(String(data.content || "").trim());
   const showApiSkeleton = isFromApi && !isEditing && !hasAnyApiData;
   const apiProgressRaw = (data as any)?.progress;
   const apiProgress =
     typeof apiProgressRaw === "number" && Number.isFinite(apiProgressRaw)
       ? Math.max(0, Math.min(100, Math.round(apiProgressRaw)))
       : 0;
+  const isPendingGenerate = Boolean((data as any)?.pendingGenerate);
+  const isServerStreaming = Boolean(data.isStreaming);
+  const hasCompletedApiData = isFromApi && hasAnyApiData && !isPendingGenerate && apiProgress >= 100;
   const showContentSkeleton =
     !isEditing &&
     !String(data.content || "").trim() &&
     (
       // 流式创建（接口拉流）
-      (Boolean(isStreaming) && (!editContent || editContent === "生成中...")) ||
+      (isServerStreaming && (!editContent || editContent === "生成中...")) ||
       // 接口创建（非拉流）：在内容未落盘前也需要骨架占位
       showApiSkeleton
+    );
+  const isPlaceholderCard =
+    !hasCompletedApiData &&
+    (
+      showApiSkeleton ||
+      showContentSkeleton ||
+      (isFromApi && (isServerStreaming || isPendingGenerate))
     );
 
   // 同步外部内容：仅在 data.content 变化时更新本地；避免流式结束时用空串覆盖本地最终内容
@@ -221,6 +241,11 @@ export default function EditableFlowCard({
   }, [data.content, isEditing]);
 
   useEffect(() => {
+    if (!isPlaceholderCard) return;
+    setShowFloatingButtons(false);
+  }, [isPlaceholderCard]);
+
+  useEffect(() => {
     // 节点切换时，重置本地 streaming 状态
     setIsStreaming(Boolean(data.isStreaming));
     streamingStartedRef.current = false;
@@ -230,17 +255,16 @@ export default function EditableFlowCard({
   }, [id]);
 
   useEffect(() => {
+    // 外部将同一节点的流式状态置为 false 时，同步收敛本地状态，
+    // 避免占位卡完成替换/回写后仍被本地旧状态卡在“生成中”。
+    if (data.isStreaming || !isStreaming) return;
+    setIsStreaming(false);
+  }, [data.isStreaming, isStreaming]);
+
+  useEffect(() => {
     // 仅在编辑状态切换时更新 draggable，避免每次 render 都触发 updateNode 导致循环更新
     updateNode(id, { draggable: !isEditing });
   }, [id, isEditing, updateNode]);
-
-  useEffect(() => {
-    // 仅在 isStreaming 与节点 data 不一致时才同步，避免 updateNodeData -> 触发 props.data 引用变化 -> effect 再跑
-    const next = Boolean(isStreaming);
-    const prev = Boolean(data.isStreaming);
-    if (next === prev) return;
-    updateNodeData(id, { isStreaming: next });
-  }, [id, isStreaming, data.isStreaming, updateNodeData]);
 
   // 更新与该节点相关的入边动画状态（父 -> 当前）
   useEffect(() => {
@@ -418,6 +442,7 @@ export default function EditableFlowCard({
       };
 
       setIsStreaming(true);
+      updateNodeData(id, { isStreaming: true });
       streamContentRef.current = "";
       setEditContent("生成中...");
 
@@ -450,6 +475,7 @@ export default function EditableFlowCard({
         // 流式接口报错：弹出错误提示，保持 UI 可恢复，并在“新空节点且无子节点”时自动移除该节点
         notifyError(err);
         setIsStreaming(false);
+        updateNodeData(id, { isStreaming: false });
         if (!children.length && !data.content) {
           onDelete(id);
         }
@@ -473,7 +499,10 @@ export default function EditableFlowCard({
         // 如果流式内容存在但未在 updates 中更新，则使用流式内容更新节点
         const finalContent = streamContentRef.current;
         if (finalContent) commitFinalContent(finalContent);
-        else setIsStreaming(false);
+        else {
+          setIsStreaming(false);
+          updateNodeData(id, { isStreaming: false });
+        }
         await saveCanvas();
       };
 
@@ -482,6 +511,7 @@ export default function EditableFlowCard({
       streamingStartedRef.current = false;
       startedStreamNodeIds.delete(id);
       setIsStreaming(false);
+      updateNodeData(id, { isStreaming: false });
       // 请求级别的异常（如网络错误）同样视为生成失败，弹出错误并清理“新空节点”
       notifyError(err);
       if (!children.length && !data.content) {
@@ -512,17 +542,14 @@ export default function EditableFlowCard({
     onAdd(id)
   };
 
-  const handleDelete = useCallback(async () => {
-    const confirmed = await confirm({
-      title: "删除卡片",
-      message: "此操作不可逆，确认删除卡片？",
-      cancelText: "取消",
-      confirmText: "确认",
-      confirmVariant: "destructive",
-    });
-    if (!confirmed) return;
+  const handleDelete = useCallback(() => {
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    setDeleteDialogOpen(false);
     onDelete(id, { skipLayout: true });
-  }, [confirm, id, onDelete]);
+  }, [id, onDelete]);
 
   const handleRefresh = () => {
     setEditContent("");
@@ -569,7 +596,17 @@ export default function EditableFlowCard({
     () => String(cardLabel ?? data?.label ?? ""),
     [cardLabel, data?.label]
   );
-  const isRoleCard = useMemo(() => normalizedCardLabel === "角色", [normalizedCardLabel]);
+  const isGroupedRoleCard = Boolean((data as any)?.roleGroupId);
+  const isGroupedOutlineCard = Boolean((data as any)?.outlineGroupId);
+  const isGroupedCard = isGroupedRoleCard || isGroupedOutlineCard;
+  const isRoleCard = useMemo(
+    () => isGroupedRoleCard || normalizedCardLabel === "角色",
+    [isGroupedRoleCard, normalizedCardLabel]
+  );
+  const hasTitleText = titleText.trim().length > 0;
+  const isBlankDraft = Boolean((data as any)?.isBlankDraft ?? (data as any)?.isBlankBrainstormDraft);
+  const shouldShowReadonlyTitle = !hasTitleText && (!isRoleCard || isBlankDraft);
+
   const isBrainstormCard = useMemo(() => normalizedCardLabel === "脑洞", [normalizedCardLabel]);
   const isInfoCard = useMemo(() => normalizedCardLabel === "信息", [normalizedCardLabel]);
   const isSummaryCard = useMemo(
@@ -585,22 +622,45 @@ export default function EditableFlowCard({
     [displayedContent, isRoleCard]
   );
   const isLargeSummaryCard = isSummaryCard || isInfoCard;
-  const isBlankBrainstormDraft = Boolean((data as any)?.isBlankBrainstormDraft);
   const isBrainstormAiMode = Boolean((data as any)?.brainstormAiMode);
-  const isPendingGenerate = Boolean((data as any)?.pendingGenerate);
   const isHighlighted = Boolean((data as any)?.highlighted);
+  const hasPendingApiResponse = !hasCompletedApiData && (isServerStreaming || isPendingGenerate);
+  const hasAnyPendingCanvasOutput = useMemo(
+    () =>
+      allNodes.some((node) => {
+        const content = String(node.data?.content ?? "").trim();
+        return (
+          Boolean((node.data as any)?.isStreaming) ||
+          Boolean((node.data as any)?.pendingGenerate) ||
+          (Boolean((node.data as any)?.fromApi) && !content)
+        );
+      }),
+    [allNodes]
+  );
+  const shouldShowCardFloatingControls =
+    !isPlaceholderCard &&
+    !hasPendingApiResponse &&
+    !hasAnyPendingCanvasOutput &&
+    !isRoleCard &&
+    !isGroupedOutlineCard;
+  useEffect(() => {
+    if (!shouldShowCardFloatingControls) {
+      setShowFloatingButtons(false);
+    }
+  }, [shouldShowCardFloatingControls]);
+
   const isTextOnlyCard = !isImageCard;
   const collapsedContentMaxHeight = isRoleMermaidCard
     ? 330
     : isImageCard
-      ? 50
+      ? 96
       : isLargeSummaryCard
         ? 720
         : 168;
   const expandedContentMaxHeight = isRoleMermaidCard
     ? 380
     : isImageCard
-      ? 270
+      ? 160
       : isLargeSummaryCard
         ? 820
         : 320;
@@ -611,6 +671,25 @@ export default function EditableFlowCard({
     if (normalizedCardLabel === "大纲" || normalizedCardLabel === "故事大纲") return "大纲卡";
     return "脑洞卡";
   }, [normalizedCardLabel]);
+  const displayCardLabel = useMemo(() => {
+    if (normalizedCardLabel === "故事梗概") return "梗概";
+    return normalizedCardLabel;
+  }, [normalizedCardLabel]);
+  const headerLabelBackground = useMemo(() => {
+    if (isSummaryCard) {
+      return "linear-gradient(90deg, #BCDEFF 0%, rgba(188,222,255,0) 100%)";
+    }
+    if (isInfoCard) {
+      return "linear-gradient(90deg, #DEDEDE 0%, rgba(222,222,222,0) 100%)";
+    }
+    if (isBrainstormCard) {
+      return "linear-gradient(90deg, #FEF9C3 0%, rgba(254,249,195,0) 100%)";
+    }
+    return undefined;
+  }, [isBrainstormCard, isInfoCard, isSummaryCard]);
+  const headerLabelText = isGroupedCard || isRoleCard
+    ? (titleText.trim() ? titleText : `【${displayCardLabel || cardLabel}】请输入标题`)
+    : (displayCardLabel || data.label || cardLabel);
   const handleAddNote = useCallback(async () => {
     const content = String(data.content || "").trim();
     if (!content) {
@@ -628,12 +707,20 @@ export default function EditableFlowCard({
   }, [data.content, msg, noteCardTypeLabel, titleText]);
 
   const floatingActions = useMemo(() => {
+    if (isPlaceholderCard) {
+      return [] as FloatingAction[];
+    }
+
+    if (isGroupedCard) {
+      return [] as FloatingAction[];
+    }
+
     const infoAction: FloatingAction = {
       key: "generate-info",
       label: "我想用它生成...",
       onClick: (e: React.MouseEvent) => {
         e.stopPropagation();
-        canvasHandlers.handleGenerateIns?.(id, "info");
+        canvasHandlers.handlePrepareGenerateToDialog?.(id, "info");
       },
     };
 
@@ -662,8 +749,8 @@ export default function EditableFlowCard({
     if (isSummaryCard) {
       return [
         {
-          key: "expand-role",
-          label: "以此扩充随机角色",
+          key: "generate-role",
+          label: "以此生成角色",
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
             canvasHandlers.handleGenerateIns?.(id, "role");
@@ -726,11 +813,16 @@ export default function EditableFlowCard({
     hasUpstreamSummaryCard,
     id,
     isBrainstormCard,
+    isGroupedCard,
     isInfoCard,
     isRoleCard,
     isSummaryCard,
+    isPlaceholderCard,
   ]);
-  const visibleFloatingActions = useMemo(() => floatingActions.slice(0, 3), [floatingActions]);
+  const visibleFloatingActions = useMemo(
+    () => (shouldShowCardFloatingControls ? floatingActions.slice(0, 3) : []),
+    [floatingActions, shouldShowCardFloatingControls]
+  );
 
   const handleCopyCard = useCallback(() => {
     const currentNode = getNodes().find((node) => node.id === id);
@@ -827,11 +919,13 @@ export default function EditableFlowCard({
       className={cn(
         "vue-flow-card nowheel relative overflow-visible",
         "rounded-[20px] bg-white border",
-        isBlankBrainstormDraft && !isBrainstormAiMode
+        isBlankDraft && !isBrainstormAiMode && !isPendingGenerate && !isServerStreaming
           ? "border-dashed border-[#EFAF00]"
           : "border-solid border-[#e5e7eb]",
         (isBrainstormAiMode || isHighlighted) &&
           "border-solid border-[#EFAF00] shadow-[0px_0px_0px_2px_rgba(239,175,0,0.18),0px_14px_36px_0px_rgba(0,0,0,0.14)]",
+        isHighlighted &&
+          "after:pointer-events-none after:absolute after:inset-[-6px] after:rounded-[24px] after:border after:border-[#EFAF00]/70 after:content-[''] after:animate-ping",
         "shadow-[0px_10px_28px_0px_rgba(0,0,0,0.10)] hover:shadow-[0px_14px_36px_0px_rgba(0,0,0,0.14)]",
         "group transition-shadow duration-200 ease-out",
         isImageCard
@@ -841,17 +935,23 @@ export default function EditableFlowCard({
             : (isExpanded ? "w-[520px] min-h-[420px]" : "w-[300px] min-h-[240px]"),
         isEditing && "nodrag nopan"
       )}
-      onMouseEnter={showFloatingButtonsNow}
-      onMouseLeave={scheduleHideFloatingButtons}
+      onMouseEnter={shouldShowCardFloatingControls ? showFloatingButtonsNow : undefined}
+      onMouseLeave={shouldShowCardFloatingControls ? scheduleHideFloatingButtons : undefined}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 text-sm">
-        <div className="flex items-center gap-2">
-          <span aria-hidden className="size-2 rounded-full bg-[#efaf00]" />
-          <span className="font-semibold text-[#111] text-sm">
-            {isRoleCard
-              ? (titleText.trim() ? titleText : `【${cardLabel}】请输入标题`)
-              : (data.label || cardLabel)}
+      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2 text-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            title={headerLabelText}
+            className="min-w-0 inline-flex max-w-[min(100%,calc(100%-2.5rem))] gap-1 rounded-[6px] px-2 py-0.5 font-semibold text-[#111] text-sm"
+            style={{
+              backgroundImage: headerLabelBackground,
+            }}
+          >
+            <Iconfont unicode="&#xe664;" className="text-[#854D0E] size-4" />
+            <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              {headerLabelText}
+            </span>
           </span>
           {isPendingGenerate ? (
             <span className="rounded-full border border-[#FEF08A] bg-[#FEFCE8] px-2 py-0.5 text-[11px] text-[#854D0E]">
@@ -860,7 +960,7 @@ export default function EditableFlowCard({
           ) : null}
         </div>
         {!isStreaming && (
-          <div className="flex items-center gap-1.5 z-20 transition-opacity">
+          <div className="z-20 flex shrink-0 items-center gap-1.5 transition-opacity">
             {isEditing && allowImageUpload && isImageCard ? (
               <>
                 <input
@@ -955,8 +1055,9 @@ export default function EditableFlowCard({
                 e.stopPropagation();
                 canvasHandlers.handleAddCardToDialog?.(id);
               }}
-              title="添加到对话"
-              className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground"
+              title={hasCardContent ? "添加到对话" : "卡片内容为空，无法添加到对话"}
+              disabled={!hasCardContent}
+              className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
             >
               <MessageSquarePlus className="size-3" />
             </Button>
@@ -975,12 +1076,44 @@ export default function EditableFlowCard({
           </div>
         )}
       </div>
-      {confirmDialog}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(92vw,26rem)] gap-5 rounded-[12px] border-0 p-0 shadow-[0_24px_80px_rgba(0,0,0,0.14)]"
+        >
+          <DialogHeader className="gap-2 px-6 pt-6 text-left">
+            <DialogTitle className="text-base font-semibold text-[#111827]">
+              <Iconfont unicode="&#xe655;" className="text-[#E67E22] size-4 mr-2" />
+              删除卡片
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-6 text-sm leading-6 text-[#4b5563]">
+            此操作不可逆，确认删除卡片？
+          </div>
+          <DialogFooter className="gap-3 px-6 pb-6 sm:justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleteDialogOpen(false)}
+              className="h-10 rounded-3xl border border-[#e5e7eb] bg-white px-5 text-sm font-medium text-[#374151] hover:bg-[#f9fafb]"
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmDelete}
+              className="h-10 rounded-3xl bg-white border !border-[#8E77F0] px-5 text-sm font-medium text-[#8E77F0] hover:bg-[#8E77F0] hover:text-white"
+            >
+              确认
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Body：使用 MarkdownEditor 展示/编辑 md，展开按钮居中；折叠时在展开按钮上方显示渐变蒙层 */}
       <div
         className={cn(
-          "flex min-h-20 flex-col items-center pb-4",
+          "flex min-h-20 w-full flex-1 flex-col pb-4",
           isLargeSummaryCard ? "px-5 pt-1" : "px-4"
         )}
       >
@@ -1006,29 +1139,29 @@ export default function EditableFlowCard({
                 "focus:bg-white"
               )}
             />
-          ) : !isRoleCard ? (
+          ) : shouldShowReadonlyTitle ? (
             <div
               className={cn(
                 "flex w-full items-start gap-2 rounded-[14px] px-3 py-2 font-semibold",
                 isLargeSummaryCard ? "text-[24px] leading-8" : "text-[18px] leading-6",
-                titleText.trim() ? "text-[#111]" : "text-[#9CA3AF]"
+                "text-[#9CA3AF]"
               )}
             >
               <span className="min-w-0 flex-1">
-                {titleText.trim() ? titleText : `【${cardLabel}】请输入标题`}
+                {`【${cardLabel}】请输入标题`}
               </span>
-              {isBrainstormCard && isBlankBrainstormDraft && !isPendingGenerate ? (
+              {isBlankDraft && !isGroupedOutlineCard && !isPendingGenerate ? (
                 <button
                   type="button"
-                  className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-[#EFAF00] bg-[#FFF7DB] text-[#EFAF00] transition-colors hover:bg-[#FFE9A8] hover:text-[#B7791F]"
+                  className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center text-black transition-colors hover:text-[#EFAF00]"
                   onClick={(e) => {
                     e.stopPropagation();
                     canvasHandlers.handlePrepareBrainstormCard?.(id);
                   }}
-                  title="进入 AI 模式"
-                  aria-label="进入 AI 模式"
+                  title="AI 生成"
+                  aria-label="AI 生成"
                 >
-                  <Sparkles className="size-3.5" />
+                  <Iconfont unicode="&#xe6d9;" className="size-3" />
                 </button>
               ) : null}
             </div>
@@ -1040,7 +1173,12 @@ export default function EditableFlowCard({
         <div
           className={cn(
             "relative w-full",
-            isImageCard ? "mt-2" : isLargeSummaryCard ? "mt-4" : "mt-3",
+            isImageCard && "flex flex-1 flex-col",
+            isImageCard
+              ? "mt-2"
+              : isLargeSummaryCard
+                ? "mt-4"
+                : "mt-3",
             isEditing && "nodrag nopan"
           )}
           onMouseDown={isEditing ? (e) => e.stopPropagation() : undefined}
@@ -1070,6 +1208,7 @@ export default function EditableFlowCard({
               autoScroll={isStreaming && !isEditing}
               className={cn(
                 "relative w-full cursor-pointer",
+                isImageCard && (isExpanded ? "min-h-[160px]" : "min-h-[96px]"),
                 isTextOnlyCard && "rounded-[14px] bg-[#fafafa] px-3 py-3",
                 isLargeSummaryCard && "min-h-[720px] rounded-[16px] border border-[#f1f5f9] bg-[#fcfcfc] px-4 py-4",
                 isRoleMermaidCard && (isExpanded ? "min-h-[380px]" : "min-h-[330px]"),
@@ -1077,7 +1216,7 @@ export default function EditableFlowCard({
               )}
               onWheel={handleWheel}
             >
-              <div ref={textRef} className="w-full min-h-0">
+              <div ref={textRef} className="w-full min-h-0 p-0">
                 <MarkdownEditor
                   ref={editorRef}
                   className="min-h-0"
@@ -1193,62 +1332,66 @@ export default function EditableFlowCard({
       </div>
 
       {/* Add */}
-      <span
-        className={cn(
-          "absolute bottom-[-15px] left-1/2 -translate-x-1/2 z-10",
-          // 不做淡入淡出，避免 hover 时出现“半透明”过渡帧
-          showFloatingButtons ? "visible" : "invisible"
-        )}
-        onMouseEnter={showFloatingButtonsNow}
-        onMouseLeave={scheduleHideFloatingButtons}
-      >
-        <div className="relative">
-          {/* options */}
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-0",
-              // 同上：直接显示/隐藏，不做 opacity 过渡
-              showFloatingButtons ? "block" : "hidden"
-            )}
-            aria-hidden={!showFloatingButtons}
-          >
-            {visibleFloatingActions.map((action, index) => (
-              <div
-                key={action.key}
-                className={cn(
-                  "pointer-events-none absolute",
-                  index === 0 && "-top-15 left-15 -translate-x-1/2",
-                  index === 1 && "top-1/2 left-15 ml-2 -translate-y-1/2",
-                  index === 2 && "top-full mt-2 left-20 -translate-x-1/2"
-                )}
-              >
-                <Button
-                  type="button"
-                  className={cn(
-                    "pointer-events-auto rounded-[10px] border border-[#FEF08A] bg-[#FEFCE8] px-3 py-1 text-[12px] text-[#854D0E] shadow-sm",
-                    "hover:bg-[#FEF08A]/80"
-                  )}
-                  onClick={action.onClick}
-                >
-                  {action.label}
-                </Button>
-              </div>
-            ))}
-          </div>
+      {shouldShowCardFloatingControls ? (
+        <span
+          className={cn(
+            "absolute bottom-[-15px] left-1/2 -translate-x-1/2 z-10",
+            // 不做淡入淡出，避免 hover 时出现“半透明”过渡帧
+            showFloatingButtons ? "visible" : "invisible"
+          )}
+          onMouseEnter={showFloatingButtonsNow}
+          onMouseLeave={scheduleHideFloatingButtons}
+        >
+          <div className="relative">
+            {/* options */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0",
+                // 同上：直接显示/隐藏，不做 opacity 过渡
+                showFloatingButtons ? "block" : "hidden"
+              )}
+              aria-hidden={!showFloatingButtons}
+            >
+              {shouldShowCardFloatingControls
+                ? visibleFloatingActions.map((action, index) => (
+                    <div
+                      key={action.key}
+                      className={cn(
+                        "pointer-events-none absolute",
+                        index === 0 && "-top-15 left-15 -translate-x-1/2",
+                        index === 1 && "top-1/2 left-15 ml-2 -translate-y-1/2",
+                        index === 2 && "top-full mt-2 left-20 -translate-x-1/2"
+                      )}
+                    >
+                      <Button
+                        type="button"
+                        className={cn(
+                          "pointer-events-auto rounded-[10px] border border-[#FEF08A] bg-[#FEFCE8] px-3 py-1 text-[12px] text-[#854D0E] shadow-sm",
+                          "hover:bg-[#FEF08A]/80"
+                        )}
+                        onClick={action.onClick}
+                      >
+                        {action.label}
+                      </Button>
+                    </div>
+                  ))
+                : null}
+            </div>
 
-          <Button
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleAdd();
-            }}
-            className="rounded-full bg-[#EFAF00] text-white hover:bg-[#EFAF00]/90 hover:scale-110 hover:shadow-md size-8"
-            title="添加"
-          >
-            <Plus className="size-4" />
-          </Button>
-        </div>
-      </span>
+            <Button
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAdd();
+              }}
+              className="rounded-full bg-[#EFAF00] text-white hover:bg-[#EFAF00]/90 hover:scale-110 hover:shadow-md size-8"
+              title="添加"
+            >
+              <Plus className="size-4" />
+            </Button>
+          </div>
+        </span>
+      ) : null}
 
       {/* Invisible handles: provide edge anchor points */}
       <Handle

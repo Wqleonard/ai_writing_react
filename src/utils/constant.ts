@@ -46,5 +46,11 @@ export const ORDER_CODE_VALUE: Record<string, string> = {
   INSPIRATION_THEME: '画布创作-灵感选题',
   INSPIRATION_INTRODUCTION: '画布创作-故事梗概',
   INSPIRATION_STORY_SETTING: '画布创作-故事设定',
-  INSPIRATION_STORY_OUTLINE: '画布创作-大纲'
+  INSPIRATION_STORY_OUTLINE: '画布创作-大纲',
+  CANVAS_CREATE_BRAIN_STORM: '画布创作- 脑洞',
+  CANVAS_CREATE_OUTLINE: '画布创作-大纲',
+  CANVAS_CREATE_SUMMARY: '画布创作-梗概',
+  CANVAS_CREATE_CHARACTER: '画布创作-角色',
+  CANVAS_CREATE_INFO: '画布创作-信息',
+  CANVAS_CREATE_SMART: '画布创作-智能',
 }

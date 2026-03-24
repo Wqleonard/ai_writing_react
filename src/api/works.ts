@@ -126,7 +126,7 @@ const postInspirationStream = (
 interface PostCanvasChoicesStreamData {
   assistantId?: "canvas_chat" | "canvas";
   prompt: string;
-  model?: string;
+  mode?: 'max' | 'fast';
   time?: string;
   type?: "auto" | "manual";
   files?: string | Record<string, string>;
@@ -164,7 +164,7 @@ const postCanvasChoicesStream = (
   return apiClient.postStream(
     "/api/works/canvas-chat",
     {
-      model: "kimi_k2",
+      mode: data.mode ?? "fast",
       type: data.type ?? "auto",
       files: serializedFiles,
       content: data.prompt
