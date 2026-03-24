@@ -166,7 +166,7 @@ const MInspirationPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
-  const [showPaw, setShowPaw] = useState(true);
+  const [showPaw, setShowPaw] = useState(false);
   const [pawHit, setPawHit] = useState(false);
   const [buttonHit, setButtonHit] = useState(false);
   const [lastInspirationWord, setLastInspirationWord] = useState("");
