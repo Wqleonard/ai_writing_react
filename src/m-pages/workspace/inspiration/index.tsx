@@ -26,8 +26,6 @@ import DEFAULT_CARD_IMAGE from "@/assets/images/m_ins/card_cover.png";
 import CAT_HAND from "@/assets/images/m_ins/cat_hand.png";
 import "./card.less";
 
-const COST_PER_REROLL = 60;
-const COST_PER_DETAIL = 1;
 const SWIPE_THRESHOLD = 28;
 const CARD_WIDTH_PX = 380;
 // 左右卡片与中间卡片的水平间距（rem）：值越小越紧密
@@ -75,13 +73,6 @@ import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
-import {
-  selectDailyBalance,
-  selectDailyBalanceLimit,
-  selectFixedBalance,
-  useLoginStore,
-} from "@/stores/loginStore";
-
 const EMPTY_CARD_DATA = {
   title: "",
   summary: "",
@@ -142,16 +133,6 @@ const InspirationCard = ({
 
 const MInspirationPage = () => {
   const [status, setStatus] = useState<Status>("idle");
-  const balance = useLoginStore(selectDailyBalance);
-  const fixedToken = useLoginStore(selectFixedBalance);
-  const dailyBalanceLimit = useLoginStore(selectDailyBalanceLimit);
-
-  // 整数化
-  const totalPoint = useMemo(() => {
-    return Math.floor(fixedToken + (dailyBalanceLimit - balance));
-  }, [fixedToken, dailyBalanceLimit, balance]);
-
-  const refreshBalance = useLoginStore((s) => s.refreshBalance);
   const [ideaInput, setIdeaInput] = useState("");
 
   const [openInsDetail, setOpenInsDetail] = useState(false);
@@ -170,13 +151,11 @@ const MInspirationPage = () => {
   const [pawHit, setPawHit] = useState(false);
   const [buttonHit, setButtonHit] = useState(false);
   const [lastInspirationWord, setLastInspirationWord] = useState("");
-  const [optimisticPointCost, setOptimisticPointCost] = useState(0);
 
   const [InspirationCardData, setInspirationCardData] =
     useState<InspirationIdea[]>(createEmptyCards);
   const [carouselOffset, setCarouselOffset] = useState(1);
   const [dragPreviewOffset, setDragPreviewOffset] = useState(0);
-  const availablePoint = Math.max(0, totalPoint - optimisticPointCost);
 
   const headline = useMemo(() => {
     if (status === "loading") return "加载中...";
@@ -200,7 +179,6 @@ const MInspirationPage = () => {
   const suppressCardClickRef = useRef(false);
   const snapTimerRef = useRef<number | null>(null);
   const detailRequestIdRef = useRef(0);
-  const balanceInitRef = useRef(false);
 
   const normalizeCarouselOffset = useCallback(
     (value: number) => {
@@ -213,9 +191,10 @@ const MInspirationPage = () => {
 
   const rotateCarousel = useCallback(
     (delta: number) => {
+      if (status === "loading") return;
       setCarouselOffset((prev) => normalizeCarouselOffset(prev + delta));
     },
-    [normalizeCarouselOffset],
+    [normalizeCarouselOffset, status],
   );
 
   const clearSnapTimer = useCallback(() => {
@@ -239,6 +218,7 @@ const MInspirationPage = () => {
 
   const handleCarouselWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       event.preventDefault();
       const dominantDelta =
         Math.abs(event.deltaY) > Math.abs(event.deltaX)
@@ -251,11 +231,12 @@ const MInspirationPage = () => {
       rotateCarousel(dominantDelta > 0 ? CAROUSEL_STEP : -CAROUSEL_STEP);
       scheduleCarouselSnap();
     },
-    [rotateCarousel, scheduleCarouselSnap],
+    [rotateCarousel, scheduleCarouselSnap, status],
   );
 
   const handleCarouselPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       clearSnapTimer();
       if (event.currentTarget.hasPointerCapture(event.pointerId) === false) {
@@ -269,11 +250,12 @@ const MInspirationPage = () => {
       suppressCardClickRef.current = false;
       setDragPreviewOffset(0);
     },
-    [clearSnapTimer],
+    [clearSnapTimer, status],
   );
 
   const handleCarouselPointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       if (pointerIdRef.current !== event.pointerId) return;
 
       const deltaX = event.clientX - pointerStartXRef.current;
@@ -301,7 +283,7 @@ const MInspirationPage = () => {
       );
       setDragPreviewOffset(clampedOffset);
     },
-    [],
+    [status],
   );
 
   const finishPointerGesture = useCallback(
@@ -319,7 +301,7 @@ const MInspirationPage = () => {
         (Math.abs(deltaX) >= SWIPE_THRESHOLD ||
           Math.abs(velocityX) >= SWIPE_VELOCITY_THRESHOLD);
 
-      if (shouldSlide) {
+      if (status !== "loading" && shouldSlide) {
         rotateCarousel(deltaX < 0 ? CAROUSEL_STEP : -CAROUSEL_STEP);
       }
 
@@ -331,7 +313,7 @@ const MInspirationPage = () => {
       setDragPreviewOffset(0);
       scheduleCarouselSnap();
     },
-    [rotateCarousel, scheduleCarouselSnap],
+    [rotateCarousel, scheduleCarouselSnap, status],
   );
 
   const handleCarouselPointerUp = useCallback(
@@ -351,6 +333,11 @@ const MInspirationPage = () => {
   useEffect(() => {
     return clearSnapTimer;
   }, [clearSnapTimer]);
+
+  useEffect(() => {
+    if (status !== "loading") return;
+    setDragPreviewOffset(0);
+  }, [status]);
 
   const cardTransforms = useMemo(() => {
     const total = InspirationCardData.length;
@@ -413,16 +400,6 @@ const MInspirationPage = () => {
     }
     setCarouselOffset(Math.floor(InspirationCardData.length / 2));
   }, [InspirationCardData.length]);
-
-  useEffect(() => {
-    setOptimisticPointCost(0);
-  }, []);
-
-  useEffect(() => {
-    if (balanceInitRef.current) return;
-    balanceInitRef.current = true;
-    void refreshBalance();
-  }, [refreshBalance]);
 
   const fetchInspirationCards = useCallback(async (seed: string) => {
     try {
@@ -535,32 +512,19 @@ const MInspirationPage = () => {
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
-    if (availablePoint < COST_PER_REROLL) {
-      mtoast.error("灵感余额不足");
-      return;
-    }
-
-    setOptimisticPointCost((prev) => prev + COST_PER_REROLL);
     setLoading(true);
     setHasGenerated(true);
     setStatus("loading");
 
     try {
-      const success = await fetchInspirationCards(ideaInput.trim());
-      if (!success) {
-        setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_REROLL));
-      }
+      await fetchInspirationCards(ideaInput.trim());
     } finally {
       setLoading(false);
     }
-  }, [availablePoint, fetchInspirationCards, ideaInput, loading]);
+  }, [fetchInspirationCards, ideaInput, loading]);
 
   const handleReroll = useCallback(async () => {
     if (loading || status === "loading" || status === "rerolling") return;
-    if (availablePoint < COST_PER_REROLL) {
-      mtoast.error("灵感余额不足");
-      return;
-    }
 
     const seed = ideaInput.trim() || lastInspirationWord;
     if (!seed) {
@@ -572,7 +536,6 @@ const MInspirationPage = () => {
     setShowPaw(true);
     setPawHit(false);
     setButtonHit(false);
-    setOptimisticPointCost((prev) => prev + COST_PER_REROLL);
     window.requestAnimationFrame(() => {
       setPawHit(true);
     });
@@ -586,16 +549,12 @@ const MInspirationPage = () => {
       setLoading(true);
       setStatus("loading");
       try {
-        const success = await fetchInspirationCards(seed);
-        if (!success) {
-          setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_REROLL));
-        }
+        await fetchInspirationCards(seed);
       } finally {
         setLoading(false);
       }
     }, 260);
   }, [
-    availablePoint,
     fetchInspirationCards,
     ideaInput,
     lastInspirationWord,
@@ -659,12 +618,6 @@ const MInspirationPage = () => {
         return;
       }
       if (loading) return;
-      if (availablePoint < COST_PER_DETAIL) {
-        mtoast.error("灵感余额不足");
-        return;
-      }
-
-      setOptimisticPointCost((prev) => prev + COST_PER_DETAIL);
       setInsDetailData({
         ...cardData,
         roleInfo: "",
@@ -673,12 +626,9 @@ const MInspirationPage = () => {
         worldSetting: "",
       });
       setOpenInsDetail(true);
-      const success = await fetchCardDetail(cardData.title);
-      if (!success) {
-        setOptimisticPointCost((prev) => Math.max(0, prev - COST_PER_DETAIL));
-      }
+      await fetchCardDetail(cardData.title);
     },
-    [availablePoint, fetchCardDetail, handleGenerateSingleCenterCard, loading],
+    [fetchCardDetail, handleGenerateSingleCenterCard, loading],
   );
 
   const handleRegenerateDetail = useCallback(async () => {
@@ -740,7 +690,10 @@ const MInspirationPage = () => {
         </div>
         <div className="h-200 flex items-center justify-center">
           <div
-            className="inspiration-carousel relative w-full h-150 select-none"
+            className={cn(
+              "inspiration-carousel relative w-full h-150 select-none",
+              status === "loading" && "pointer-events-none",
+            )}
             style={{ touchAction: "pan-y" }}
             onWheel={handleCarouselWheel}
             onPointerDown={handleCarouselPointerDown}
