@@ -1,7 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from "axios";
 import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import { toast } from "sonner";
+import { mtoast } from "@/components/ui/toast";
+import { isMobileDevice } from "@/utils/rem";
+
 import { getOrCreateVisitorId } from "@/utils/visitorId";
 
 export const WRITE_STREAM_URL = "/api/v1/writing/generate-stream";
@@ -74,6 +76,14 @@ function extractErrorMessage(data: any, fallback: string) {
   return data?.message || data?.error || data?.msg || fallback;
 }
 
+function showErrorToast(message: string) {
+  if (typeof window !== "undefined" && isMobileDevice()) {
+    mtoast.error(message);
+    return;
+  }
+  toast.error(message);
+}
+
 function applyAuthOrVisitorHeader(headers: Record<string, string>, token: string | null | undefined) {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -84,6 +94,29 @@ function applyAuthOrVisitorHeader(headers: Record<string, string>, token: string
   delete headers.Authorization;
   const visitorId = getOrCreateVisitorId();
   if (visitorId) headers["X-Visitor-Id"] = visitorId;
+}
+
+let tokenExpiredHandling = false;
+
+function defaultTokenExpiredHandler() {
+  if (typeof window === "undefined") return;
+  if (tokenExpiredHandling) return;
+  tokenExpiredHandling = true;
+
+  // 懒加载 store，避免 api 层和 store 的静态循环依赖
+  void import("@/stores/loginStore")
+    .then(({ useLoginStore }) => {
+      useLoginStore.getState().logout();
+    })
+    .catch(() => {
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userInfo");
+      } catch {
+        // ignore
+      }
+      window.location.href = "/";
+    });
 }
 
 export function createApiClient(options: ApiClientOptions = {}) {
@@ -106,7 +139,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
   const handleTokenExpired = () => {
     onWarnMessage?.("登录已过期，请重新登录");
-    onTokenExpired?.();
+    (onTokenExpired ?? defaultTokenExpiredHandler)();
   };
 
   // 请求拦截器
@@ -147,7 +180,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         // 400 参数错误
         if (status === 400) {
           const msg = extractErrorMessage(data, "请求参数错误，请检查后重试");
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
           const customError: any = new Error(msg);
           customError.response = error.response;
@@ -158,7 +191,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         // 403 无权限
         if (status === 403) {
           const msg = extractErrorMessage(data, "无访问权限");
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
           return Promise.reject(error);
         }
@@ -166,7 +199,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         // 404 资源不存在
         if (status === 404) {
           const msg = extractErrorMessage(data, "请求的资源不存在");
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
           return Promise.reject(error);
         }
@@ -174,7 +207,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         // 429 限流
         if (status === 429) {
           const msg = extractErrorMessage(data, "请求过于频繁，请稍后再试");
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
           return Promise.reject(error);
         }
@@ -182,24 +215,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
         // 5xx 服务器错误
         if (status >= 500) {
           const msg = extractErrorMessage(data, "服务器错误，请稍后重试");
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
           return Promise.reject(error);
         }
 
         // 其他 HTTP 错误
         const msg = extractErrorMessage(data, `请求失败（${status}）`);
-        toast.error(msg);
+        showErrorToast(msg);
         onErrorMessage?.(msg);
       } else if (error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
         // 超时
         const msg = "请求超时，请检查网络后重试";
-        toast.error(msg);
+        showErrorToast(msg);
         onErrorMessage?.(msg);
       } else if (!error?.response) {
         // 网络断开 / 无响应
         const msg = "网络异常，请检查网络连接";
-        toast.error(msg);
+        showErrorToast(msg);
         onErrorMessage?.(msg);
       }
 
@@ -343,7 +376,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
           }
         }
         if (config?.showError !== false) {
-          toast.error(errorMessage);
+          showErrorToast(errorMessage);
           onErrorMessage?.(errorMessage);
         }
         const apiError: any = new Error(errorMessage);
@@ -395,7 +428,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         if (streamError?.name !== "AbortError") {
           const msg = streamError instanceof Error ? streamError.message : "流式读取失败";
           if (config?.showError !== false) {
-            toast.error(msg);
+            showErrorToast(msg);
             onErrorMessage?.(msg);
           }
           const err: any = streamError instanceof Error ? streamError : new Error(msg);
@@ -413,7 +446,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
       if (config?.showError !== false) {
         const msg = e instanceof Error ? e.message : "请求失败，请稍后重试";
-        toast.error(msg);
+        showErrorToast(msg);
         onErrorMessage?.(msg);
       }
       const err = e instanceof Error ? e : new Error("Unknown error");
@@ -453,7 +486,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     es.onerror = (err) => {
       if (config?.showError !== false) {
-        toast.error("连接中断，请稍后重试");
+        showErrorToast("连接中断，请稍后重试");
         onErrorMessage?.("连接中断，请稍后重试");
       }
       onError?.(err);
@@ -522,7 +555,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       } else {
         const msg = `请求失败（${xhr.status}）`;
         if (config?.showError !== false) {
-          toast.error(msg);
+          showErrorToast(msg);
           onErrorMessage?.(msg);
         }
         onError?.(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`) as any);
@@ -531,7 +564,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     xhr.onerror = (err) => {
       if (config?.showError !== false) {
-        toast.error("网络异常，请检查网络连接");
+        showErrorToast("网络异常，请检查网络连接");
         onErrorMessage?.("网络异常，请检查网络连接");
       }
       onError?.(err);
@@ -590,7 +623,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
           }
         }
         if (config?.showError !== false) {
-          toast.error(errorMessage);
+          showErrorToast(errorMessage);
           onErrorMessage?.(errorMessage);
         }
         const apiError: any = new Error(errorMessage);
@@ -642,7 +675,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         if (streamError?.name !== "AbortError") {
           const msg = streamError instanceof Error ? streamError.message : "流式读取失败";
           if (config?.showError !== false) {
-            toast.error(msg);
+            showErrorToast(msg);
             onErrorMessage?.(msg);
           }
           const err: any = streamError instanceof Error ? streamError : new Error(msg);
@@ -660,7 +693,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
       if (config?.showError !== false) {
         const msg = e instanceof Error ? e.message : "请求失败，请稍后重试";
-        toast.error(msg);
+        showErrorToast(msg);
         onErrorMessage?.(msg);
       }
       const err = e instanceof Error ? e : new Error("Unknown error");

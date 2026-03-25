@@ -9,6 +9,10 @@ import { mtoast } from '@/components/ui/toast'
 import { MConfirmDialog } from '@/components/ui/MConfirmDialog'
 
 export default function MNotesPage() {
+  const DELETE_ACTION_WIDTH = 96 // 对应 w-24
+  const MAX_LEFT_OFFSET = -DELETE_ACTION_WIDTH
+  const SNAP_THRESHOLD = MAX_LEFT_OFFSET / 2
+
   const navigate = useNavigate()
   const noteList = useNoteStore(selectNoteList)
   const loading = useNoteStore(selectNotesLoading)
@@ -22,6 +26,7 @@ export default function MNotesPage() {
   const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<number | null>(null)
   const touchStartX = useRef(0)
   const touchCurrentX = useRef(0)
+  const touchStartOffset = useRef(0)
 
   // 初始化加载
   useEffect(() => {
@@ -44,34 +49,34 @@ export default function MNotesPage() {
   // 触摸开始
   const handleTouchStart = useCallback((e: React.TouchEvent, noteId: number) => {
     touchStartX.current = e.touches[0].clientX
+    touchStartOffset.current = activeId === noteId ? currentOffset : 0
     setActiveId(noteId)
-  }, [])
+    setCurrentOffset(touchStartOffset.current)
+  }, [activeId, currentOffset])
 
   // 触摸移动
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!activeId) return
     touchCurrentX.current = e.touches[0].clientX
     const diff = touchCurrentX.current - touchStartX.current
-    // 只允许向左滑动
-    if (diff < 0) {
-      setCurrentOffset(Math.max(diff, -160)) // 最大滑动 160px
-    }
-  }, [activeId])
+    // 支持左滑打开、右滑关闭；基于触摸开始时的偏移量计算
+    const nextOffset = Math.min(0, Math.max(MAX_LEFT_OFFSET, touchStartOffset.current + diff))
+    setCurrentOffset(nextOffset)
+  }, [activeId, MAX_LEFT_OFFSET])
 
   // 触摸结束
   const handleTouchEnd = useCallback(() => {
     if (!activeId) return
 
-    const threshold = -80 // 滑动阈值
-    if (currentOffset < threshold) {
-      // 保持展开状态
-      setCurrentOffset(currentOffset)
+    if (currentOffset < SNAP_THRESHOLD) {
+      // 吸附到完全展开
+      setCurrentOffset(MAX_LEFT_OFFSET)
     } else {
-      // 收起
+      // 吸附到收起
       setCurrentOffset(0)
       setActiveId(null)
     }
-  }, [activeId, currentOffset])
+  }, [activeId, currentOffset, MAX_LEFT_OFFSET, SNAP_THRESHOLD])
 
   // 打开删除确认框
   const handleDelete = useCallback((noteId: number) => {
@@ -213,8 +218,7 @@ export default function MNotesPage() {
               {/* 右侧删除按钮 */}
               {activeId === note.id && currentOffset < 0 && (
                 <div
-                  className="absolute right-0 top-0 h-full flex items-center justify-center bg-[#ff4444] text-white z-0 active:bg-[#cc0000] cursor-pointer"
-                  style={{ width: '160px' }}
+                  className="absolute w-24 right-0 top-0 h-full flex items-center justify-center bg-[#ff4444] text-white z-0 active:bg-[#cc0000] cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleDelete(note.id)

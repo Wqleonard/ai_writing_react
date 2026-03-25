@@ -1,0 +1,14 @@
+.animate-notice-marquee {
+  animation: notice-marquee 20s linear infinite;
+  will-change: transform;
+}
+
+@keyframes notice-marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}

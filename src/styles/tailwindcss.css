@@ -71,15 +71,34 @@
   }
 
   .font-YaHei {
-    font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family:
+      "YaHei",
+      "Microsoft YaHei",
+      "PingFang SC",
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
   }
 
   .font-YaHei\! {
-    font-family: 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family:
+      "YaHei",
+      "Microsoft YaHei",
+      "PingFang SC",
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif !important;
   }
 
   .font-KaiTi {
-    font-family: 'KaiTi', 'YaHei', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family:
+      "KaiTi",
+      "YaHei",
+      "Microsoft YaHei",
+      "PingFang SC",
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
   }
 
   .custom-btn {
@@ -98,12 +117,11 @@
       cursor: not-allowed;
     }
   }
-    .shadow-popper-base {
-        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
-    }
+  .shadow-popper-base {
+    box-shadow: 0 0 0.75rem rgba(0, 0, 0, 0.12) !important;
+  }
 
-    .shadow-popper-base\!{
-        box-shadow: 0 0 0.75rem rgba(0,0,0,0.12) !important;
-    }
-
+  .shadow-popper-base\! {
+    box-shadow: 0 0 0.75rem rgba(0, 0, 0, 0.12) !important;
+  }
 }
