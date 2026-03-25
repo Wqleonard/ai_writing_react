@@ -90,7 +90,10 @@ export default function MLandingPage() {
   }, [])
 
   return (
-    <div className="overflow-y-auto h-screen overflow-x-hidden hide-scrollbar bg-[#f7f7f4]">
+    <div
+      className="overflow-y-auto h-screen overflow-x-hidden hide-scrollbar bg-[#f7f7f4]"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       {/* 顶部导航 */}
       <div className="h-20 w-full flex justify-between items-center px-9 fixed top-0 left-0 z-99 bg-[#f7f7f4]">
         <div className="h-full flex items-center gap-4">
@@ -338,7 +341,10 @@ export default function MLandingPage() {
         </footer>
 
         {/* 底部版权信息 */}
-        <div className="mt-22 flex flex-col gap-2 items-center text-[#999999] text-2xl pb-40">
+        <div
+          className="mt-22 flex flex-col gap-2 items-center text-[#999999] text-2xl pb-40"
+          style={{ paddingBottom: 'calc(10rem + env(safe-area-inset-bottom))' }}
+        >
           <div className="w-150 h-px bg-[#999999]"/>
           <div className="mt-18">
             © 2025 数龙信息技术（浙江）有限公司 保留所有权利。

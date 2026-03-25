@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
+      host: '0.0.0.0',
       port: 5555,
     },
     plugins: [

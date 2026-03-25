@@ -23,10 +23,9 @@ import { Iconfont } from "@/components/Iconfont";
 import { cn } from "@/lib/utils";
 
 import DEFAULT_CARD_IMAGE from "@/assets/images/m_ins/card_cover.png";
-import CAT_HAND from '@/assets/images/m_ins/cat_hand.png';
+import CAT_HAND from "@/assets/images/m_ins/cat_hand.png";
 import "./card.less";
 
-const COST_PER_REROLL = 10;
 const SWIPE_THRESHOLD = 28;
 const CARD_WIDTH_PX = 380;
 // 左右卡片与中间卡片的水平间距（rem）：值越小越紧密
@@ -67,45 +66,19 @@ interface InspirationCardProps {
   style: CSSProperties;
   side3dClassName?: string;
   isActive: boolean;
-  onClick: (data: InspirationIdea) => void;
+  onClick: (data: InspirationIdea, isActive: boolean) => void;
 }
 
-import TEST1 from "@/assets/images/m_ins/test1.jpg";
-import TEST2 from "@/assets/images/m_ins/test2.jpg";
-import TEST3 from "@/assets/images/m_ins/test3.jpg";
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { selectDailyBalance, selectDailyBalanceLimit, selectFixedBalance, useLoginStore } from "@/stores/loginStore";
-
 const EMPTY_CARD_DATA = {
   title: "",
   summary: "",
   tag: "",
   image: "",
 };
-
-const INSPIRATION_CARDS: InspirationIdea[] = [
-  {
-    title: "玻璃海公约",
-    summary: "海底城市重启投票前夜，档案员发现被抹去的第零条。",
-    tag: "#科幻",
-    image: TEST1,
-  },
-  {
-    title: "雾屿邮差",
-    summary: "守岛邮差在无名信件里，解锁雾屿沉睡的秘密。",
-    tag: "#悬疑",
-    image: TEST2,
-  },
-  {
-    title: "雨夜备忘录",
-    summary: "旧手机凌晨自动发来未来短信，主角被迫提前破局。",
-    tag: "#都市脑洞",
-    image: TEST3,
-  },
-];
 
 const createEmptyCards = () => [
   EMPTY_CARD_DATA,
@@ -125,7 +98,7 @@ const InspirationCard = ({
   return (
     <div
       className={cn(
-        "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
+        "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 overflow-hidden p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
         hasData && "cursor-pointer",
         side3dClassName,
       )}
@@ -134,14 +107,12 @@ const InspirationCard = ({
       tabIndex={0}
       aria-label="抽取灵感卡"
       onClick={() => {
-        if (!hasData) return;
-        onClick(data);
+        onClick(data, isActive);
       }}
       onKeyDown={(event) => {
-        if (!hasData) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onClick(data);
+          onClick(data, isActive);
         }
       }}
     >
@@ -151,7 +122,7 @@ const InspirationCard = ({
         className="w-full h-full object-cover rounded-lg"
       />
       {data.title && (
-        <div className="absolute bottom-0 left-0 right-0 p-5 pb-6 text-white">
+        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-b from-black/0 to-black/30 p-5 pb-6 text-white">
           <div className="text-[40px] font-bold">{data.title}</div>
           <div className="mt-5 line-clamp-2 text-2xl">{data.summary}</div>
         </div>
@@ -162,24 +133,11 @@ const InspirationCard = ({
 
 const MInspirationPage = () => {
   const [status, setStatus] = useState<Status>("idle");
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [imageReady, setImageReady] = useState(false);
-  const balance = useLoginStore(selectDailyBalance);
-  const fixedToken = useLoginStore(selectFixedBalance);
-  const dailyBalanceLimit = useLoginStore(selectDailyBalanceLimit);
-
-  // 整数化
-  const totalPoint = useMemo(() => {
-    return Math.floor(fixedToken + (dailyBalanceLimit - balance));
-  }, [fixedToken, dailyBalanceLimit, balance]);
-
-  const refreshBalance = useLoginStore((s) => s.refreshBalance);
   const [ideaInput, setIdeaInput] = useState("");
 
   const [openInsDetail, setOpenInsDetail] = useState(false);
-  const [insDetailData, setInsDetailData] = useState<InspirationDetailData | null>(
-    null,
-  );
+  const [insDetailData, setInsDetailData] =
+    useState<InspirationDetailData | null>(null);
   const [insDetailLoading, setInsDetailLoading] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
 
@@ -233,9 +191,10 @@ const MInspirationPage = () => {
 
   const rotateCarousel = useCallback(
     (delta: number) => {
+      if (status === "loading") return;
       setCarouselOffset((prev) => normalizeCarouselOffset(prev + delta));
     },
-    [normalizeCarouselOffset],
+    [normalizeCarouselOffset, status],
   );
 
   const clearSnapTimer = useCallback(() => {
@@ -259,6 +218,7 @@ const MInspirationPage = () => {
 
   const handleCarouselWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       event.preventDefault();
       const dominantDelta =
         Math.abs(event.deltaY) > Math.abs(event.deltaX)
@@ -271,11 +231,12 @@ const MInspirationPage = () => {
       rotateCarousel(dominantDelta > 0 ? CAROUSEL_STEP : -CAROUSEL_STEP);
       scheduleCarouselSnap();
     },
-    [rotateCarousel, scheduleCarouselSnap],
+    [rotateCarousel, scheduleCarouselSnap, status],
   );
 
   const handleCarouselPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       clearSnapTimer();
       if (event.currentTarget.hasPointerCapture(event.pointerId) === false) {
@@ -289,11 +250,12 @@ const MInspirationPage = () => {
       suppressCardClickRef.current = false;
       setDragPreviewOffset(0);
     },
-    [clearSnapTimer],
+    [clearSnapTimer, status],
   );
 
   const handleCarouselPointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (status === "loading") return;
       if (pointerIdRef.current !== event.pointerId) return;
 
       const deltaX = event.clientX - pointerStartXRef.current;
@@ -306,7 +268,8 @@ const MInspirationPage = () => {
         ) {
           return;
         }
-        pointerAxisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
+        pointerAxisRef.current =
+          Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
       }
 
       if (pointerAxisRef.current !== "x") return;
@@ -320,7 +283,7 @@ const MInspirationPage = () => {
       );
       setDragPreviewOffset(clampedOffset);
     },
-    [],
+    [status],
   );
 
   const finishPointerGesture = useCallback(
@@ -328,14 +291,17 @@ const MInspirationPage = () => {
       if (pointerIdRef.current !== event.pointerId) return;
 
       const deltaX = event.clientX - pointerStartXRef.current;
-      const elapsedMs = Math.max(1, performance.now() - pointerStartAtRef.current);
+      const elapsedMs = Math.max(
+        1,
+        performance.now() - pointerStartAtRef.current,
+      );
       const velocityX = deltaX / elapsedMs;
       const shouldSlide =
         pointerAxisRef.current === "x" &&
         (Math.abs(deltaX) >= SWIPE_THRESHOLD ||
           Math.abs(velocityX) >= SWIPE_VELOCITY_THRESHOLD);
 
-      if (shouldSlide) {
+      if (status !== "loading" && shouldSlide) {
         rotateCarousel(deltaX < 0 ? CAROUSEL_STEP : -CAROUSEL_STEP);
       }
 
@@ -347,7 +313,7 @@ const MInspirationPage = () => {
       setDragPreviewOffset(0);
       scheduleCarouselSnap();
     },
-    [rotateCarousel, scheduleCarouselSnap],
+    [rotateCarousel, scheduleCarouselSnap, status],
   );
 
   const handleCarouselPointerUp = useCallback(
@@ -368,6 +334,11 @@ const MInspirationPage = () => {
     return clearSnapTimer;
   }, [clearSnapTimer]);
 
+  useEffect(() => {
+    if (status !== "loading") return;
+    setDragPreviewOffset(0);
+  }, [status]);
+
   const cardTransforms = useMemo(() => {
     const total = InspirationCardData.length;
     if (!total) return [];
@@ -379,7 +350,9 @@ const MInspirationPage = () => {
       const depth = (Math.cos(angle) + 1) / 2;
       const sideStrength = Math.min(1, Math.abs(sin));
       const x = sin * CAROUSEL_RADIUS_X_REM;
-      const y = (1 - depth) * CAROUSEL_RADIUS_Y_REM - sideStrength * CAROUSEL_SIDE_LIFT_Y_REM;
+      const y =
+        (1 - depth) * CAROUSEL_RADIUS_Y_REM -
+        sideStrength * CAROUSEL_SIDE_LIFT_Y_REM;
       const scale = 0.76 + depth * 0.24;
       const rotateY = -sin * 58;
       const zLift = sideStrength * CAROUSEL_SIDE_Z_LIFT_REM;
@@ -427,10 +400,6 @@ const MInspirationPage = () => {
     }
     setCarouselOffset(Math.floor(InspirationCardData.length / 2));
   }, [InspirationCardData.length]);
-
-  useEffect(() => {
-    refreshBalance();
-  }, [refreshBalance]);
 
   const fetchInspirationCards = useCallback(async (seed: string) => {
     try {
@@ -482,7 +451,6 @@ const MInspirationPage = () => {
       setLastInspirationWord(inspirationWord);
       setInspirationCardData(cardsWithImages);
       setStatus("ready");
-      await refreshBalance();
       return true;
     } catch (error) {
       console.error("获取灵感卡片失败:", error);
@@ -491,7 +459,56 @@ const MInspirationPage = () => {
       setInspirationCardData(createEmptyCards());
       return false;
     }
-  }, [refreshBalance]);
+  }, []);
+
+  const handleGenerateSingleCenterCard = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    setStatus("loading");
+
+    try {
+      const seed = ideaInput.trim();
+      const req: any = await getInspirationCardsReq(seed);
+      const inspirations = Array.isArray(req?.inspirations)
+        ? req.inspirations
+        : [];
+      const inspirationWord = req?.inspirationWord || seed;
+      const first = inspirations[0];
+
+      if (!first?.inspirationTheme) {
+        mtoast.error("暂未获取到灵感内容");
+        setStatus("idle");
+        return;
+      }
+
+      const imageReq: any = await getInspirationCardsImageReq(inspirationWord, [
+        first,
+      ]);
+      const firstImage = Array.isArray(imageReq)
+        ? (imageReq[0]?.imageUrl ?? "")
+        : "";
+
+      setInspirationCardData((prev) => {
+        const next = [...prev];
+        if (!next[activeCardIndex]) return prev;
+        next[activeCardIndex] = {
+          title: first.inspirationTheme || "",
+          summary: first.referenceStyle || "",
+          tag: "",
+          image: firstImage,
+        };
+        return next;
+      });
+      setLastInspirationWord(inspirationWord);
+      setStatus("ready");
+    } catch (error) {
+      console.error("点击空白卡片生成灵感失败:", error);
+      mtoast.error("生成灵感失败，请稍后重试");
+      setStatus("idle");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCardIndex, ideaInput, loading]);
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
@@ -508,10 +525,6 @@ const MInspirationPage = () => {
 
   const handleReroll = useCallback(async () => {
     if (loading || status === "loading" || status === "rerolling") return;
-    if (totalPoint < COST_PER_REROLL) {
-      mtoast.error("灵感余额不足");
-      return;
-    }
 
     const seed = ideaInput.trim() || lastInspirationWord;
     if (!seed) {
@@ -541,21 +554,30 @@ const MInspirationPage = () => {
         setLoading(false);
       }
     }, 260);
-  }, [fetchInspirationCards, ideaInput, lastInspirationWord, loading, status, totalPoint]);
+  }, [
+    fetchInspirationCards,
+    ideaInput,
+    lastInspirationWord,
+    loading,
+    status,
+  ]);
 
   const fetchCardDetail = useCallback(
     async (inspirationTheme: string) => {
       const inspirationWord = lastInspirationWord || ideaInput.trim();
       if (!inspirationWord) {
         mtoast.error("缺少灵感关键词，暂无法重新生成详情");
-        return;
+        return false;
       }
 
       const requestId = detailRequestIdRef.current + 1;
       detailRequestIdRef.current = requestId;
       setInsDetailLoading(true);
       try {
-        const req: any = await getInspirationDetail(inspirationWord, inspirationTheme);
+        const req: any = await getInspirationDetail(
+          inspirationWord,
+          inspirationTheme,
+        );
         const detail = req?.data ?? req ?? {};
         if (detailRequestIdRef.current !== requestId) return;
         setInsDetailData((prev) =>
@@ -569,28 +591,33 @@ const MInspirationPage = () => {
               }
             : prev,
         );
-        await refreshBalance();
+        return true;
       } catch (error) {
         console.error("获取灵感详情失败:", error);
         mtoast.error("获取详情失败，请稍后重试");
+        return false;
       } finally {
         if (detailRequestIdRef.current === requestId) {
           setInsDetailLoading(false);
         }
       }
     },
-    [ideaInput, lastInspirationWord, refreshBalance],
+    [ideaInput, lastInspirationWord],
   );
 
   const handleCardClick = useCallback(
-    async (cardData: InspirationIdea) => {
+    async (cardData: InspirationIdea, isActive: boolean) => {
       if (suppressCardClickRef.current) {
         suppressCardClickRef.current = false;
         return;
       }
-      if (!cardData.title) return;
+      if (!cardData.title) {
+        if (isActive) {
+          await handleGenerateSingleCenterCard();
+        }
+        return;
+      }
       if (loading) return;
-
       setInsDetailData({
         ...cardData,
         roleInfo: "",
@@ -601,7 +628,7 @@ const MInspirationPage = () => {
       setOpenInsDetail(true);
       await fetchCardDetail(cardData.title);
     },
-    [fetchCardDetail, loading],
+    [fetchCardDetail, handleGenerateSingleCenterCard, loading],
   );
 
   const handleRegenerateDetail = useCallback(async () => {
@@ -655,8 +682,6 @@ const MInspirationPage = () => {
     }
   }, [insDetailData, noteSaving]);
 
-
-
   return (
     <div className="w-full flex flex-col overflow-x-hidden h-full overflow-y-auto bg-[#f3f3f3]">
       <div className="flex-1 min-h-0 px-9 flex flex-col">
@@ -665,7 +690,10 @@ const MInspirationPage = () => {
         </div>
         <div className="h-200 flex items-center justify-center">
           <div
-            className="inspiration-carousel relative w-full h-150 select-none"
+            className={cn(
+              "inspiration-carousel relative w-full h-150 select-none",
+              status === "loading" && "pointer-events-none",
+            )}
             style={{ touchAction: "pan-y" }}
             onWheel={handleCarouselWheel}
             onPointerDown={handleCarouselPointerDown}
@@ -687,8 +715,8 @@ const MInspirationPage = () => {
         </div>
       </div>
 
-      <div className="px-10 py-12 pb-20 h-[460px] flex items-center justify-center">
-        {(!hasGenerated && !loading) && (
+      <div className="px-10 py-12 pb-20 h-[460px] flex items-center justify-center relative overflow-hidden">
+        {!hasGenerated && !loading && (
           <div className="mt-14 rounded-[53px] w-full bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] px-8 py-8 min-h-[220px]">
             <textarea
               value={ideaInput}
@@ -712,11 +740,11 @@ const MInspirationPage = () => {
         )}
 
         {/* 重置灵感按钮 */}
-        {(hasGenerated && !loading) && (
+        {hasGenerated && !loading && (
           <button
             type="button"
             className={cn(
-              "relative size-[308px] p-5 rounded-full overflow-hidden bg-[linear-gradient(135deg,#ffbb00,#ffa001)] transition-transform duration-150",
+              "size-[308px] p-5 rounded-full overflow-hidden bg-[linear-gradient(135deg,#ffbb00,#ffa001)] transition-transform duration-150",
               buttonHit ? "scale-[0.96]" : "scale-100",
             )}
             onClick={handleReroll}
@@ -728,27 +756,26 @@ const MInspirationPage = () => {
                 <div className="size-25 leading-25 text-center">
                   <Iconfont unicode="&#xe66f;" className="text-[96px]" />
                 </div>
-                <div className="">
-                  <Iconfont unicode="&#xe60c;" className="text-[28px] mr-2" />
-                  <span className="text-[28px]">{COST_PER_REROLL}/{totalPoint}</span>
+                <div className="mt-3">
+                  <span className="text-[32px]">重新生成</span>
                 </div>
               </div>
             </div>
-            <img
-              src={CAT_HAND}
-              alt=""
-              aria-hidden="true"
-              className={cn(
-                "absolute left-1/2 -translate-x-1/2 bottom-[-350px] w-120 pointer-events-none select-none transition-all duration-300 ease-out",
-                showPaw
-                  ? pawHit
-                    ? "-translate-y-[250px] -rotate-6 opacity-100"
-                    : "translate-y-0 rotate-6 opacity-100"
-                  : "translate-y-6 rotate-6 opacity-0",
-              )}
-            />
           </button>
         )}
+        <img
+          src={CAT_HAND}
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            "inspiration-paw absolute left-1/2 top-60 w-120 pointer-events-none select-none",
+            showPaw
+              ? pawHit
+                ? "inspiration-paw--hit"
+                : "inspiration-paw--show"
+              : "",
+          )}
+        />
       </div>
 
       <Dialog
@@ -763,9 +790,9 @@ const MInspirationPage = () => {
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[calc(100vw-80px)] h-[calc(100vh-400px)] p-0 rounded-[36px] overflow-hidden"
+          className="w-[calc(100vw-80px)] h-[calc(100dvh-200px)] p-0 rounded-[36px] overflow-hidden"
         >
-          <div className="flex flex-col h-[calc(100vh-400px)]">
+          <div className="flex flex-col h-[calc(100dvh-200px)]">
             <ScrollArea className="flex-1 min-h-0">
               <div>
                 <div className="relative h-fit">
@@ -775,7 +802,7 @@ const MInspirationPage = () => {
                     className="w-full h-auto min-h-80 object-cover"
                   />
                   {insDetailData?.title && (
-                    <div className="absolute bottom-0 left-0 right-0 p-5 pb-6 text-white">
+                    <div className="absolute bottom-0 left-0 right-0 bg-linear-to-b from-black/0 to-black/30 p-5 pb-6 text-white">
                       <div className="text-[40px] font-bold">
                         {insDetailData.title}
                       </div>
@@ -833,7 +860,9 @@ const MInspirationPage = () => {
               <Button
                 className="w-106 h-26 text-[40px] font-bold text-white rounded-full disabled:opacity-50"
                 onClick={handleAddToNote}
-                disabled={noteSaving || !insDetailData?.title || insDetailLoading}
+                disabled={
+                  noteSaving || !insDetailData?.title || insDetailLoading
+                }
               >
                 <Iconfont unicode="&#xe64c;" className="text-[32px] mr-2" />
                 <span>{noteSaving ? "添加中..." : "添加到笔记"}</span>
@@ -848,9 +877,9 @@ const MInspirationPage = () => {
               </LinkButton>
             </div>
           </div>
-          <div 
-          className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn" 
-          onClick={() => setOpenInsDetail(false)}
+          <div
+            className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn"
+            onClick={() => setOpenInsDetail(false)}
           >
             <Iconfont unicode="&#xe633;" className="text-[28px] text-white" />
           </div>

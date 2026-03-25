@@ -26,7 +26,7 @@ export interface InspirationDetailResponse {
 const getInspirationCardsReq = (inspiration: string) => {
   return apiClient.post<InspirationCardsResponse>(
     "/api/works/inspiration",
-    inspiration ? { inspiration } : undefined,
+    inspiration ? { inspiration } : '',
   );
 };
 
