@@ -30,6 +30,14 @@ import { ExportUtils } from "@/utils/exportUtils"
 
 const TREE_ICON_DIR = "\ue620"
 const TREE_ICON_FILE = "\ue624"
+export const EDITOR_TREE_CANVAS_FILE_MIME = "application/x-boom-cat-editor-tree-file"
+let activeCanvasDragFileId = ""
+
+export const setActiveCanvasDragFileId = (fileId: string) => {
+  activeCanvasDragFileId = fileId
+}
+
+export const getActiveCanvasDragFileId = () => activeCanvasDragFileId
 
 const getTreeIcon = (node: FileTreeNode) =>
   node.isDirectory ? TREE_ICON_DIR : TREE_ICON_FILE
@@ -283,6 +291,7 @@ interface TreeNodeRowProps {
   newNodeIdMap: Record<string, boolean>
   level: number
   currentKey: string
+  onFileSelect?: (node: FileTreeNode) => void
   onMarkNodeAsRead: (id: string) => void
   onAddFile: (node: FileTreeNode) => void
   onContextMenu: (e: React.MouseEvent, node: FileTreeNode) => void
@@ -310,6 +319,7 @@ const TreeNodeRow = React.memo((
     newNodeIdMap,
     level,
     currentKey,
+    onFileSelect,
     onMarkNodeAsRead,
     onAddFile,
     onContextMenu,
@@ -354,10 +364,22 @@ const TreeNodeRow = React.memo((
     }
     if (isMd) {
       setCurrentEditingId(node.id, node)
+      onFileSelect?.(node)
     } else if (isDir) {
       onToggleExpand(node.id)
     }
-  }, [showNewBadge, isMd, isDir, node, onMarkNodeAsRead, setCurrentEditingId, onToggleExpand])
+  }, [
+    exportSelectMode,
+    showNewBadge,
+    isMd,
+    isDir,
+    node,
+    onFileSelect,
+    onMarkNodeAsRead,
+    onToggleExpand,
+    onToggleExportCheck,
+    setCurrentEditingId,
+  ])
 
   return (
     <div className="w-full">
@@ -482,6 +504,7 @@ const TreeNodeRow = React.memo((
               newNodeIdMap={newNodeIdMap}
               level={level + 1}
               currentKey={currentKey}
+              onFileSelect={onFileSelect}
               onMarkNodeAsRead={onMarkNodeAsRead}
               onAddFile={onAddFile}
               onContextMenu={onContextMenu}
@@ -546,10 +569,12 @@ const TreeNodeRow = React.memo((
 
 export interface EditorTreeSidebarProps {
   className?: string
+  onFileSelect?: (node: FileTreeNode) => void
 }
 
 export const EditorTreeSidebar = ({
   className,
+  onFileSelect,
 }: EditorTreeSidebarProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
@@ -1295,6 +1320,7 @@ export const EditorTreeSidebar = ({
   )
 
   const resetDragState = useCallback(() => {
+    setActiveCanvasDragFileId("")
     setDragState({
       draggedId: null,
       draggedParentId: null,
@@ -1312,8 +1338,12 @@ export const EditorTreeSidebar = ({
       if (loc.index < 0) return
       e.stopPropagation()
       if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.effectAllowed = node.isDirectory ? "move" : "copyMove"
         e.dataTransfer.setData("text/plain", node.id)
+        if (!node.isDirectory) {
+          e.dataTransfer.setData(EDITOR_TREE_CANVAS_FILE_MIME, node.id)
+          setActiveCanvasDragFileId(node.id)
+        }
       }
       setDragState((prev) => ({
         ...prev,
@@ -1531,6 +1561,7 @@ export const EditorTreeSidebar = ({
               newNodeIdMap={newNodeIdMap}
               level={0}
               currentKey={currentEditingId}
+              onFileSelect={onFileSelect}
               onMarkNodeAsRead={clearNewNodeId}
               onAddFile={handleAddFileUnder}
               onContextMenu={(e, node) => {

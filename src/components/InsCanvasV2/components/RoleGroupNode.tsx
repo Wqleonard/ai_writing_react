@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, NodeToolbar, Position, useEdges, useNodes } from "@xyflow/react";
+import { Handle, NodeToolbar, Position, useEdges, useNodes, useReactFlow } from "@xyflow/react";
 import { MessageSquarePlus, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext";
+import { Iconfont } from "@/components/Iconfont";
+import ConfirmDeleteDialog from "@/components/InsCanvasV2/components/ConfirmDeleteDialog";
 
 type FloatingAction = {
   key: string;
@@ -20,11 +22,13 @@ export default function RoleGroupNode(props: any) {
   const handlers = useInsCanvasHandlers();
   const allNodes = useNodes();
   const allEdges = useEdges();
+  const { setEdges } = useReactFlow();
   const label = String(props?.data?.label ?? "角色");
   const highlighted = Boolean(props?.data?.highlighted);
   const isRoleGroup = label === "角色";
   const isOutlineGroup = label === "大纲";
   const [showFloatingButtons, setShowFloatingButtons] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const hideFloatingButtonsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAnyPendingCanvasOutput = useMemo(
     () =>
@@ -95,37 +99,51 @@ export default function RoleGroupNode(props: any) {
       .slice(0, 3)
       .join("、") || (isRoleGroup ? "角色组" : "大纲组");
 
-    const sourceNodeId = String(
-      allEdges.find((edge) => edge.target === props.id)?.source ?? ""
-    );
+    const nodeMap = new Map(allNodes.map((node) => [node.id, node]));
+    const upstreamByNodeId = new Map<string, Set<string>>();
+    const connectUpstream = (targetId: string, sourceId: string) => {
+      if (!targetId || !sourceId || targetId === sourceId) return;
+      if (!upstreamByNodeId.has(targetId)) upstreamByNodeId.set(targetId, new Set());
+      upstreamByNodeId.get(targetId)?.add(sourceId);
+    };
+
+    allEdges.forEach((edge) => {
+      connectUpstream(String(edge.target ?? ""), String(edge.source ?? ""));
+    });
+
     const visited = new Set<string>();
-    const stack = sourceNodeId ? [sourceNodeId] : [];
-    const contextNodes: any[] = [];
+    const stack = [props.id];
+    const chainNodes: any[] = [];
 
     while (stack.length > 0) {
       const currentId = stack.pop() as string;
       if (!currentId || visited.has(currentId)) continue;
       visited.add(currentId);
-      const currentNode = allNodes.find((node) => node.id === currentId);
-      if (currentNode) contextNodes.push(currentNode);
-      allEdges
-        .filter((edge) => edge.target === currentId)
-        .forEach((edge) => {
-          if (!visited.has(edge.source)) {
-            stack.push(edge.source);
-          }
-        });
+
+      const currentNode = nodeMap.get(currentId);
+      if (currentNode) {
+        chainNodes.push(currentNode);
+      }
+
+      upstreamByNodeId.get(currentId)?.forEach((upstreamId) => {
+        if (!visited.has(upstreamId)) {
+          stack.push(upstreamId);
+        }
+      });
     }
+
+    const relatedChainNodes = chainNodes.filter((node) => node.id !== props.id);
 
     return {
       files,
       title,
-      hasSummaryContext: contextNodes.some((node) =>
+      hasSummaryContext: relatedChainNodes.some((node) =>
         String(node?.data?.label ?? "").includes("梗概")
       ),
-      hasOutlineContext: contextNodes.some((node) =>
-        String(node?.data?.label ?? "").includes("大纲")
-      ),
+      hasOutlineContext: relatedChainNodes.some((node) => {
+        const nodeLabel = String(node?.data?.label ?? "");
+        return nodeLabel.includes("大纲") || Boolean((node.data as any)?.outlineGroupId);
+      }),
       isPlaceholder,
       hasPendingApiResponse,
     };
@@ -155,6 +173,16 @@ export default function RoleGroupNode(props: any) {
   }, [groupMeta.hasPendingApiResponse, hasAnyPendingCanvasOutput]);
 
   useEffect(() => {
+    setEdges((eds) =>
+      eds.map((edge) =>
+        edge.target === props.id
+          ? { ...edge, animated: groupMeta.hasPendingApiResponse }
+          : edge
+      )
+    );
+  }, [groupMeta.hasPendingApiResponse, props.id, setEdges]);
+
+  useEffect(() => {
     return () => {
       if (hideFloatingButtonsTimerRef.current) {
         clearTimeout(hideFloatingButtonsTimerRef.current);
@@ -162,12 +190,16 @@ export default function RoleGroupNode(props: any) {
       }
     };
   }, []);
+  const handleConfirmDelete = useCallback(() => {
+    setDeleteDialogOpen(false);
+    handlers.handleGroupDelete?.(props.id, { skipLayout: true });
+  }, [handlers, props.id]);
+
   const floatingActions = useMemo(() => {
     if (groupMeta.hasPendingApiResponse || hasAnyPendingCanvasOutput) return [] as FloatingAction[];
 
     const groupOptions = {
       files: groupMeta.files,
-      title: groupMeta.title,
     };
     const actions: FloatingAction[] = [];
 
@@ -177,7 +209,11 @@ export default function RoleGroupNode(props: any) {
         label: "以此扩充随机角色",
         onClick: (event) => {
           event.stopPropagation();
-          handlers.handleGenerateIns?.(props.id, "role", groupOptions);
+          handlers.handleGenerateIns?.(props.id, "role", {
+            ...groupOptions,
+            title: "角色",
+            actionLabel: "以此扩充随机角色",
+          });
         },
       });
 
@@ -187,16 +223,25 @@ export default function RoleGroupNode(props: any) {
           label: "以此生成故事梗概",
           onClick: (event) => {
             event.stopPropagation();
-            handlers.handleGenerateIns?.(props.id, "summary", groupOptions);
+            handlers.handleGenerateIns?.(props.id, "summary", {
+              ...groupOptions,
+              title: "故事梗概",
+              actionLabel: "以此生成故事梗概",
+            });
           },
         });
-      } else if (!groupMeta.hasOutlineContext) {
+      }
+      if (!groupMeta.hasOutlineContext) {
         actions.push({
           key: "generate-outline",
           label: "以此生成大纲",
           onClick: (event) => {
             event.stopPropagation();
-            handlers.handleGenerateOutlineFromContext?.(props.id, groupOptions);
+            handlers.handleGenerateOutlineFromContext?.(props.id, {
+              ...groupOptions,
+              title: "大纲",
+              actionLabel: "以此生成大纲",
+            });
           },
         });
       }
@@ -207,14 +252,19 @@ export default function RoleGroupNode(props: any) {
       label: "我想用它生成...",
       onClick: (event) => {
         event.stopPropagation();
-        handlers.handleAddGroupToDialog?.(props.id);
+        handlers.handlePrepareGenerateToDialog?.(props.id, "info", {
+          ...groupOptions,
+          title: "信息",
+          actionLabel: "我想用它生成...",
+        });
       },
     });
 
     return actions;
   }, [groupMeta, handlers, hasAnyPendingCanvasOutput, isRoleGroup, props.id]);
 
-  const visibleFloatingActions = useMemo(() => floatingActions.slice(0, 3), [floatingActions]);
+  const visibleFloatingActions = useMemo(() => floatingActions, [floatingActions]);
+  const hasThirdFloatingAction = visibleFloatingActions.length > 2;
   return (
     <div
       className={cn(
@@ -246,6 +296,7 @@ export default function RoleGroupNode(props: any) {
                 : undefined,
           }}
         >
+          <Iconfont unicode="&#xe664;" className="text-[#854D0E] size-4" />
           {label}
         </div>
 
@@ -272,7 +323,7 @@ export default function RoleGroupNode(props: any) {
             size="icon-xs"
             onClick={(e) => {
               e.stopPropagation();
-              handlers.handleGroupDelete?.(props.id, { skipLayout: true });
+              setDeleteDialogOpen(true);
             }}
             title="删除"
             className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-destructive"
@@ -306,7 +357,11 @@ export default function RoleGroupNode(props: any) {
                     "pointer-events-none absolute z-50",
                     index === 0 && "-top-15 left-15 -translate-x-1/2",
                     index === 1 && "top-1/2 left-15 ml-2 -translate-y-1/2",
-                    index === 2 && "top-full left-20 mt-2 -translate-x-1/2"
+                    index === 2 && "top-full left-20 mt-2 -translate-x-1/2",
+                    index === 3 &&
+                      (hasThirdFloatingAction
+                        ? "-bottom-22 left-13 mt-2 -translate-x-1/2"
+                        : "top-full left-20 mt-2 -translate-x-1/2")
                   )}
                 >
                   <Button
@@ -336,16 +391,48 @@ export default function RoleGroupNode(props: any) {
           </div>
         </NodeToolbar>
       ) : null}
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        targetLabel="卡片组"
+      />
 
       {/* Invisible handle: allow edges to connect to the group */}
       <Handle
+        id="target-top"
         type="target"
         position={Position.Top}
         style={{ opacity: 0, pointerEvents: "none" }}
       />
       <Handle
+        id="target-left"
+        type="target"
+        position={Position.Left}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="target-right"
+        type="target"
+        position={Position.Right}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-bottom"
         type="source"
         position={Position.Bottom}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-left"
+        type="source"
+        position={Position.Left}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-right"
+        type="source"
+        position={Position.Right}
         style={{ opacity: 0, pointerEvents: "none" }}
       />
     </div>

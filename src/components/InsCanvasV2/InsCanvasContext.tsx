@@ -4,6 +4,13 @@ type DeleteNodeOptions = {
   skipLayout?: boolean;
 };
 
+type UpdateNodeOptions = {
+  title?: string;
+  filePath?: string;
+  image?: string;
+  images?: string[];
+};
+
 export interface InsCanvasHandlers {
   handleMainCardCreate: (nodeId: string) => void;
   handleAddCardToDialog: (nodeId: string) => void;
@@ -14,6 +21,7 @@ export interface InsCanvasHandlers {
     options?: {
       files?: Record<string, string>;
       title?: string;
+      actionLabel?: string;
     }
   ) => void;
   handlePrepareBrainstormCard: (nodeId: string) => void;
@@ -24,6 +32,7 @@ export interface InsCanvasHandlers {
     options?: {
       files?: Record<string, string>;
       title?: string;
+      actionLabel?: string;
     }
   ) => void;
 
@@ -36,6 +45,7 @@ export interface InsCanvasHandlers {
       requirement?: string;
       files?: Record<string, string>;
       title?: string;
+      actionLabel?: string;
     }
   ) => void;
   handleGenerateInfoFromContext: (
@@ -43,6 +53,7 @@ export interface InsCanvasHandlers {
     options?: {
       files?: Record<string, string>;
       title?: string;
+      actionLabel?: string;
     }
   ) => void;
 
@@ -91,15 +102,15 @@ export interface InsCanvasHandlers {
   ) => void;
   handleSummaryGenerate: (nodeId: string) => void;
   handleSummaryDelete: (nodeId: string, options?: DeleteNodeOptions) => void;
-  handleSummaryUpdate: (nodeId: string, content: string) => void;
+  handleSummaryUpdate: (nodeId: string, content: string, options?: UpdateNodeOptions) => void;
   handleSummaryExpand: (nodeId: string) => void;
   handleSettingGenerate: (nodeId: string) => void;
   handleSettingDelete: (nodeId: string, options?: DeleteNodeOptions) => void;
-  handleSettingUpdate: (nodeId: string, content: string) => void;
+  handleSettingUpdate: (nodeId: string, content: string, options?: UpdateNodeOptions) => void;
   handleSettingExpand: (nodeId: string) => void;
   handleOutlineGenerate: (nodeId: string) => void;
   handleOutlineDelete: (nodeId: string, options?: DeleteNodeOptions) => void;
-  handleOutlineUpdate: (nodeId: string, content: string) => void;
+  handleOutlineUpdate: (nodeId: string, content: string, options?: UpdateNodeOptions) => void;
   handleOutlineExpand: (nodeId: string) => void;
   getCanvasSessionId: () => string;
   msg: (type: "success" | "error" | "warning", msg: string) => void;

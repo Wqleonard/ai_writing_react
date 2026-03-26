@@ -1,16 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, useNodes, useReactFlow } from "@xyflow/react";
+import { Handle, NodeToolbar, Position, useEdges, useNodes, useReactFlow } from "@xyflow/react";
 import { Trash2, Pencil, Plus, Copy, MessageSquarePlus, Sparkles, Notebook } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { AutoScrollArea } from "@/components/AutoScrollArea/AutoScrollArea";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/Dialog";
 import MarkdownEditor, { type MarkdownEditorRef } from "@/components/MainEditor";
 import type { CustomNodeData } from "@/components/InsCanvasV2/types";
 import type { PostStreamData } from "@/api";
@@ -18,6 +11,7 @@ import { postInspirationStream, saveInspirationCanvasReq } from "@/api/works";
 import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext";
 import { addNote } from "@/api/notes";
 import { Iconfont } from "@/components/Iconfont";
+import ConfirmDeleteDialog from "@/components/InsCanvasV2/components/ConfirmDeleteDialog";
 // React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
 // 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
 const startedStreamNodeIds = new Set<string>();
@@ -28,10 +22,21 @@ interface EditableFlowCardProps {
   cardLabel: string;
   generateLabel: string;
   type: string;
+  dragging?: boolean;
+  selected?: boolean;
   onGenerate: (id: string) => void;
   onAdd: (id: string) => void;
   onDelete: (id: string, options?: { skipLayout?: boolean }) => void;
-  onUpdate: (id: string, content: string) => void;
+  onUpdate: (
+    id: string,
+    content: string,
+    options?: {
+      title?: string;
+      filePath?: string;
+      image?: string;
+      images?: string[];
+    }
+  ) => void;
   onExpand?: (id: string) => void;
   msg: (type: "success" | "error" | "warning", msg: string) => void;
 }
@@ -40,6 +45,11 @@ type FloatingAction = {
   key: string;
   label: string;
   onClick?: (e: React.MouseEvent) => void;
+};
+
+const sanitizeContextFileName = (value: string, fallback: string) => {
+  const normalized = value.trim().replace(/[\\/:*?"<>|]+/g, "_");
+  return normalized || fallback;
 };
 
 const normalizeImageSrc = (value: string): string => {
@@ -62,12 +72,77 @@ const normalizeImageSrc = (value: string): string => {
   }
 };
 
+const normalizeTitleMarkdown = (value: string): string => {
+  const firstMeaningfulLine = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  if (!firstMeaningfulLine) return "";
+
+  return firstMeaningfulLine
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^>\s+/, "")
+    .replace(/^[-*+]\s+/, "")
+    .replace(/^\d+\.\s+/, "")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .trim();
+};
+
+const convertRichTextToPlainText = (value: string): string => {
+  const normalized = String(value || "").replace(/\r\n/g, "\n");
+  if (!normalized.trim()) return "";
+
+  return normalized
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]*>/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .trim();
+};
+
+const SUMMARY_DRAFT_TEMPLATE = `### 内容梗概
+> [内容梗概]
+
+### 关键节点
+> [关键节点]`;
+
+const getDefaultDraftContent = (label: string, fromApi: boolean): string => {
+  if (fromApi) return "";
+  if (label === "故事梗概" || label === "梗概") return SUMMARY_DRAFT_TEMPLATE;
+  return "";
+};
+
+const isPlaceholderDraftContent = (label: string, fromApi: boolean, content: string): boolean => {
+  const normalizedContent = String(content || "").trim();
+  if (!normalizedContent) return false;
+  const defaultContent = getDefaultDraftContent(label, fromApi).trim();
+  return Boolean(defaultContent) && normalizedContent === defaultContent;
+};
+
 export default function EditableFlowCard({
   id,
   data,
   cardLabel,
   generateLabel,
   type = '',
+  dragging = false,
   msg,
   onGenerate,
   onAdd,
@@ -76,14 +151,27 @@ export default function EditableFlowCard({
   onExpand,
 }: EditableFlowCardProps) {
   const allNodes = useNodes();
-  const { updateNode, updateNodeData, setNodes, setEdges, getEdges, getNodes } = useReactFlow();
+  const allEdges = useEdges();
+  const { updateNode, updateNodeData, setNodes, setEdges, getEdges, getNodes, getNode, setCenter } = useReactFlow();
   const canvasHandlers = useInsCanvasHandlers();
   const { getCanvasSessionId } = canvasHandlers;
+  const normalizedCardLabel = useMemo(
+    () => String(cardLabel ?? data?.label ?? ""),
+    [cardLabel, data?.label]
+  );
+  const defaultDraftContent = useMemo(
+    () => getDefaultDraftContent(normalizedCardLabel, Boolean(data.fromApi)),
+    [data.fromApi, normalizedCardLabel]
+  );
   const allowTitleEdit = Boolean((data as any)?.allowTitleEdit);
+  const canFocusTitleEditor =
+    allowTitleEdit &&
+    !Boolean((data as any)?.outlineGroupId) &&
+    !["大纲", "故事大纲"].includes(String(cardLabel ?? data?.label ?? ""));
   const allowImageUpload = Boolean((data as any)?.allowImageUpload);
   const [isEditing, setIsEditing] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editContent, setEditContent] = useState(data.content || "[写作思路]");
+  const [editContent, setEditContent] = useState(() => String(data.content || defaultDraftContent));
   const [editLabel, setEditLabel] = useState<string>(() => String((data as any)?.title ?? ""));
   const editLabelRef = useRef(editLabel);
   const streamContentRef = useRef("");
@@ -94,6 +182,7 @@ export default function EditableFlowCard({
   const realtimeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 进入编辑后，若接口回写 data.content，且用户未改动（dirty=false），允许同步到输入框
   const editDirtyRef = useRef(false);
+  const titleDirtyRef = useRef(false);
   useEffect(() => {
     editContentRef.current = editContent;
   }, [editContent]);
@@ -103,6 +192,7 @@ export default function EditableFlowCard({
   }, [editLabel]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const copyHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -121,6 +211,7 @@ export default function EditableFlowCard({
   const [showExpandBtn, setShowExpandBtn] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditorRef>(null);
+  const titleEditorRef = useRef<MarkdownEditorRef>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   /** 编辑态下在「编辑」按钮上按下鼠标，用于区分「同一次点击退出」与「再次点击进入」，避免 blur + click 导致退出后立刻又进入 */
   const editButtonMousedownRef = useRef(false);
@@ -173,6 +264,7 @@ export default function EditableFlowCard({
 
   const displayedContent = isEditing ? editContent : bodyContent;
   const titleText = String((data as any)?.title ?? "");
+  const normalizedTitleText = titleText.trim();
   const images: string[] = useMemo(() => {
     const imgs = (data as any)?.images;
     if (Array.isArray(imgs)) {
@@ -197,6 +289,8 @@ export default function EditableFlowCard({
     typeof apiProgressRaw === "number" && Number.isFinite(apiProgressRaw)
       ? Math.max(0, Math.min(100, Math.round(apiProgressRaw)))
       : 0;
+  const [simulatedApiProgress, setSimulatedApiProgress] = useState(apiProgress);
+  const apiProgressDisplay = apiProgress >= 100 ? 100 : Math.max(apiProgress, simulatedApiProgress);
   const isPendingGenerate = Boolean((data as any)?.pendingGenerate);
   const isServerStreaming = Boolean(data.isStreaming);
   const hasCompletedApiData = isFromApi && hasAnyApiData && !isPendingGenerate && apiProgress >= 100;
@@ -241,6 +335,12 @@ export default function EditableFlowCard({
   }, [data.content, isEditing]);
 
   useEffect(() => {
+    if (isEditing) return;
+    const nextTitle = titleText;
+    setEditLabel((prev) => (prev === nextTitle ? prev : nextTitle));
+  }, [isEditing, titleText]);
+
+  useEffect(() => {
     if (!isPlaceholderCard) return;
     setShowFloatingButtons(false);
   }, [isPlaceholderCard]);
@@ -251,8 +351,45 @@ export default function EditableFlowCard({
     streamingStartedRef.current = false;
     streamContentRef.current = "";
     pendingCommitRef.current = null;
+    setSimulatedApiProgress(apiProgress);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    // 概念图占位阶段：用随机速度推进展示进度，避免长时间停在同一数值。
+    const isImageLikeCard = normalizedCardLabel === "脑洞" || normalizedCardLabel === "角色";
+    const shouldAnimateProgress = isImageLikeCard && showApiSkeleton && apiProgress < 100;
+    if (!shouldAnimateProgress) {
+      setSimulatedApiProgress(apiProgress);
+      return;
+    }
+
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextTick = () => {
+      const delay = 120 + Math.floor(Math.random() * 460); // 120~579ms
+      timer = setTimeout(() => {
+        if (disposed) return;
+        setSimulatedApiProgress((prev) => {
+          const floor = Math.max(prev, apiProgress);
+          if (floor >= 99) return floor;
+          // 偶尔停顿一下，让速度更自然。
+          if (Math.random() < 0.2) return floor;
+          const stepMax = floor < 60 ? 6 : floor < 85 ? 4 : 2;
+          const step = 1 + Math.floor(Math.random() * stepMax);
+          return Math.min(99, floor + step);
+        });
+        scheduleNextTick();
+      }, delay);
+    };
+
+    scheduleNextTick();
+    return () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [apiProgress, normalizedCardLabel, showApiSkeleton]);
 
   useEffect(() => {
     // 外部将同一节点的流式状态置为 false 时，同步收敛本地状态，
@@ -326,22 +463,85 @@ export default function EditableFlowCard({
     return () => observer.disconnect();
   }, [isEditing, isExpanded, editContent]);
 
-  const handleBlur = () => {
-    if (isEditing) {
-      if (realtimeSaveTimerRef.current) {
-        clearTimeout(realtimeSaveTimerRef.current);
-        realtimeSaveTimerRef.current = null;
-      }
-      // 以编辑器实例为准；ref 可能在 IME 组合时未更新，仅作兜底
-      const finalContent =
-        editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent);
-      const finalTitle = (allowTitleEdit ? editLabelRef.current : (data as any)?.title ?? "") ?? "";
-      if (allowTitleEdit) updateNodeData(id, { title: String(finalTitle) });
-      updateNodeData(id, { content: finalContent });
-      onUpdate(id, finalContent);
-      setEditContent(finalContent);
-      setIsEditing(false);
+  const clearRealtimeSaveTimer = () => {
+    if (realtimeSaveTimerRef.current) {
+      clearTimeout(realtimeSaveTimerRef.current);
+      realtimeSaveTimerRef.current = null;
     }
+  };
+
+  const getFinalContent = () =>
+    editDirtyRef.current
+      ? (editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent))
+      : String(data.content ?? "");
+
+  const getFinalTitle = () => {
+    const finalTitleMarkdown =
+      allowTitleEdit
+        ? titleEditorRef.current?.getMarkdown() ?? editLabelRef.current
+        : String((data as any)?.title ?? "");
+    return allowTitleEdit
+      ? normalizeTitleMarkdown(finalTitleMarkdown)
+      : String((data as any)?.title ?? "");
+  };
+
+  const saveTitle = () => {
+    if (!allowTitleEdit || !titleDirtyRef.current) return;
+    const finalTitle = getFinalTitle();
+    const currentContent = editDirtyRef.current ? getFinalContent() : String(data.content ?? "");
+    updateNodeData(id, { title: finalTitle });
+    onUpdate(id, currentContent, { title: finalTitle });
+    setEditLabel(finalTitle);
+    titleDirtyRef.current = false;
+  };
+
+  const saveContent = () => {
+    clearRealtimeSaveTimer();
+    const finalContent = getFinalContent();
+    updateNodeData(id, { content: finalContent });
+    onUpdate(id, finalContent);
+    setEditContent(finalContent);
+    editDirtyRef.current = false;
+  };
+
+  const exitEditing = (options?: { saveTitle?: boolean; saveContent?: boolean }) => {
+    if (!isEditing) return;
+    const shouldSaveTitle = options?.saveTitle ?? true;
+    const shouldSaveContent = options?.saveContent ?? true;
+
+    if (shouldSaveTitle) {
+      saveTitle();
+    }
+    if (shouldSaveContent) {
+      saveContent();
+    } else {
+      clearRealtimeSaveTimer();
+    }
+
+    titleDirtyRef.current = false;
+    editDirtyRef.current = false;
+    setIsEditing(false);
+  };
+
+  const handleTitleEditorBlur = () => {
+    requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      if (activeElement && cardRef.current?.contains(activeElement)) {
+        saveTitle();
+        return;
+      }
+      exitEditing({ saveTitle: true, saveContent: false });
+    });
+  };
+
+  const handleContentEditorBlur = () => {
+    requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      if (activeElement && cardRef.current?.contains(activeElement)) {
+        return;
+      }
+      exitEditing({ saveTitle: true, saveContent: true });
+    });
   };
 
   const commitFinalContent = (finalText: string) => {
@@ -356,7 +556,7 @@ export default function EditableFlowCard({
 
   const handleEdit = () => {
     if (isEditing) {
-      handleBlur();
+      exitEditing({ saveTitle: true, saveContent: true });
       return;
     }
     // 所有卡片均可进入编辑（不依赖 showExpandBtn）
@@ -367,12 +567,18 @@ export default function EditableFlowCard({
     }
     setIsEditing(true);
     editDirtyRef.current = false;
+    titleDirtyRef.current = false;
     const initial = data.content || "";
     setEditContent(initial);
     editingContentRef.current = initial;
     setEditLabel(String((data as any)?.title ?? ""));
     // 等 React 提交更新、MarkdownEditor 收到 readonly=false 后，再强制 setEditable+focus 兜底
     setTimeout(() => {
+      if (canFocusTitleEditor) {
+        titleEditorRef.current?.editor?.setEditable(true);
+        titleEditorRef.current?.focus();
+        return;
+      }
       editorRef.current?.editor?.setEditable(true);
       editorRef.current?.focus();
     }, 0);
@@ -380,30 +586,35 @@ export default function EditableFlowCard({
 
   useEffect(() => {
     if (isEditing) {
-      const t = setTimeout(() => editorRef.current?.focus(), 100);
+      const t = setTimeout(() => {
+        if (canFocusTitleEditor) {
+          titleEditorRef.current?.focus();
+          return;
+        }
+        editorRef.current?.focus();
+      }, 100);
       return () => clearTimeout(t);
     }
-  }, [isEditing]);
+  }, [canFocusTitleEditor, isEditing]);
 
   // 点击卡片外区域时退出编辑（TipTap 在点击非可聚焦元素时可能不触发 blur）
   useEffect(() => {
     if (!isEditing) return;
     const onMouseDown = (e: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
-        handleBlur();
+        exitEditing({ saveTitle: true, saveContent: true });
       }
     };
     document.addEventListener("mousedown", onMouseDown, true);
     return () => document.removeEventListener("mousedown", onMouseDown, true);
-  }, [isEditing, handleBlur]);
+  }, [isEditing]);
 
   const handleCancel = () => {
-    if (realtimeSaveTimerRef.current) {
-      clearTimeout(realtimeSaveTimerRef.current);
-      realtimeSaveTimerRef.current = null;
-    }
+    clearRealtimeSaveTimer();
     editDirtyRef.current = false;
+    titleDirtyRef.current = false;
     setEditContent(data.content || "");
+    setEditLabel(String((data as any)?.title ?? ""));
     setIsEditing(false);
   };
 
@@ -559,53 +770,164 @@ export default function EditableFlowCard({
     void startStream();
   };
 
-  const contextNodes = useMemo(() => {
-    const nodes = (getNodes() || []) as any[];
-    const edges = (getEdges() || []) as any[];
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const chainNodes = useMemo(() => {
+    const nodeMap = new Map(allNodes.map((node) => [node.id, node]));
+    const upstreamByNodeId = new Map<string, Set<string>>();
+    const connectUpstream = (targetId: string, sourceId: string) => {
+      if (!targetId || !sourceId || targetId === sourceId) return;
+      if (!upstreamByNodeId.has(targetId)) upstreamByNodeId.set(targetId, new Set());
+      upstreamByNodeId.get(targetId)?.add(sourceId);
+    };
+
+    allEdges.forEach((edge) => {
+      connectUpstream(String(edge.target ?? ""), String(edge.source ?? ""));
+    });
+
     const visited = new Set<string>();
     const ordered: any[] = [];
-    const visit = (nodeId: string) => {
-      if (!nodeId || visited.has(nodeId)) return;
-      visited.add(nodeId);
-      const current = nodeMap.get(nodeId);
-      if (!current) return;
-      if (current.parentId) visit(current.parentId);
-      edges.filter((edge) => edge.target === nodeId).forEach((edge) => visit(edge.source));
-      ordered.push(current);
-    };
-    visit(id);
-    return ordered;
-  }, [getEdges, getNodes, id]);
+    const stack = [id];
 
-  const hasUpstreamSummaryCard = useMemo(
-    () =>
-      contextNodes.some(
-        (node) => node.id !== id && String(node?.data?.label ?? "").includes("梗概")
+    while (stack.length > 0) {
+      const currentId = stack.pop() as string;
+      if (!currentId || visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const current = nodeMap.get(currentId);
+      if (current) {
+        ordered.push(current);
+      }
+
+      upstreamByNodeId.get(currentId)?.forEach((upstreamId) => {
+        if (!visited.has(upstreamId)) {
+          stack.push(upstreamId);
+        }
+      });
+    }
+
+    return ordered;
+  }, [allEdges, allNodes, id]);
+
+  const chainMeta = useMemo(() => {
+    const relatedNodes = chainNodes.filter((node) => node.id !== id);
+    return {
+      hasSummaryCard: relatedNodes.some((node) =>
+        String(node?.data?.label ?? "").includes("梗概")
       ),
-    [contextNodes, id]
-  );
-  const hasUpstreamOutlineCard = useMemo(
-    () =>
-      contextNodes.some(
-        (node) => node.id !== id && String(node?.data?.label ?? "").includes("大纲")
+      hasOutlineCardOrGroup: relatedNodes.some((node) => {
+        const label = String(node?.data?.label ?? "");
+        return (
+          label.includes("大纲") ||
+          Boolean((node.data as any)?.outlineGroupId)
+        );
+      }),
+      hasRoleCardGroup: relatedNodes.some((node) =>
+        node.type === "roleGroup" && String(node?.data?.label ?? "") === "角色"
       ),
-    [contextNodes, id]
-  );
-  const normalizedCardLabel = useMemo(
-    () => String(cardLabel ?? data?.label ?? ""),
-    [cardLabel, data?.label]
-  );
+    };
+  }, [chainNodes, id]);
+  const contextGenerateOptions = useMemo(() => {
+    const files = chainNodes.reduce<Record<string, string>>((acc, node, index) => {
+      const content = String(node.data?.content ?? "").trim();
+      if (!content) return acc;
+
+      const filePath = String((node.data as any)?.filePath ?? "").trim();
+      const title = String((node.data as any)?.title ?? "").trim();
+      const label = String(node.data?.label ?? "").trim();
+      const fromApi = Boolean((node.data as any)?.fromApi);
+      if (isPlaceholderDraftContent(label, fromApi, content)) {
+        return acc;
+      }
+      const fallbackBaseName = sanitizeContextFileName(
+        title || label || `卡片${index + 1}`,
+        `卡片${index + 1}`
+      );
+      const fallbackPath = label.includes("梗概")
+        ? "故事设定/故事简介.md"
+        : label.includes("大纲")
+          ? "大纲.md"
+          : label === "角色"
+            ? `角色设定/${fallbackBaseName}.md`
+            : label === "脑洞"
+              ? `脑洞/${fallbackBaseName}.md`
+              : label === "信息"
+                ? `信息/${fallbackBaseName}.md`
+                : `上下文/${fallbackBaseName}.md`;
+
+      acc[filePath || fallbackPath] = content;
+      return acc;
+    }, {});
+
+    const explicitTitle =
+      titleText.trim() || String((data as any)?.title ?? "").trim();
+    const currentContent = String(data.content ?? "").trim();
+    const fallbackTitle =
+      !isPlaceholderDraftContent(normalizedCardLabel, Boolean(data.fromApi), currentContent) &&
+      currentContent
+        ? normalizeTitleMarkdown(currentContent)
+        : "";
+
+    return {
+      files,
+      title: explicitTitle || fallbackTitle,
+    };
+  }, [chainNodes, data, normalizedCardLabel, titleText]);
   const isGroupedRoleCard = Boolean((data as any)?.roleGroupId);
   const isGroupedOutlineCard = Boolean((data as any)?.outlineGroupId);
   const isGroupedCard = isGroupedRoleCard || isGroupedOutlineCard;
+  const isGroupedCardDragging = isGroupedCard && dragging;
   const isRoleCard = useMemo(
     () => isGroupedRoleCard || normalizedCardLabel === "角色",
     [isGroupedRoleCard, normalizedCardLabel]
   );
-  const hasTitleText = titleText.trim().length > 0;
+  const roleCardIndex = useMemo(() => {
+    if (!isRoleCard) return 1;
+
+    const currentRoleGroupId = String((data as any)?.roleGroupId ?? "").trim();
+    const siblingRoleCards = allNodes
+      .filter((node) => {
+        if (currentRoleGroupId) {
+          return String((node.data as any)?.roleGroupId ?? "").trim() === currentRoleGroupId;
+        }
+        return (
+          String(node.data?.label ?? "").trim() === "角色" &&
+          !String((node.data as any)?.roleGroupId ?? "").trim() &&
+          !String((node.data as any)?.outlineGroupId ?? "").trim()
+        );
+      })
+      .sort((a, b) => {
+        const ay = Number(a.position?.y ?? 0);
+        const by = Number(b.position?.y ?? 0);
+        if (ay !== by) return ay - by;
+        return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+      });
+
+    const currentIndex = siblingRoleCards.findIndex((node) => node.id === id);
+    return currentIndex >= 0 ? currentIndex + 1 : 1;
+  }, [allNodes, data, id, isRoleCard]);
+  const hasTitleText = normalizedTitleText.length > 0;
   const isBlankDraft = Boolean((data as any)?.isBlankDraft ?? (data as any)?.isBlankBrainstormDraft);
-  const shouldShowReadonlyTitle = !hasTitleText && (!isRoleCard || isBlankDraft);
+  const isOutlineCard = useMemo(
+    () => normalizedCardLabel === "大纲" || normalizedCardLabel === "故事大纲",
+    [normalizedCardLabel]
+  );
+  const shouldShowInlineTitle = !isOutlineCard && !isGroupedOutlineCard;
+  const shouldShowReadonlyTitle = shouldShowInlineTitle && !isEditing;
+  const visibleContent = useMemo(() => {
+    if (isEditing || !shouldShowInlineTitle || !hasTitleText) {
+      return displayedContent;
+    }
+
+    const content = String(displayedContent || "");
+    const headingMatch = content.match(/^\s*#{1,6}\s+(.+?)\s*(?:\r?\n|$)/);
+    const headingText = String(headingMatch?.[1] ?? "").trim();
+    if (!headingText || headingText !== normalizedTitleText) {
+      return content;
+    }
+
+    return content
+      .replace(/^\s*#{1,6}\s+.+?(?:\r?\n|$)/, "")
+      .replace(/^(?:\s*\r?\n)+/, "");
+  }, [displayedContent, hasTitleText, isEditing, normalizedTitleText, shouldShowInlineTitle]);
 
   const isBrainstormCard = useMemo(() => normalizedCardLabel === "脑洞", [normalizedCardLabel]);
   const isInfoCard = useMemo(() => normalizedCardLabel === "信息", [normalizedCardLabel]);
@@ -613,6 +935,15 @@ export default function EditableFlowCard({
     () => normalizedCardLabel === "故事梗概" || normalizedCardLabel === "梗概",
     [normalizedCardLabel]
   );
+  useEffect(() => {
+    if (Boolean(data.fromApi)) return;
+    if (!isSummaryCard) return;
+    if (String(data.content || "").trim()) return;
+    if (!defaultDraftContent.trim()) return;
+
+    updateNodeData(id, { content: defaultDraftContent });
+    onUpdate(id, defaultDraftContent);
+  }, [data.content, data.fromApi, defaultDraftContent, id, isSummaryCard, onUpdate, updateNodeData]);
   const isImageCard = useMemo(
     () => normalizedCardLabel === "脑洞" || normalizedCardLabel === "角色",
     [normalizedCardLabel]
@@ -622,8 +953,15 @@ export default function EditableFlowCard({
     [displayedContent, isRoleCard]
   );
   const isLargeSummaryCard = isSummaryCard || isInfoCard;
+  const titleAreaHeightClass = isLargeSummaryCard ? "h-[92px]" : "h-[54px]";
   const isBrainstormAiMode = Boolean((data as any)?.brainstormAiMode);
   const isHighlighted = Boolean((data as any)?.highlighted);
+  const shouldShowPendingBadge =
+    isBlankDraft &&
+    isPendingGenerate &&
+    isBrainstormAiMode &&
+    !isServerStreaming &&
+    !hasCardContent;
   const hasPendingApiResponse = !hasCompletedApiData && (isServerStreaming || isPendingGenerate);
   const hasAnyPendingCanvasOutput = useMemo(
     () =>
@@ -675,6 +1013,32 @@ export default function EditableFlowCard({
     if (normalizedCardLabel === "故事梗概") return "梗概";
     return normalizedCardLabel;
   }, [normalizedCardLabel]);
+  const readonlyTitleText = useMemo(() => {
+    if (hasTitleText) {
+      if (hasTitleText) return normalizedTitleText;
+    } else {
+      if (isRoleCard) {
+        return `[${cardLabel}名称]`;
+      }
+      if (isSummaryCard) {
+        return `[作品名称]`;
+      }
+      if (isInfoCard) {
+        return `[标题]`
+      }
+    }
+   
+    return `[${cardLabel}]`;
+  }, [cardLabel, hasTitleText, isRoleCard, normalizedTitleText, isSummaryCard]);
+  const editorPlaceholder = useMemo(() => {
+    if (data.fromApi) return "";
+    if (isBrainstormCard) return "[写作思路]";
+    if (isRoleCard) return "[角色描述]";
+    if (isOutlineCard || isGroupedOutlineCard) return "[章纲内容]";
+    if (isInfoCard) return "[内容]";
+    return "[写作思路]";
+  }, [data.fromApi, isBrainstormCard, isGroupedOutlineCard, isInfoCard, isOutlineCard, isRoleCard]);
+
   const headerLabelBackground = useMemo(() => {
     if (isSummaryCard) {
       return "linear-gradient(90deg, #BCDEFF 0%, rgba(188,222,255,0) 100%)";
@@ -688,17 +1052,18 @@ export default function EditableFlowCard({
     return undefined;
   }, [isBrainstormCard, isInfoCard, isSummaryCard]);
   const headerLabelText = isGroupedCard || isRoleCard
-    ? (titleText.trim() ? titleText : `【${displayCardLabel || cardLabel}】请输入标题`)
+    ? (titleText.trim() ? titleText : `[${displayCardLabel || cardLabel}]`)
     : (displayCardLabel || data.label || cardLabel);
+  const shouldShowHeaderIcon = !isRoleCard && !isOutlineCard;
   const handleAddNote = useCallback(async () => {
-    const content = String(data.content || "").trim();
+    const content = convertRichTextToPlainText(String(data.content || ""));
     if (!content) {
       msg("warning", "当前卡片内容为空，无法添加笔记");
       return;
     }
     const title = `【${noteCardTypeLabel}】${titleText.trim() || "未命名卡片"}`;
     try {
-      await addNote(title, String(data.content || ""), "PC_INSPIRATION_DRAW");
+      await addNote(title, content, "PC_INSPIRATION_DRAW");
       msg("success", "笔记添加成功");
     } catch (error) {
       console.error("添加笔记失败:", error);
@@ -720,52 +1085,80 @@ export default function EditableFlowCard({
       label: "我想用它生成...",
       onClick: (e: React.MouseEvent) => {
         e.stopPropagation();
-        canvasHandlers.handlePrepareGenerateToDialog?.(id, "info");
+        canvasHandlers.handlePrepareGenerateToDialog?.(id, "info", {
+          files: contextGenerateOptions.files,
+          title: "信息",
+          actionLabel: "我想用它生成...",
+        });
       },
     };
 
     if (isBrainstormCard) {
-      return [
-        {
+      const actions: FloatingAction[] = [];
+      if (!chainMeta.hasRoleCardGroup) {
+        actions.push({
           key: "generate-role",
           label: "以此生成角色",
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateIns?.(id, "role");
+            canvasHandlers.handleGenerateIns?.(id, "role", {
+              files: contextGenerateOptions.files,
+              title: "角色",
+              actionLabel: "以此生成角色",
+            });
           },
-        },
-        {
+        });
+      }
+      if (!chainMeta.hasSummaryCard) {
+        actions.push({
           key: "generate-summary",
           label: "以此生成故事梗概",
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateIns?.(id, "summary");
+            canvasHandlers.handleGenerateIns?.(id, "summary", {
+              files: contextGenerateOptions.files,
+              title: "故事梗概",
+              actionLabel: "以此生成故事梗概",
+            });
           },
-        },
-        infoAction,
-      ] as FloatingAction[];
+        });
+      }
+      actions.push(infoAction);
+      return actions;
     }
 
     if (isSummaryCard) {
-      return [
-        {
+      const actions: FloatingAction[] = [];
+      if (!chainMeta.hasRoleCardGroup) {
+        actions.push({
           key: "generate-role",
           label: "以此生成角色",
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateIns?.(id, "role");
+            canvasHandlers.handleGenerateIns?.(id, "role", {
+              files: contextGenerateOptions.files,
+              title: "角色",
+              actionLabel: "以此生成角色",
+            });
           },
-        },
-        {
+        });
+      }
+      if (!chainMeta.hasOutlineCardOrGroup) {
+        actions.push({
           key: "generate-outline",
           label: "以此生成大纲",
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateOutlineFromContext?.(id);
+            canvasHandlers.handleGenerateOutlineFromContext?.(id, {
+              files: contextGenerateOptions.files,
+              title: "大纲",
+              actionLabel: "以此生成大纲",
+            });
           },
-        },
-        infoAction,
-      ] as FloatingAction[];
+        });
+      }
+      actions.push(infoAction);
+      return actions;
     }
 
     if (isInfoCard) {
@@ -779,26 +1172,39 @@ export default function EditableFlowCard({
           label: "以此扩充随机角色",
           onClick: (e) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateIns?.(id, "role");
+            canvasHandlers.handleGenerateIns?.(id, "role", {
+              files: contextGenerateOptions.files,
+              title: "角色",
+              actionLabel: "以此扩充随机角色",
+            });
           },
         },
       ];
-      if (!hasUpstreamSummaryCard) {
+      if (!chainMeta.hasSummaryCard) {
         actions.push({
           key: "generate-summary",
           label: "以此生成故事梗概",
           onClick: (e) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateIns?.(id, "summary");
+            canvasHandlers.handleGenerateIns?.(id, "summary", {
+              files: contextGenerateOptions.files,
+              title: "故事梗概",
+              actionLabel: "以此生成故事梗概",
+            });
           },
         });
-      } else if (!hasUpstreamOutlineCard) {
+      }
+      if (!chainMeta.hasOutlineCardOrGroup) {
         actions.push({
           key: "generate-outline",
           label: "以此生成大纲",
           onClick: (e) => {
             e.stopPropagation();
-            canvasHandlers.handleGenerateOutlineFromContext?.(id);
+            canvasHandlers.handleGenerateOutlineFromContext?.(id, {
+              files: contextGenerateOptions.files,
+              title: "大纲",
+              actionLabel: "以此生成大纲",
+            });
           },
         });
       }
@@ -809,8 +1215,7 @@ export default function EditableFlowCard({
     return [] as FloatingAction[];
   }, [
     canvasHandlers,
-    hasUpstreamOutlineCard,
-    hasUpstreamSummaryCard,
+    chainMeta,
     id,
     isBrainstormCard,
     isGroupedCard,
@@ -818,11 +1223,116 @@ export default function EditableFlowCard({
     isRoleCard,
     isSummaryCard,
     isPlaceholderCard,
+    contextGenerateOptions,
   ]);
   const visibleFloatingActions = useMemo(
-    () => (shouldShowCardFloatingControls ? floatingActions.slice(0, 3) : []),
+    () => (shouldShowCardFloatingControls ? floatingActions : []),
     [floatingActions, shouldShowCardFloatingControls]
   );
+  const hasThirdFloatingAction = visibleFloatingActions.length > 2;
+
+  const getCanvasNodeLayoutSize = useCallback((node: any) => {
+    const measuredWidth = Number(node?.measured?.width ?? node?.dimensions?.width ?? 0);
+    const measuredHeight = Number(node?.measured?.height ?? node?.dimensions?.height ?? 0);
+    const styledWidth = Number(node?.style?.width ?? 0);
+    const styledHeight = Number(node?.style?.height ?? 0);
+
+    if (measuredWidth > 0 && measuredHeight > 0) {
+      return { width: measuredWidth, height: measuredHeight };
+    }
+    if (styledWidth > 0 && styledHeight > 0) {
+      return { width: styledWidth, height: styledHeight };
+    }
+
+    const label = String(node?.data?.label ?? "").trim();
+    if (node?.type === "settingCard" && label === "角色") return { width: 300, height: 450 };
+    if (node?.type === "outlineCard") return { width: 260, height: 260 };
+    if (node?.type === "settingCard") return { width: 260, height: 220 };
+    if (node?.type === "roleGroup") return { width: 340, height: 580 };
+    return { width: 260, height: 220 };
+  }, []);
+
+  const getAbsoluteCanvasNodePosition = useCallback((nodeId: string) => {
+    const normalizedNodeId = String(nodeId || "").trim();
+    if (!normalizedNodeId) return { x: 0, y: 0 };
+
+    const latestNodes = getNodes();
+    const nodeMap = new Map(latestNodes.map((node) => [node.id, node]));
+    const visit = (currentId: string): { x: number; y: number } => {
+      const currentNode = nodeMap.get(currentId) as any;
+      if (!currentNode) return { x: 0, y: 0 };
+
+      const parentId =
+        String(currentNode.parentId ?? "") ||
+        String(currentNode.data?.roleGroupId ?? "") ||
+        String(currentNode.data?.outlineGroupId ?? "");
+      if (!parentId) {
+        return {
+          x: Number(currentNode.position?.x ?? 0),
+          y: Number(currentNode.position?.y ?? 0),
+        };
+      }
+
+      const parentPosition = visit(parentId);
+      return {
+        x: parentPosition.x + Number(currentNode.position?.x ?? 0),
+        y: parentPosition.y + Number(currentNode.position?.y ?? 0),
+      };
+    };
+
+    return visit(normalizedNodeId);
+  }, [getNodes]);
+
+  const focusCopiedNode = useCallback((nodeId: string) => {
+    const normalizedNodeId = String(nodeId || "").trim();
+    if (!normalizedNodeId) return;
+
+    const attemptFocus = (attempt: number) => {
+      const targetNode = getNodes().find((node) => node.id === normalizedNodeId);
+      const internalNode = getNode(normalizedNodeId) as any;
+      if (!targetNode && !internalNode && attempt < 12) {
+        requestAnimationFrame(() => attemptFocus(attempt + 1));
+        return;
+      }
+      if (!targetNode && !internalNode) return;
+
+      const absolutePosition =
+        internalNode?.internals?.positionAbsolute ||
+        internalNode?.positionAbsolute ||
+        getAbsoluteCanvasNodePosition(normalizedNodeId);
+      const { width, height } = getCanvasNodeLayoutSize(internalNode || targetNode);
+
+      setNodes((prev) =>
+        prev.map((node) =>
+          node.id === normalizedNodeId
+            ? { ...node, data: { ...node.data, highlighted: true } as any }
+            : node
+        )
+      );
+
+      if (copyHighlightTimerRef.current) {
+        clearTimeout(copyHighlightTimerRef.current);
+      }
+      copyHighlightTimerRef.current = setTimeout(() => {
+        copyHighlightTimerRef.current = null;
+        setNodes((prev) =>
+          prev.map((node) =>
+            node.id === normalizedNodeId
+              ? { ...node, data: { ...node.data, highlighted: false } as any }
+              : node
+          )
+        );
+      }, 1800);
+
+      void setCenter(
+        (absolutePosition?.x ?? 0) + width / 2,
+        (absolutePosition?.y ?? 0) + height / 2,
+        { zoom: 0.95, duration: 500 } as any
+      );
+    };
+
+    requestAnimationFrame(() => attemptFocus(0));
+  }, [getAbsoluteCanvasNodePosition, getCanvasNodeLayoutSize, getNode, getNodes, setCenter, setNodes]);
 
   const handleCopyCard = useCallback(() => {
     const currentNode = getNodes().find((node) => node.id === id);
@@ -834,11 +1344,33 @@ export default function EditableFlowCard({
     const roleGroupId = String((currentNode.data as any)?.roleGroupId ?? "");
     const outlineGroupId = String((currentNode.data as any)?.outlineGroupId ?? "");
     const groupId = roleGroupId || outlineGroupId;
+    const duplicatedNodeId = `${currentNode.type || "card"}-${Date.now()}`;
+    const duplicatedCardSize = getCanvasNodeLayoutSize(currentNode);
+    const CARD_GAP_X = 28;
+    const CARD_GAP_Y = 36;
+    const ROLE_GROUP_MAX_COLS = 3;
+    const ROLE_GROUP_PADDING = 24;
+    const ROLE_GROUP_PADDING_TOP = 64;
+    const ROLE_GROUP_GAP_X = 24;
+    const ROLE_GROUP_GAP_Y = 28;
+    const ROLE_GROUP_MIN_HEIGHT = 580;
+    const OUTLINE_GROUP_MAX_COLS = 3;
+    const OUTLINE_GROUP_PADDING = 20;
+    const OUTLINE_GROUP_CARD_WIDTH = 300;
+    const OUTLINE_GROUP_CARD_HEIGHT = 260;
+    const OUTLINE_GROUP_GAP_X = 24;
+    const OUTLINE_GROUP_GAP_Y = 28;
+    const OUTLINE_GROUP_SETTINGS_TOP = 56;
+    const OUTLINE_GROUP_SETTINGS_BOTTOM_GAP = 24;
+    const OUTLINE_GROUP_SETTINGS_CARD_WIDTH = 600;
+    const OUTLINE_GROUP_SETTINGS_CARD_HEIGHT = 420;
+    const OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT = 56;
+    const isGroupedOutlineCard = Boolean(outlineGroupId);
 
     setNodes((prev) => {
       const baseDuplicatedNode = {
         ...currentNode,
-        id: `${currentNode.type || "card"}-${Date.now()}`,
+        id: duplicatedNodeId,
         selected: false,
         dragging: false,
         data: {
@@ -849,69 +1381,252 @@ export default function EditableFlowCard({
         },
       } as any;
 
+      const getNodeRect = (node: any) => {
+        const size = getCanvasNodeLayoutSize(node);
+        const x = Number(node.position?.x ?? 0);
+        const y = Number(node.position?.y ?? 0);
+        return {
+          left: x,
+          top: y,
+          right: x + size.width,
+          bottom: y + size.height,
+          width: size.width,
+          height: size.height,
+        };
+      };
+
+      const hasOverlapAtPosition = (x: number, y: number, nodes: any[]) =>
+        nodes.some((node) => {
+          const rect = getNodeRect(node);
+          return !(
+            x + duplicatedCardSize.width <= rect.left ||
+            x >= rect.right ||
+            y + duplicatedCardSize.height <= rect.top ||
+            y >= rect.bottom
+          );
+        });
+
       if (!groupId) {
+        const currentX = Number(currentNode.position?.x ?? 0);
+        const currentY = Number(currentNode.position?.y ?? 0);
+        const topLevelNodes = prev.filter((node) => !node.parentId && node.id !== currentNode.id);
+        const candidatePositions = [
+          { x: currentX + duplicatedCardSize.width + CARD_GAP_X, y: currentY },
+          { x: currentX - duplicatedCardSize.width - CARD_GAP_X, y: currentY },
+          { x: currentX, y: currentY - duplicatedCardSize.height - CARD_GAP_Y },
+          { x: currentX, y: currentY + duplicatedCardSize.height + CARD_GAP_Y },
+        ];
+        const emptyPosition = candidatePositions.find(
+          (candidate) => !hasOverlapAtPosition(candidate.x, candidate.y, topLevelNodes)
+        );
+
+        if (emptyPosition) {
+          return [
+            ...prev,
+            {
+              ...baseDuplicatedNode,
+              position: emptyPosition,
+            },
+          ];
+        }
+
+        const insertionX = currentX + duplicatedCardSize.width + CARD_GAP_X;
+        const sameRowThreshold = duplicatedCardSize.height / 2;
+        const affectedNodeIds = new Set(
+          prev
+            .filter((node) => {
+              if (node.parentId || node.id === currentNode.id) return false;
+              const nodeX = Number(node.position?.x ?? 0);
+              const nodeY = Number(node.position?.y ?? 0);
+              return nodeX >= insertionX && Math.abs(nodeY - currentY) <= sameRowThreshold;
+            })
+            .map((node) => node.id)
+        );
+
         return [
-          ...prev,
+          ...prev.map((node) =>
+            affectedNodeIds.has(node.id)
+              ? {
+                  ...node,
+                  position: {
+                    ...node.position,
+                    x: Number(node.position?.x ?? 0) + duplicatedCardSize.width + CARD_GAP_X,
+                  },
+                }
+              : node
+          ),
           {
             ...baseDuplicatedNode,
             position: {
-              x: (currentNode.position?.x ?? 0) + 32,
-              y: (currentNode.position?.y ?? 0) + 32,
+              x: insertionX,
+              y: currentY,
             },
           },
         ];
       }
 
-      const cols = 3;
-      const cardWidth = 300;
-      const cardHeight = outlineGroupId ? 260 : 450;
-      const gapX = 20;
-      const gapY = 24;
-      const groupPaddingTop = 56;
-      const groupPadding = 20;
-      const minGroupWidth = 340;
-      const groupedNodes = prev.filter(
-        (node) =>
-          String((node.data as any)?.roleGroupId ?? "") === groupId ||
-          String((node.data as any)?.outlineGroupId ?? "") === groupId
-      );
-      const nextIndex = groupedNodes.length;
-      const col = nextIndex % cols;
-      const row = Math.floor(nextIndex / cols);
-      const totalCount = nextIndex + 1;
-      const rows = Math.max(1, Math.ceil(totalCount / cols));
-      const colsUsed = Math.min(cols, totalCount);
-      const nextGroupWidth = Math.max(
-        minGroupWidth,
-        groupPadding * 2 + colsUsed * cardWidth + Math.max(0, colsUsed - 1) * gapX
-      );
-      const nextGroupHeight =
-        groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
+      const groupedNodes = prev
+        .filter((node) =>
+          isGroupedOutlineCard
+            ? String((node.data as any)?.outlineGroupId ?? "") === groupId
+            : String((node.data as any)?.roleGroupId ?? "") === groupId
+        )
+        .sort((a, b) => {
+          const ay = Number(a.position?.y ?? 0);
+          const by = Number(b.position?.y ?? 0);
+          if (ay !== by) return ay - by;
+          return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+        });
+      const groupNode = prev.find((node) => node.id === groupId);
+      const currentIndex = groupedNodes.findIndex((node) => node.id === currentNode.id);
+      const maxCols = isGroupedOutlineCard ? OUTLINE_GROUP_MAX_COLS : ROLE_GROUP_MAX_COLS;
+      const rowStartIndex = currentIndex >= 0 ? Math.floor(currentIndex / maxCols) * maxCols : groupedNodes.length;
+      const currentRowNodes = groupedNodes.slice(rowStartIndex, rowStartIndex + maxCols);
+      const rowIsFull = currentRowNodes.length >= maxCols;
+      const insertionIndex =
+        currentIndex < 0
+          ? groupedNodes.length
+          : rowIsFull
+            ? Math.min(rowStartIndex + maxCols, groupedNodes.length)
+            : currentIndex + 1;
+      const orderedNodes = [
+        ...groupedNodes.slice(0, insertionIndex),
+        baseDuplicatedNode,
+        ...groupedNodes.slice(insertionIndex),
+      ];
+
+      const nextPositionById = new Map<string, { x: number; y: number }>();
+      let nextGroupWidth = Number((groupNode as any)?.style?.width ?? 0);
+      let nextGroupHeight = Number((groupNode as any)?.style?.height ?? 0);
+
+      if (isGroupedOutlineCard) {
+        const settingsNode = prev.find(
+          (node) => node.parentId === groupId && node.type === "outlineSettingCard"
+        ) as any;
+        const settingsHeight = settingsNode
+          ? Number(settingsNode?.style?.height ?? settingsNode?.measured?.height ?? 0) ||
+            (Boolean(settingsNode.data?.outlineSettingCollapsed)
+              ? OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT
+              : OUTLINE_GROUP_SETTINGS_CARD_HEIGHT)
+          : 0;
+        const cardsTop =
+          settingsHeight > 0
+            ? OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
+            : OUTLINE_GROUP_SETTINGS_TOP;
+
+        orderedNodes.forEach((node, index) => {
+          const col = index % OUTLINE_GROUP_MAX_COLS;
+          const row = Math.floor(index / OUTLINE_GROUP_MAX_COLS);
+          nextPositionById.set(node.id, {
+            x: OUTLINE_GROUP_PADDING + col * (OUTLINE_GROUP_CARD_WIDTH + OUTLINE_GROUP_GAP_X),
+            y: cardsTop + row * (OUTLINE_GROUP_CARD_HEIGHT + OUTLINE_GROUP_GAP_Y),
+          });
+        });
+
+        const rows = Math.max(1, Math.ceil(orderedNodes.length / OUTLINE_GROUP_MAX_COLS));
+        const colsUsed = Math.min(OUTLINE_GROUP_MAX_COLS, orderedNodes.length);
+        nextGroupWidth = Math.max(
+          OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_PADDING * 2,
+          OUTLINE_GROUP_PADDING * 2 +
+            colsUsed * OUTLINE_GROUP_CARD_WIDTH +
+            Math.max(0, colsUsed - 1) * OUTLINE_GROUP_GAP_X
+        );
+        nextGroupHeight = Math.max(
+          OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + OUTLINE_GROUP_PADDING,
+          cardsTop +
+            rows * OUTLINE_GROUP_CARD_HEIGHT +
+            Math.max(0, rows - 1) * OUTLINE_GROUP_GAP_Y +
+            OUTLINE_GROUP_PADDING
+        );
+      } else {
+        let rowStartY = ROLE_GROUP_PADDING_TOP;
+        for (let start = 0; start < orderedNodes.length; start += ROLE_GROUP_MAX_COLS) {
+          const rowNodes = orderedNodes.slice(start, start + ROLE_GROUP_MAX_COLS);
+          const rowHeight = rowNodes.reduce((max, node) => {
+            const { height } = getCanvasNodeLayoutSize(node);
+            return Math.max(max, height);
+          }, 0);
+
+          let nextRowX = ROLE_GROUP_PADDING;
+          rowNodes.forEach((node) => {
+            const { width } = getCanvasNodeLayoutSize(node);
+            nextPositionById.set(node.id, {
+              x: nextRowX,
+              y: rowStartY,
+            });
+            nextRowX += width + ROLE_GROUP_GAP_X;
+          });
+          rowStartY += rowHeight + ROLE_GROUP_GAP_Y;
+        }
+
+        const maxRight = orderedNodes.reduce((max, node) => {
+          const nextPosition = nextPositionById.get(node.id);
+          const { width } = getCanvasNodeLayoutSize(node);
+          return Math.max(max, Number(nextPosition?.x ?? 0) + width);
+        }, 0);
+        const maxBottom = orderedNodes.reduce((max, node) => {
+          const nextPosition = nextPositionById.get(node.id);
+          const { height } = getCanvasNodeLayoutSize(node);
+          return Math.max(max, Number(nextPosition?.y ?? 0) + height);
+        }, 0);
+        nextGroupWidth = Math.max(340, maxRight + ROLE_GROUP_PADDING);
+        nextGroupHeight = Math.max(ROLE_GROUP_MIN_HEIGHT, maxBottom + ROLE_GROUP_PADDING);
+      }
+
+      const nextNodes = prev.map((node) => {
+        if (node.id === groupId) {
+          return {
+            ...node,
+            style: {
+              ...((node as any)?.style ?? {}),
+              width: nextGroupWidth,
+              height: nextGroupHeight,
+            },
+          };
+        }
+
+        if (
+          isGroupedOutlineCard &&
+          node.parentId === groupId &&
+          node.type === "outlineSettingCard"
+        ) {
+          return {
+            ...node,
+            style: {
+              ...((node as any)?.style ?? {}),
+              width: Math.max(nextGroupWidth - OUTLINE_GROUP_PADDING * 2, OUTLINE_GROUP_SETTINGS_CARD_WIDTH),
+            },
+          };
+        }
+
+        const nextPosition = nextPositionById.get(node.id);
+        if (!nextPosition) return node;
+        return {
+          ...node,
+          position: nextPosition,
+        };
+      });
 
       return [
-        ...prev.map((node) =>
-          node.id !== groupId
-            ? node
-            : {
-                ...node,
-                style: {
-                  ...((node as any)?.style ?? {}),
-                  width: Math.max(Number((node as any)?.style?.width ?? 0), nextGroupWidth),
-                  height: Math.max(Number((node as any)?.style?.height ?? 0), nextGroupHeight),
-                },
-              }
-        ),
+        ...nextNodes,
         {
           ...baseDuplicatedNode,
-          position: {
-            x: groupPadding + col * (cardWidth + gapX),
-            y: groupPaddingTop + row * (cardHeight + gapY),
-          },
+          position: nextPositionById.get(duplicatedNodeId) ?? currentNode.position,
         },
       ];
     });
+    focusCopiedNode(duplicatedNodeId);
     msg("success", "已复制当前卡片");
-  }, [getNodes, id, msg, setNodes]);
+  }, [focusCopiedNode, getCanvasNodeLayoutSize, getNodes, id, msg, setNodes]);
+
+  useEffect(() => {
+    return () => {
+      if (copyHighlightTimerRef.current) {
+        clearTimeout(copyHighlightTimerRef.current);
+        copyHighlightTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -924,43 +1639,54 @@ export default function EditableFlowCard({
           : "border-solid border-[#e5e7eb]",
         (isBrainstormAiMode || isHighlighted) &&
           "border-solid border-[#EFAF00] shadow-[0px_0px_0px_2px_rgba(239,175,0,0.18),0px_14px_36px_0px_rgba(0,0,0,0.14)]",
+        isGroupedCardDragging &&
+          "z-30 scale-[1.035] -rotate-[1deg] border-solid border-[#2563EB] shadow-[0px_0px_0px_3px_rgba(59,130,246,0.22),0px_24px_56px_0px_rgba(37,99,235,0.24)]",
         isHighlighted &&
           "after:pointer-events-none after:absolute after:inset-[-6px] after:rounded-[24px] after:border after:border-[#EFAF00]/70 after:content-[''] after:animate-ping",
         "shadow-[0px_10px_28px_0px_rgba(0,0,0,0.10)] hover:shadow-[0px_14px_36px_0px_rgba(0,0,0,0.14)]",
-        "group transition-shadow duration-200 ease-out",
+        "group transition-[box-shadow,transform,border-color] duration-200 ease-out",
         isImageCard
           ? (isExpanded ? "w-[750px] h-[500px]" : "w-[300px] min-h-[450px]")
           : isLargeSummaryCard
             ? (isExpanded ? "w-[680px] min-h-[960px]" : "w-[600px] min-h-[900px]")
             : (isExpanded ? "w-[520px] min-h-[420px]" : "w-[300px] min-h-[240px]"),
+        isGroupedCard && !isEditing && "cursor-grab active:cursor-grabbing",
         isEditing && "nodrag nopan"
       )}
       onMouseEnter={shouldShowCardFloatingControls ? showFloatingButtonsNow : undefined}
       onMouseLeave={shouldShowCardFloatingControls ? scheduleHideFloatingButtons : undefined}
     >
+      {isGroupedCardDragging ? (
+        <div className="pointer-events-none absolute right-3 top-3 z-40 inline-flex items-center gap-1.5 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-medium text-white shadow-[0px_8px_20px_0px_rgba(37,99,235,0.28)]">
+          <span className="size-2 rounded-full bg-white/95 animate-pulse" />
+          拖动中
+        </div>
+      ) : null}
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2 text-sm">
+      <div className="flex items-center justify-between gap-2 px-2 pt-4 pb-2 text-sm">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
-            title={headerLabelText}
-            className="min-w-0 inline-flex max-w-[min(100%,calc(100%-2.5rem))] gap-1 rounded-[6px] px-2 py-0.5 font-semibold text-[#111] text-sm"
+            title={isRoleCard ? `角色${roleCardIndex}` : hasTitleText ? normalizedTitleText : ``}
+            className="min-w-0 inline-flex max-w-[min(100%,calc(100%-1.5rem))] gap-1 rounded-[6px] px-2 py-0.5 font-semibold text-[#111] text-sm"
             style={{
               backgroundImage: headerLabelBackground,
             }}
           >
-            <Iconfont unicode="&#xe664;" className="text-[#854D0E] size-4" />
+            {shouldShowHeaderIcon ? (
+              <Iconfont unicode="&#xe664;" className="text-[#854D0E] size-4" />
+            ) : null}
             <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-              {headerLabelText}
+              {isRoleCard ? `` :  headerLabelText }
             </span>
           </span>
-          {isPendingGenerate ? (
+          {shouldShowPendingBadge ? (
             <span className="rounded-full border border-[#FEF08A] bg-[#FEFCE8] px-2 py-0.5 text-[11px] text-[#854D0E]">
               待生成
             </span>
           ) : null}
         </div>
         {!isStreaming && (
-          <div className="z-20 flex shrink-0 items-center gap-1.5 transition-opacity">
+          <div className="z-20 flex shrink-0 items-center transition-opacity">
             {isEditing && allowImageUpload && isImageCard ? (
               <>
                 <input
@@ -972,7 +1698,6 @@ export default function EditableFlowCard({
                   onChange={async (e) => {
                     const files = Array.from(e.target.files ?? []);
                     if (files.length === 0) return;
-                    // reset so selecting same file again still triggers
                     e.target.value = "";
 
                     const toDataUrl = (file: File) =>
@@ -990,6 +1715,10 @@ export default function EditableFlowCard({
                         ...urls.filter(Boolean).map(String),
                       ];
                       updateNodeData(id, {
+                        images: nextImages,
+                        image: nextImages[0],
+                      });
+                      onUpdate(id, editContentRef.current || String(data.content || ""), {
                         images: nextImages,
                         image: nextImages[0],
                       });
@@ -1076,39 +1805,12 @@ export default function EditableFlowCard({
           </div>
         )}
       </div>
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="w-[min(92vw,26rem)] gap-5 rounded-[12px] border-0 p-0 shadow-[0_24px_80px_rgba(0,0,0,0.14)]"
-        >
-          <DialogHeader className="gap-2 px-6 pt-6 text-left">
-            <DialogTitle className="text-base font-semibold text-[#111827]">
-              <Iconfont unicode="&#xe655;" className="text-[#E67E22] size-4 mr-2" />
-              删除卡片
-            </DialogTitle>
-          </DialogHeader>
-          <div className="px-6 text-sm leading-6 text-[#4b5563]">
-            此操作不可逆，确认删除卡片？
-          </div>
-          <DialogFooter className="gap-3 px-6 pb-6 sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setDeleteDialogOpen(false)}
-              className="h-10 rounded-3xl border border-[#e5e7eb] bg-white px-5 text-sm font-medium text-[#374151] hover:bg-[#f9fafb]"
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmDelete}
-              className="h-10 rounded-3xl bg-white border !border-[#8E77F0] px-5 text-sm font-medium text-[#8E77F0] hover:bg-[#8E77F0] hover:text-white"
-            >
-              确认
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        targetLabel="卡片"
+      />
 
       {/* Body：使用 MarkdownEditor 展示/编辑 md，展开按钮居中；折叠时在展开按钮上方显示渐变蒙层 */}
       <div
@@ -1127,28 +1829,47 @@ export default function EditableFlowCard({
             <div className="w-full rounded-[14px] px-3 py-3">
               <div className="h-4 w-2/3 rounded bg-[#E5E7EB]" />
             </div>
-          ) : isEditing && allowTitleEdit ? (
-            <input
-              value={editLabel}
-              onChange={(e) => {
-                setEditLabel(e.target.value);
-              }}
-              placeholder="请输入标题"
-              className={cn(
-                "w-full rounded-[14px] px-3 py-2 text-[15px] font-medium text-[#111] outline-none",
-                "focus:bg-white"
-              )}
-            />
+          ) : isEditing && allowTitleEdit && shouldShowInlineTitle ? (
+            <div className={cn("w-full overflow-hidden", titleAreaHeightClass)}>
+              <MarkdownEditor
+                ref={titleEditorRef}
+                className={cn(
+                  "h-full w-full overflow-hidden bg-white/90 px-3 py-2",
+                  "[&_.editor-content]:!h-full [&_.main-editor-content]:!h-full [&_.main-editor-content]:!overflow-hidden [&_.main-editor-content]:!pb-0",
+                  "[&_.main-editor-content_.ProseMirror]:!max-h-full [&_.main-editor-content_.ProseMirror]:!overflow-y-auto [&_.main-editor-content_.ProseMirror]:!overscroll-contain [&_.main-editor-content_.ProseMirror]:!whitespace-pre-wrap [&_.main-editor-content_.ProseMirror]:break-words"
+                )}
+                fontClassName={cn(
+                  "!min-h-0 !p-0 !text-[15px] !font-medium !leading-6 !text-[#111]",
+                  "[&_p]:!my-0 [&_h1]:!my-0 [&_h2]:!my-0 [&_h3]:!my-0 [&_h4]:!my-0 [&_h5]:!my-0 [&_h6]:!my-0"
+                )}
+                readonly={false}
+                value={editLabel}
+                onChange={(md) => {
+                  titleDirtyRef.current = true;
+                  setEditLabel(md);
+                }}
+                placeholder="请输入标题"
+                minHeight={0}
+                onBlur={isEditing ? handleTitleEditorBlur : undefined}
+                onKeyDown={(e: KeyboardEvent) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    handleCancel();
+                  }
+                }}
+              />
+            </div>
           ) : shouldShowReadonlyTitle ? (
             <div
               className={cn(
-                "flex w-full items-start gap-2 rounded-[14px] px-3 py-2 font-semibold",
+                "flex w-full items-start gap-2 overflow-hidden rounded-[14px] px-3 py-2 font-semibold",
+                titleAreaHeightClass,
                 isLargeSummaryCard ? "text-[24px] leading-8" : "text-[18px] leading-6",
-                "text-[#9CA3AF]"
+                (isRoleCard && hasTitleText) || hasTitleText ? "text-[#111827]" : "text-[#9CA3AF]"
               )}
             >
-              <span className="min-w-0 flex-1">
-                {`【${cardLabel}】请输入标题`}
+              <span className="min-w-0 h-full flex-1 overflow-y-auto whitespace-pre-wrap break-words overscroll-contain pr-1">
+                {readonlyTitleText}
               </span>
               {isBlankDraft && !isGroupedOutlineCard && !isPendingGenerate ? (
                 <button
@@ -1177,8 +1898,8 @@ export default function EditableFlowCard({
             isImageCard
               ? "mt-2"
               : isLargeSummaryCard
-                ? "mt-4"
-                : "mt-3",
+                ? "mt-2"
+                : "mt-1",
             isEditing && "nodrag nopan"
           )}
           onMouseDown={isEditing ? (e) => e.stopPropagation() : undefined}
@@ -1210,7 +1931,7 @@ export default function EditableFlowCard({
                 "relative w-full cursor-pointer",
                 isImageCard && (isExpanded ? "min-h-[160px]" : "min-h-[96px]"),
                 isTextOnlyCard && "rounded-[14px] bg-[#fafafa] px-3 py-3",
-                isLargeSummaryCard && "min-h-[720px] rounded-[16px] border border-[#f1f5f9] bg-[#fcfcfc] px-4 py-4",
+                isLargeSummaryCard && "min-h-[720px] rounded-[16px] px-4 py-4",
                 isRoleMermaidCard && (isExpanded ? "min-h-[380px]" : "min-h-[330px]"),
                 isEditing && "cursor-text bg-white"
               )}
@@ -1222,8 +1943,8 @@ export default function EditableFlowCard({
                   className="min-h-0"
                   fontClassName="!text-sm"
                   readonly={!isEditing}
-                  value={displayedContent}
-                  placeholder={data.fromApi ? '' : '[写作思路]'}
+                  value={visibleContent}
+                  placeholder={editorPlaceholder}
                   minHeight={0}
                   onChange={
                     isEditing
@@ -1243,7 +1964,7 @@ export default function EditableFlowCard({
                       }
                       : undefined
                   }
-                  onBlur={isEditing && !allowTitleEdit && !allowImageUpload ? handleBlur : undefined}
+                  onBlur={isEditing ? handleContentEditorBlur : undefined}
                   onKeyDown={
                     isEditing
                       ? (e: KeyboardEvent) => {
@@ -1273,10 +1994,7 @@ export default function EditableFlowCard({
         {isImageCard && !isRoleMermaidCard && (
           <div className="mt-3 w-full">
             <div
-              className={cn(
-                "relative w-full overflow-hidden rounded-[14px]",
-                isExpanded ? "h-[320px]" : "h-[260px]"
-              )}
+              className="relative aspect-[3/4] w-full overflow-hidden rounded-[14px]"
             >
               {showApiSkeleton ? (
                 <>
@@ -1285,10 +2003,10 @@ export default function EditableFlowCard({
                     <div
                       className={cn(
                         "rounded-full bg-white px-3 py-1 text-[12px] font-medium shadow-sm",
-                        apiProgress >= 100 ? "text-[#111]" : "text-[#EFAF00]"
+                        apiProgressDisplay >= 100 ? "text-[#111]" : "text-[#EFAF00]"
                       )}
                     >
-                      脑洞概念生成中 {apiProgress}%
+                      {cardLabel}概念图生成中 {apiProgressDisplay}%
                     </div>
                   </div>
                 </>
@@ -1304,8 +2022,8 @@ export default function EditableFlowCard({
                 </>
               ) : (
                 data.fromApi ? null : (
-                  <div className="flex h-full w-full items-center justify-center bg-white text-[12px] text-[#9CA3AF]">
-                    {"[可上传脑洞概念图]"}
+                  <div className="flex h-full w-full items-center justify-center bg-[#F9F9F7] text-[12px] text-[#9CA3AF]">
+                    {`[${cardLabel}概念图]`}
                   </div>
                 )
               )}
@@ -1333,49 +2051,47 @@ export default function EditableFlowCard({
 
       {/* Add */}
       {shouldShowCardFloatingControls ? (
-        <span
-          className={cn(
-            "absolute bottom-[-15px] left-1/2 -translate-x-1/2 z-10",
-            // 不做淡入淡出，避免 hover 时出现“半透明”过渡帧
-            showFloatingButtons ? "visible" : "invisible"
-          )}
+        <NodeToolbar
+          isVisible={showFloatingButtons}
+          position={Position.Bottom}
+          offset={-15}
           onMouseEnter={showFloatingButtonsNow}
           onMouseLeave={scheduleHideFloatingButtons}
         >
-          <div className="relative">
-            {/* options */}
+          <div className="relative z-50">
             <div
               className={cn(
                 "pointer-events-none absolute inset-0",
-                // 同上：直接显示/隐藏，不做 opacity 过渡
                 showFloatingButtons ? "block" : "hidden"
               )}
               aria-hidden={!showFloatingButtons}
             >
-              {shouldShowCardFloatingControls
-                ? visibleFloatingActions.map((action, index) => (
-                    <div
-                      key={action.key}
-                      className={cn(
-                        "pointer-events-none absolute",
-                        index === 0 && "-top-15 left-15 -translate-x-1/2",
-                        index === 1 && "top-1/2 left-15 ml-2 -translate-y-1/2",
-                        index === 2 && "top-full mt-2 left-20 -translate-x-1/2"
-                      )}
-                    >
-                      <Button
-                        type="button"
-                        className={cn(
-                          "pointer-events-auto rounded-[10px] border border-[#FEF08A] bg-[#FEFCE8] px-3 py-1 text-[12px] text-[#854D0E] shadow-sm",
-                          "hover:bg-[#FEF08A]/80"
-                        )}
-                        onClick={action.onClick}
-                      >
-                        {action.label}
-                      </Button>
-                    </div>
-                  ))
-                : null}
+              {visibleFloatingActions.map((action, index) => (
+                <div
+                  key={action.key}
+                  className={cn(
+                    "pointer-events-none absolute z-50",
+                    index === 0 && "-top-15 left-15 -translate-x-1/2",
+                    index === 1 && "top-1/2 left-15 ml-2 -translate-y-1/2",
+                    index === 2 && "top-full left-20 mt-2 -translate-x-1/2",
+                    index === 3 &&
+                      (hasThirdFloatingAction
+                        ? "-bottom-22 left-13 mt-2 -translate-x-1/2"
+                        : "top-full left-20 mt-2 -translate-x-1/2")
+                  )}
+                >
+                  <Button
+                    type="button"
+                    className={cn(
+                      "pointer-events-auto rounded-[10px] border border-[#FEF08A] bg-[#FEFCE8] px-3 py-1 text-[12px] text-[#854D0E] shadow-sm",
+                      "hover:bg-[#FEF08A]/80"
+                    )}
+                    onClick={action.onClick}
+                  >
+                    {action.label}
+                  </Button>
+                </div>
+              ))}
             </div>
 
             <Button
@@ -1390,18 +2106,44 @@ export default function EditableFlowCard({
               <Plus className="size-4" />
             </Button>
           </div>
-        </span>
+        </NodeToolbar>
       ) : null}
 
       {/* Invisible handles: provide edge anchor points */}
       <Handle
+        id="target-top"
         type="target"
         position={Position.Top}
         style={{ opacity: 0, pointerEvents: "none" }}
       />
       <Handle
+        id="target-left"
+        type="target"
+        position={Position.Left}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="target-right"
+        type="target"
+        position={Position.Right}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-bottom"
         type="source"
         position={Position.Bottom}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-left"
+        type="source"
+        position={Position.Left}
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        id="source-right"
+        type="source"
+        position={Position.Right}
         style={{ opacity: 0, pointerEvents: "none" }}
       />
     </div>
