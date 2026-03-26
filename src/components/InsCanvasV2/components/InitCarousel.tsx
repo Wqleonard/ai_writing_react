@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import canvasCarouselImg from "@/assets/images/canvas_carousel.png";
+import guaitanCarouselImg from "@/assets/images/canvas/guaitan.png";
+import nanpinCarouselImg from "@/assets/images/canvas/nanpin.png";
+import shengcunCarouselImg from "@/assets/images/canvas/shengcun.png";
+import xdyanqingCarouselImg from "@/assets/images/canvas/xdyanqing.png";
+import xuanyiCarouselImg from "@/assets/images/canvas/xuanyi.png";
+import yanqingCarouselImg from "@/assets/images/canvas/yanqing.png";
+import zhiyuCarouselImg from "@/assets/images/canvas/zhiyu.png";
 
 export interface InitCarouselImage {
   src: string;
@@ -33,12 +39,13 @@ export interface InitCarouselProps {
 }
 
 const DEFAULT_IMAGES: InitCarouselImage[] = [
-  { src: canvasCarouselImg, alt: "情感", typeLabel: "情感", theme: '中元节1' },
-  { src: canvasCarouselImg, alt: "科普", typeLabel: "科普", theme: '中元节2' },
-  { src: canvasCarouselImg, alt: "攻略", typeLabel: "攻略", theme: '中元节3' },
-  { src: canvasCarouselImg, alt: "测评", typeLabel: "测评", theme: '中元节4' },
-  { src: canvasCarouselImg, alt: "故事", typeLabel: "故事", theme: '中元节5' },
-  { src: canvasCarouselImg, alt: "观点", typeLabel: "观点", theme: '中元节6' },
+  { src: guaitanCarouselImg, alt: "规则怪谈", typeLabel: "规则怪谈", theme: '规则怪谈' },
+  { src: nanpinCarouselImg, alt: "男频", typeLabel: "男频", theme: '男频' },
+  { src: shengcunCarouselImg, alt: "末日生存", typeLabel: "末日生存", theme: '末日生存' },
+  { src: xdyanqingCarouselImg, alt: "现代言情", typeLabel: "现代言情", theme: '现代言情' },
+  { src: xuanyiCarouselImg, alt: "恐怖悬疑", typeLabel: "恐怖悬疑", theme: '恐怖悬疑' },
+  { src: yanqingCarouselImg, alt: "言情", typeLabel: "言情", theme: '言情' },
+  { src: zhiyuCarouselImg, alt: "治愈", typeLabel: "治愈", theme: '治愈' },
 ];
 
 export default function InitCarousel({
@@ -48,7 +55,7 @@ export default function InitCarousel({
   className = "",
   gapPx = 16,
   slideWidth = 176,
-  slideHeight = 120,
+  slideHeight = 250,
   zoomScale = 1.12,
   sideFadePx = 64,
   onPickType,
@@ -57,6 +64,8 @@ export default function InitCarousel({
     const normalized = (images ?? []).filter((x) => Boolean(x?.src));
     return normalized.length ? normalized : DEFAULT_IMAGES;
   }, [images]);
+  const carouselShellHeight = useMemo(() => slideHeight + 120, [slideHeight]);
+  const carouselTopOffset = useMemo(() => Math.max(40, Math.round(slideHeight * 0.28)), [slideHeight]);
 
   const loopedSlides = useMemo(() => {
     if (slides.length <= 1) return slides;
@@ -190,8 +199,14 @@ export default function InitCarousel({
   };
 
   return (
-    <div className={`relative mx-auto h-[300px] w-full max-w-[720px] ${className}`}>
-      <div className="absolute left-1/2 top-[70px] w-full -translate-x-1/2 px-2">
+    <div
+      className={`relative mx-auto w-full max-w-[720px] ${className}`}
+      style={{ height: carouselShellHeight }}
+    >
+      <div
+        className="absolute left-1/2 w-full -translate-x-1/2 px-2"
+        style={{ top: carouselTopOffset }}
+      >
         <div className="relative w-full rounded-[18px]">
           {/* 左右透明度蒙层 */}
           <div
@@ -216,22 +231,6 @@ export default function InitCarousel({
                 type="button"
                 className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-[#e5e7eb] bg-white/80 p-2 text-[#111] shadow-sm backdrop-blur transition hover:bg-white"
                 aria-label="向左加速滚动"
-                onPointerDown={() => handleBoostStart(1)}
-                onPointerUp={handleBoostEnd}
-                onPointerLeave={handleBoostEnd}
-                onPointerCancel={handleBoostEnd}
-                onClick={() => {
-                  const el = viewportRef.current;
-                  if (el) el.scrollBy({ left: Math.max(120, slideWidth), behavior: "smooth" });
-                  setBoost(1, 4, 900);
-                }}
-              >
-                <span className="select-none text-[14px] leading-none">‹</span>
-              </button>
-              <button
-                type="button"
-                className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-[#e5e7eb] bg-white/80 p-2 text-[#111] shadow-sm backdrop-blur transition hover:bg-white"
-                aria-label="向右加速滚动"
                 onPointerDown={() => handleBoostStart(-1)}
                 onPointerUp={handleBoostEnd}
                 onPointerLeave={handleBoostEnd}
@@ -240,6 +239,22 @@ export default function InitCarousel({
                   const el = viewportRef.current;
                   if (el) el.scrollBy({ left: -Math.max(120, slideWidth), behavior: "smooth" });
                   setBoost(-1, 4, 900);
+                }}
+              >
+                <span className="select-none text-[14px] leading-none">‹</span>
+              </button>
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-[#e5e7eb] bg-white/80 p-2 text-[#111] shadow-sm backdrop-blur transition hover:bg-white"
+                aria-label="向右加速滚动"
+                onPointerDown={() => handleBoostStart(1)}
+                onPointerUp={handleBoostEnd}
+                onPointerLeave={handleBoostEnd}
+                onPointerCancel={handleBoostEnd}
+                onClick={() => {
+                  const el = viewportRef.current;
+                  if (el) el.scrollBy({ left: Math.max(120, slideWidth), behavior: "smooth" });
+                  setBoost(1, 4, 900);
                 }}
               >
                 <span className="select-none text-[14px] leading-none">›</span>
@@ -292,7 +307,7 @@ export default function InitCarousel({
                     }}
                   >
                     <div
-                      className="h-full w-full overflow-hidden rounded-[14px] transition-transform duration-200 ease-out group-hover:[transform:scale(var(--zoom-scale))]"
+                      className="h-full w-full overflow-hidden transition-transform duration-200 ease-out group-hover:[transform:scale(var(--zoom-scale))]"
                       style={{ transformOrigin: "center", ["--zoom-scale" as any]: zoomScale }}
                     >
                       <img
@@ -305,10 +320,11 @@ export default function InitCarousel({
                     </div>
 
                     {!!label && (
-                      <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100">
-                        <button
-                          type="button"
-                          className="rounded-full cursor-pointer bg-[#111]/80 px-2 py-1 text-[11px] leading-none text-white shadow-sm backdrop-blur hover:bg-[#111]/90"
+                      <div className="absolute -left-2.5 top-2 z-10 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="block rounded-2 cursor-pointer bg-[#FEF08A]/80 px-2 py-1 text-[11px] leading-none text-black shadow-sm backdrop-blur hover:bg-[#FEF08A]/90"
                           onPointerEnter={() => {
                             hoverPausedRef.current = true;
                           }}
@@ -321,9 +337,17 @@ export default function InitCarousel({
                             if (onPickType)
                               onPickType({ source: "label", text: `我想写一个【${label}类型文】` });
                           }}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            pauseUntilRef.current = Date.now() + 1500;
+                            if (onPickType)
+                              onPickType({ source: "label", text: `我想写一个【${label}类型文】` });
+                          }}
                         >
                           {label}类型文
-                        </button>
+                        </span>
                       </div>
                     )}
                   </button>
