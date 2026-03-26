@@ -556,7 +556,11 @@ export function useDualTabChat() {
     async (tabType: ChatTabType): Promise<ChatSession[]> => {
       if (!state.currentWorkId) return [];
       try {
-        if (state.needRefreshSessions || !state.hasLoadedSessions) {
+        if (
+          state.needRefreshSessions ||
+          !state.hasLoadedSessions ||
+          state.cachedSessions.length === 0
+        ) {
           await refreshSessionsFromAPI();
           setStoreState({ needRefreshSessions: false });
         }
@@ -675,15 +679,27 @@ export function useDualTabChat() {
           }
         }
         setTabCurrentSessionId(tabType, sessionId);
+        const currentMessages =
+          tabType === "faq" ? state.faqMessages : state.chatMessages;
+        const currentSession =
+          tabType === "faq" ? state.faqCurrentSession : state.chatCurrentSession;
+        const shouldKeepLocalMessages =
+          messages.length === 0 &&
+          currentMessages.length > 0 &&
+          currentSession?.id === sessionId;
         if (tabType === "faq") {
           setStoreState({
             faqCurrentSession: session,
-            faqMessages: [...messages],
+            faqMessages: shouldKeepLocalMessages
+              ? [...currentMessages]
+              : [...messages],
           });
         } else {
           setStoreState({
             chatCurrentSession: session,
-            chatMessages: [...messages],
+            chatMessages: shouldKeepLocalMessages
+              ? [...currentMessages]
+              : [...messages],
           });
         }
         return true;
