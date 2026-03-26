@@ -53,4 +53,6 @@ export const ORDER_CODE_VALUE: Record<string, string> = {
   CANVAS_CREATE_CHARACTER: '画布创作-角色',
   CANVAS_CREATE_INFO: '画布创作-信息',
   CANVAS_CREATE_SMART: '画布创作-智能',
+  INSPIRATION_IMAGE: '画布创作-灵感卡片',
+  INSPIRATION_INTRODUCTION_DETAIL: '画布创作-卡片详情'
 }

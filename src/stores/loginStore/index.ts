@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { verifyTicket, getNewbieMission, completeNewbieMissionReq, type GuideTask } from '@/api/users'
+import { verifyTicket, getNewbieMission, completeNewbieMissionReq, getUserBalanceReq, type GuideTask } from '@/api/users'
 import { getInsiteNotification, type NotificationItem } from '@/api/insite-notification'
 import { openLoginDialog } from '@/components/LoginDialog'
 import type {
@@ -133,6 +133,12 @@ function getAvatarDataUrl(userInfo: UserInfo | null): string {
   )
 }
 
+function toDisplayBalance(value: unknown): number {
+  const raw = Number(value ?? 0)
+  if (!Number.isFinite(raw) || raw <= 0) return 0
+  return Math.floor(raw / 1000)
+}
+
 export const useLoginStore = create<LoginStore>((set, get) => {
   const readedIds = loadReadedMessageIdsFromStorage()
   let savedUserInfo: UserInfo | null = null
@@ -160,6 +166,10 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     loginDialogRequest: 0,
     sendIdeaTourShow: false,
     missionGroup: [],
+    dailyBalance: 0,
+    dailyBalanceLimit: 1000,
+    fixedBalance: 0,
+    isLoadingBalance: false,
 
     setNewbieTourShowed: () => {
       set({ hasNewbieTourShowed: true })
@@ -381,6 +391,21 @@ export const useLoginStore = create<LoginStore>((set, get) => {
 
     setSendIdeaTourShow: (show) => set({ sendIdeaTourShow: show }),
 
+    refreshBalance: async () => {
+      set({ isLoadingBalance: true })
+      try {
+        const req: any = await getUserBalanceReq()
+        set({
+          dailyBalance: toDisplayBalance(req?.dailyFreeToken),
+          fixedBalance: toDisplayBalance(req?.token),
+        })
+      } catch (error) {
+        console.error('获取余额失败:', error)
+      } finally {
+        set({ isLoadingBalance: false })
+      }
+    },
+
     updateNewbieMission: async () => {
       if (!get().isLoggedIn) return
       try {
@@ -475,3 +500,6 @@ export const selectAvatarDataUrl = (s: LoginStore) => getAvatarDataUrl(s.userInf
 export const selectHasUnreadMessages = (s: LoginStore) =>
   s.messages.some((m) => !m.isReaded)
 export const hasNewbieTourShowed = (s:LoginStore) => s.hasNewbieTourShowed
+export const selectDailyBalance = (s: LoginStore) => s.dailyBalance
+export const selectDailyBalanceLimit = (s: LoginStore) => s.dailyBalanceLimit
+export const selectFixedBalance = (s: LoginStore) => s.fixedBalance

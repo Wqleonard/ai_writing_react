@@ -49,7 +49,7 @@ function renderMobileHeadlessToast(kind: ToastKind, message: ToastMessage) {
   }
 
   return (
-    <div className="w-89 flex items-center justify-center h-fit">
+    <div className="mx-auto w-89 flex items-center justify-center h-fit">
       <div className="rounded-xl border border-border bg-popover px-4 py-3 shadow-lg">
         <div className="flex items-center gap-2">
           <span className="mt-0.5 shrink-0">{iconMap[kind]}</span>
@@ -67,11 +67,16 @@ function createMobileAwareToast(
   message: ToastMessage,
   data?: ExternalToast,
 ) {
+  const style = data?.style as React.CSSProperties | undefined;
   const toastOptions: ExternalToast = {
     ...data,
     position: data?.position ?? "top-center",
     style: {
-      ...(data?.style as React.CSSProperties | undefined),
+      marginLeft: "auto",
+      marginRight: "auto",
+      width: "fit-content",
+      maxWidth: "100%",
+      ...style,
     },
   };
 

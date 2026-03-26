@@ -6,8 +6,10 @@ import {
   useLoginStore,
   selectUserInfo,
   selectAvatarDataUrl,
+  selectDailyBalance,
+  selectDailyBalanceLimit,
+  selectFixedBalance,
 } from "@/stores/loginStore";
-import { getUserBalanceReq } from "@/api/users";
 import USER_INFO_BG from "@/assets/images/m-workspace-mine/mine_bg.png";
 import { mtoast } from "@/components/ui/toast";
 import { MConfirmDialog } from "@/components/ui/MConfirmDialog";
@@ -17,31 +19,16 @@ export default function MMinePage() {
   const userInfo = useLoginStore(selectUserInfo);
   const avatarDataUrl = useLoginStore(selectAvatarDataUrl);
   const { logout } = useLoginStore();
+  const userBalance = useLoginStore(selectDailyBalance);
+  const dailyBalanceLimit = useLoginStore(selectDailyBalanceLimit);
+  const fixedToken = useLoginStore(selectFixedBalance);
+  const refreshBalance = useLoginStore((s) => s.refreshBalance);
 
-  const [userBalance, setUserBalance] = useState("1000");
-  const [fixedToken, setFixedToken] = useState("0");
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
-  // 获取用户余额
-  const updateToken = useCallback(async () => {
-    try {
-      const req: any = await getUserBalanceReq();
-      if (req.dailyFreeToken) {
-        setUserBalance(
-          parseFloat(String(req.dailyFreeToken / 1000)).toFixed(0),
-        );
-      }
-      if (req.token) {
-        setFixedToken(parseFloat(String(req.token / 1000)).toFixed(0));
-      }
-    } catch (e) {
-      console.error("获取余额失败:", e);
-    }
-  }, []);
-
   useEffect(() => {
-    updateToken();
-  }, [updateToken]);
+    refreshBalance();
+  }, [refreshBalance]);
 
   // 跳转到规则
   const handleJumpToRules = useCallback(() => {
@@ -118,7 +105,7 @@ export default function MMinePage() {
             <div className="flex flex-col justify-center flex-1">
               <div className="text-center text-nowrap">
                 <span className="text-[48px]">{userBalance}</span>
-                <span className="text-[24px]"> / 1000</span>
+                <span className="text-[24px]"> / {dailyBalanceLimit}</span>
               </div>
               <div className="text-center text-[24px] opacity-80">
                 (内测每日积分)

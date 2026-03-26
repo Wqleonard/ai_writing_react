@@ -408,6 +408,7 @@ const MarkdownEditorPage = () => {
   const stoppedByUserRef = useRef(false);
   const latestChatSessionIdRef = useRef("");
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
+  const [isHiltApproveStreaming, setIsHiltApproveStreaming] = useState(false);
   const [todosExpanded, setTodosExpanded] = useState(false);
   const {
     findTextInMarkdown,
@@ -511,14 +512,24 @@ const MarkdownEditorPage = () => {
     },
     onUpdateFiles: (files, fileId, editInfoList) => {
       const currentServerData = useEditorStore.getState().serverData;
-      let targetFileId = normalizeFilePath(fileId || "");
+      // 兼容后端返回的 "/path"、"./path"、"path?x=1" 等格式，避免 mergedFiles key 与 targetFileId 不一致导致正文写入空串
+      const normalizedIncomingFiles = Object.entries((files ?? {}) as Record<string, string>).reduce<
+        Record<string, string>
+      >((acc, [rawKey, value]) => {
+        const key = sanitizeIncomingFilePath(String(rawKey ?? ""));
+        if (!key) return acc;
+        acc[key] = String(value ?? "");
+        return acc;
+      }, {});
+
+      let targetFileId = sanitizeIncomingFilePath(fileId || "");
       if (!targetFileId && currentEditingId && files[currentEditingId] !== undefined) {
         targetFileId = currentEditingId;
       }
       if (!targetFileId && Array.isArray(editInfoList) && editInfoList.length > 0) {
         const fromEditInfo = editInfoList.find((item) => item?.file_path)?.file_path;
         if (fromEditInfo) {
-          targetFileId = normalizeFilePath(fromEditInfo);
+          targetFileId = sanitizeIncomingFilePath(fromEditInfo);
         }
       }
 
@@ -540,15 +551,11 @@ const MarkdownEditorPage = () => {
         pendingEditPaths.add(targetFileId);
       }
 
-      const safeIncomingFiles = { ...files };
+      const safeIncomingFiles = { ...normalizedIncomingFiles };
       if (pendingEditPaths.size > 0) {
         pendingEditPaths.forEach((path) => {
           if (path in safeIncomingFiles) {
             delete safeIncomingFiles[path];
-          }
-          const slashPath = `/${path}`;
-          if (slashPath in safeIncomingFiles) {
-            delete safeIncomingFiles[slashPath];
           }
         });
       }
@@ -621,6 +628,7 @@ const MarkdownEditorPage = () => {
       }
     },
     onComplete: async () => {
+      setIsHiltApproveStreaming(false);
       const finalized = streamingMessageRef.current;
       if (finalized) {
         const suffix = "(内容由AI生成，仅供参考)";
@@ -671,6 +679,7 @@ const MarkdownEditorPage = () => {
       }
     },
     onSensitiveWord: () => {
+      setIsHiltApproveStreaming(false);
       // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
       skipGuideForCurrentStreamRef.current = true;
       guideRequestRef.current = null;
@@ -695,6 +704,7 @@ const MarkdownEditorPage = () => {
       toast.warning("内容包含敏感词，请尝试其他话题");
     },
     onError: (err, needSendErrorMsg) => {
+      setIsHiltApproveStreaming(false);
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
@@ -746,6 +756,7 @@ const MarkdownEditorPage = () => {
     const pending = guideRequestRef.current;
     guideRequestRef.current = null;
     stoppedByUserRef.current = true;
+    setIsHiltApproveStreaming(false);
     if (needAIMessage) {
       finalizeStreamingMessageWithSuffix("\n\n智能体已暂停");
     } else {
@@ -761,9 +772,9 @@ const MarkdownEditorPage = () => {
 
   const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
     if (langGraphStream.error) return "error";
-    if (langGraphStream.isStreaming) return "streaming";
+    if (langGraphStream.isStreaming || isHiltApproveStreaming) return "streaming";
     return "ready";
-  }, [langGraphStream.error, langGraphStream.isStreaming]);
+  }, [isHiltApproveStreaming, langGraphStream.error, langGraphStream.isStreaming]);
   // 与 tree/workInfo 同理：稳定回调里通过 ref 读取实时状态
   const chatInputStatusRef = useRef(chatInputStatus);
   useEffect(() => {
@@ -2681,6 +2692,7 @@ const MarkdownEditorPage = () => {
           ),
         };
       });
+      setIsHiltApproveStreaming(true);
       sendChatText("", { command: "approve", addUserMessage: false, commandOnly: true });
     },
     [updateLastChatMessage, sendChatText]
@@ -3130,7 +3142,7 @@ const MarkdownEditorPage = () => {
                               value={currentContent}
                               onChange={setCurrentContent}
                               placeholder={EDITOR_PLACEHOLDER}
-                              readonly={!isEditorEditable}
+                              // readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
                               onSelectionAdd={handleEditorSelectionAdd}
                               onSelectionNote={handleEditorSelectionNote}

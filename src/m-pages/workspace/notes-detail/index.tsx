@@ -17,6 +17,24 @@ interface NoteItem {
   source: string
 }
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;") 
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+
+const toEditorHtml = (content: string) => {
+  if (!content.trim()) return "<p></p>"
+  // 已经是 HTML 的内容直接交给编辑器解析
+  if (/<[a-z][\s\S]*>/i.test(content)) return content
+  return content
+    .split("\n\n")
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("")
+}
+
 export default function MNotesDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -26,7 +44,7 @@ export default function MNotesDetailPage() {
   const [currentNote, setCurrentNote] = useState<NoteItem | null>(null)
   const [isNewNote, setIsNewNote] = useState(true)
 
-  // 初始化笔记数据
+  // 解析路由中的笔记数据
   useEffect(() => {
     const newNoteState = (location.state as any)?.newNote
     setIsNewNote(newNoteState !== false)
@@ -34,11 +52,10 @@ export default function MNotesDetailPage() {
     const noteState = (location.state as any)?.note
     if (noteState) {
       try {
-        const noteData: NoteItem = JSON.parse(noteState)
+        const noteData: NoteItem =
+          typeof noteState === "string" ? JSON.parse(noteState) : noteState
         setCurrentNote(noteData)
         setTitle(noteData.title || '')
-        // 设置编辑器内容
-        editor?.commands.setContent(noteData.content || '<p></p>')
       } catch (error) {
         console.error('解析笔记数据失败:', error)
       }
@@ -70,6 +87,12 @@ export default function MNotesDetailPage() {
     },
     immediatelyRender: false,
   })
+
+  // editor 就绪后再写入内容，避免首次渲染时 editor 还未创建导致丢失
+  useEffect(() => {
+    if (!editor || !currentNote) return
+    editor.commands.setContent(toEditorHtml(currentNote.content || ""))
+  }, [editor, currentNote])
 
   // 返回
   const handleBack = useCallback(async () => {

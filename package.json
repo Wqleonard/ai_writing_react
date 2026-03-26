@@ -7,7 +7,7 @@
     "dev": "vite --mode dev",
     "qa": "vite --mode qa",
     "prd": "vite --mode prd",
-    "build:dev": "vite build --mode dev --outDir reactdev",
+    "build:dev": "vite build --mode dev --outDir distdev",
     "build:qa": "vite build --mode qa --outDir distqa",
     "build:prd": "vite build --mode prd",
     "lint": "eslint .",
