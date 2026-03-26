@@ -13,6 +13,7 @@ import {
   useReactFlow,
   useNodesState,
   useEdgesState,
+  applyNodeChanges,
   Controls,
   MiniMap,
   Background,
@@ -47,11 +48,10 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
     InspirationVersion,
   } from "./types";
 import { Iconfont } from "../Iconfont";
-import { saveInspirationCanvasReq } from "@/api/works";
+import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/works";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, X } from "lucide-react";
-import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
   const nodeTypes = {
     mainCard: MainCardNode,
     summaryCard: SummaryCardNode,
@@ -63,6 +63,17 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
   export interface InsCanvasApi {
     addNewCanvas: () => void;
+    addInfoCardFromExternalFile: (options: {
+      title: string;
+      content: string;
+      filePath: string;
+      clientX?: number;
+      clientY?: number;
+    }) => string;
+    focusFileByPath: (
+      filePath: string,
+      options?: { zoom?: number; duration?: number; maxAttempts?: number }
+    ) => boolean;
     openHistory: () => void;
     saveCanvas: (sessionId?: string) => void;
     inspirationDrawId: string;
@@ -905,6 +916,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     return getFirstTextValue(headingMatch?.[1], fallback);
   };
 
+  const extractWriteFileTitle = (filePath: string, fallback: string) => {
+    const fileName = getTextValue(filePath)
+      .split("/")
+      .pop()
+      ?.replace(/\.md$/i, "");
+    return getFirstTextValue(fileName, fallback);
+  };
+
   const extractMarkdownImage = (markdown: string) => {
     const imageMatch = markdown.match(/!\[[^\]]*\]\(([^)]+)\)/);
     return getTextValue(imageMatch?.[1]);
@@ -918,13 +937,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     return "info";
   };
 
-  const isRoleCardWriteFile = (filePath: string) => /(^|\/)\[角色卡\]\//.test(filePath);
   const isRelationshipWriteFile = (filePath: string) =>
     /(^|\/)relationship\.json$/i.test(filePath) || /(^|\/)角色关系\.md$/i.test(filePath);
   const shouldSkipWriteFileCardCreation = (filePath: string) =>
     /(^|\/)relationship\.json$/i.test(filePath);
   const isRelationshipInfoWriteFile = (filePath: string) =>
-    isRelationshipWriteFile(filePath) && !isRoleCardWriteFile(filePath);
+    isRelationshipWriteFile(filePath);
 
   const formatRecordMarkdown = (
     record: Record<string, unknown>,
@@ -1108,6 +1126,21 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     return sections.join("\n\n").trim();
   };
 
+  const buildCanvasNodeFilePath = ({
+    label,
+    title,
+  }: {
+    label?: unknown;
+    title?: unknown;
+  }) => {
+    const directoryName = getCanvasDirectoryName(label);
+    const fileBase = sanitizeCanvasEntryName(
+      String(title ?? "").trim() || String(label ?? "").trim(),
+      "未命名卡片"
+    );
+    return `/${directoryName}/${fileBase}.md`;
+  };
+
   const shouldSyncCanvasNode = (node: CustomNode) => {
     if (!node || node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
 
@@ -1178,16 +1211,77 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     return result;
   };
 
+  const buildCanvasSyncFileNodeIdMap = (nodes: CustomNode[]): Record<string, string> => {
+    if (!Array.isArray(nodes) || nodes.length === 0) return {};
+    const result: Record<string, string> = {};
+    const fileNameCountByDirectory = new Map<string, Map<string, number>>();
+    const getUniqueName = (name: string, bucket: Map<string, number>) => {
+      const count = bucket.get(name) ?? 0;
+      bucket.set(name, count + 1);
+      return count === 0 ? name : `${name}${count + 1}`;
+    };
+    const ensureDirectory = (directoryName: string) => {
+      if (!fileNameCountByDirectory.has(directoryName)) {
+        fileNameCountByDirectory.set(directoryName, new Map<string, number>());
+      }
+      return fileNameCountByDirectory.get(directoryName)!;
+    };
+
+    const topLevelNodes = nodes
+      .filter((node) => !node.parentId)
+      .sort(sortCanvasNodes);
+
+    topLevelNodes.forEach((node, index) => {
+      if (node.type === "roleGroup") {
+        const syncableChildren = nodes
+          .filter((child) => child.parentId === node.id && child.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE)
+          .filter(shouldSyncCanvasNode)
+          .sort(sortCanvasNodes);
+        if (!syncableChildren.length) return;
+
+        const directoryName = getCanvasDirectoryName(node.data?.label);
+        const childNameCount = ensureDirectory(directoryName);
+        syncableChildren.forEach((child, childIndex) => {
+          const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
+          result[`${directoryName}/${fileBase}.md`] = child.id;
+        });
+        return;
+      }
+
+      if (!shouldSyncCanvasNode(node)) return;
+
+      const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
+      const fileNameCount = ensureDirectory(directoryName);
+      const fileBase = getUniqueName(getCanvasNodeBaseName(node, index), fileNameCount);
+      result[`${directoryName}/${fileBase}.md`] = node.id;
+    });
+
+    return result;
+  };
+
   const CARD_LAYOUT_GAP_X = 28;
   const CARD_LAYOUT_GAP_Y = 36;
   const INFO_COLUMN_GAP_X = 72;
   const OUTLINE_GROUP_SETTINGS_CARD_WIDTH = 600;
   const OUTLINE_GROUP_SETTINGS_CARD_HEIGHT = 420;
+  const OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT = 56;
   const OUTLINE_GROUP_HORIZONTAL_PADDING = 20;
   const OUTLINE_GROUP_SETTINGS_TOP = 56;
   const OUTLINE_GROUP_SETTINGS_BOTTOM_GAP = 24;
   const OUTLINE_GROUP_SETTINGS_NODE_TYPE = "outlineSettingCard";
   const OUTLINE_GROUP_DEFAULT_TOP = 56;
+  const ROLE_GROUP_MIN_HEIGHT = 580;
+  const ROLE_GROUP_MAX_COLS = 3;
+  const ROLE_GROUP_CARD_WIDTH = 300;
+  const ROLE_GROUP_CARD_GAP_X = 24;
+  const ROLE_GROUP_CARD_GAP_Y = 28;
+  const ROLE_GROUP_PADDING_TOP = 64;
+  const ROLE_GROUP_PADDING = 24;
+  const OUTLINE_GROUP_MAX_COLS = 3;
+  const OUTLINE_GROUP_CARD_WIDTH = 300;
+  const OUTLINE_GROUP_CARD_HEIGHT = 260;
+  const OUTLINE_GROUP_CARD_GAP_X = 24;
+  const OUTLINE_GROUP_CARD_GAP_Y = 28;
   const getCanvasNodeLayoutSize = (node: CustomNode) => {
     const measuredWidth = Number((node as any)?.measured?.width ?? (node as any)?.dimensions?.width ?? 0);
     const measuredHeight = Number((node as any)?.measured?.height ?? (node as any)?.dimensions?.height ?? 0);
@@ -1203,21 +1297,386 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const label = String(node.data?.label ?? "").trim();
     if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) {
-      return { width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH, height: OUTLINE_GROUP_SETTINGS_CARD_HEIGHT };
+      return {
+        width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
+        height: Boolean((node.data as any)?.outlineSettingCollapsed)
+          ? OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT
+          : OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
+      };
     }
     if (node.type === "settingCard" && label === "角色") return { width: 300, height: 450 };
-    if (node.type === "outlineCard") return { width: 260, height: 260 };
+    if (node.type === "outlineCard") return { width: 600, height: 260 };
     if (node.type === "settingCard") return { width: 260, height: 220 };
-    if (node.type === "roleGroup") return { width: 340, height: 526 };
+    if (node.type === "roleGroup") return { width: 340, height: ROLE_GROUP_MIN_HEIGHT };
     return { width: 260, height: 220 };
   };
 
-  const getOutlineGroupCardsTop = (hasSettingsNode: boolean) =>
-    hasSettingsNode
-      ? OUTLINE_GROUP_SETTINGS_TOP +
-        OUTLINE_GROUP_SETTINGS_CARD_HEIGHT +
-        OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
+  const getOutlineGroupSettingsNode = (currentNodes: CustomNode[], groupId: string) =>
+    currentNodes.find(
+      (node) => node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
+    );
+
+  const getOutlineGroupSettingsHeight = (currentNodes: CustomNode[], groupId: string) => {
+    const settingsNode = getOutlineGroupSettingsNode(currentNodes, groupId);
+    return settingsNode ? getCanvasNodeLayoutSize(settingsNode).height : 0;
+  };
+
+  const getOutlineGroupCardsTop = (settingsHeight: number) =>
+    settingsHeight > 0
+      ? OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
       : OUTLINE_GROUP_DEFAULT_TOP;
+
+  const getCanvasNodeGroupId = (node?: CustomNode | null) =>
+    getTextValue(node?.parentId) ||
+    getTextValue((node?.data as any)?.roleGroupId) ||
+    getTextValue((node?.data as any)?.outlineGroupId);
+
+  const clampGroupedChildNodePositions = (currentNodes: CustomNode[], nodeIds?: string[]) => {
+    const targetIds = nodeIds?.length ? new Set(nodeIds) : null;
+    let changed = false;
+
+    const nextNodes = currentNodes.map((node) => {
+      if (targetIds && !targetIds.has(node.id)) return node;
+      if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return node;
+
+      const groupId = getCanvasNodeGroupId(node);
+      if (!groupId) return node;
+
+      const groupNode = currentNodes.find((candidate) => candidate.id === groupId && candidate.type === "roleGroup");
+      if (!groupNode) return node;
+
+      const groupLabel = getTextValue(groupNode.data?.label);
+      const isRoleGroup = groupLabel === "角色";
+      const isOutlineGroup = groupLabel === "大纲";
+      if (!isRoleGroup && !isOutlineGroup) return node;
+
+      const { width: groupWidth, height: groupHeight } = getCanvasNodeLayoutSize(groupNode);
+      const { width: nodeWidth, height: nodeHeight } = getCanvasNodeLayoutSize(node);
+      const paddingX = isRoleGroup ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING;
+      const minY = isRoleGroup
+        ? ROLE_GROUP_PADDING_TOP
+        : getOutlineGroupCardsTop(getOutlineGroupSettingsHeight(currentNodes, groupId));
+      const maxX = Math.max(paddingX, groupWidth - paddingX - nodeWidth);
+      const maxY = Math.max(minY, groupHeight - (isRoleGroup ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING) - nodeHeight);
+      const currentX = Number(node.position?.x ?? 0);
+      const currentY = Number(node.position?.y ?? 0);
+      const nextX = Math.min(Math.max(currentX, paddingX), maxX);
+      const nextY = Math.min(Math.max(currentY, minY), maxY);
+
+      if (currentX === nextX && currentY === nextY) return node;
+
+      changed = true;
+      return {
+        ...node,
+        position: {
+          x: nextX,
+          y: nextY,
+        },
+      };
+    });
+
+    return changed ? nextNodes : currentNodes;
+  };
+
+  const fitGroupNodeToChildren = (currentNodes: CustomNode[], groupId: string) => {
+    if (!groupId) return currentNodes;
+
+    const groupNode = currentNodes.find((node) => node.id === groupId && node.type === "roleGroup");
+    if (!groupNode) return currentNodes;
+
+    const groupLabel = getTextValue(groupNode.data?.label);
+    const isRoleGroup = groupLabel === "角色";
+    const isOutlineGroup = groupLabel === "大纲";
+    if (!isRoleGroup && !isOutlineGroup) return currentNodes;
+
+    const childNodes = currentNodes.filter((node) => {
+      if (node.id === groupId) return false;
+      if (node.parentId === groupId) return true;
+      return isRoleGroup
+        ? getTextValue((node.data as any)?.roleGroupId) === groupId
+        : getTextValue((node.data as any)?.outlineGroupId) === groupId;
+    });
+
+    if (!childNodes.length) return currentNodes;
+
+    const maxRight = childNodes.reduce((max, node) => {
+      const { width } = getCanvasNodeLayoutSize(node);
+      return Math.max(max, Number(node.position?.x ?? 0) + width);
+    }, 0);
+    const maxBottom = childNodes.reduce((max, node) => {
+      const { height } = getCanvasNodeLayoutSize(node);
+      return Math.max(max, Number(node.position?.y ?? 0) + height);
+    }, 0);
+
+    const horizontalPadding = isRoleGroup ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING;
+    const minWidth = isRoleGroup
+      ? 340
+      : OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2;
+    const maxWidth = isRoleGroup
+      ? Number.POSITIVE_INFINITY
+      : Math.max(
+          OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2,
+          OUTLINE_GROUP_HORIZONTAL_PADDING * 2 +
+            OUTLINE_GROUP_MAX_COLS * OUTLINE_GROUP_CARD_WIDTH +
+            Math.max(0, OUTLINE_GROUP_MAX_COLS - 1) * OUTLINE_GROUP_CARD_GAP_X
+        );
+    const minHeight = isRoleGroup
+      ? ROLE_GROUP_PADDING_TOP + ROLE_GROUP_PADDING
+      : OUTLINE_GROUP_SETTINGS_TOP + getOutlineGroupSettingsHeight(currentNodes, groupId) + OUTLINE_GROUP_HORIZONTAL_PADDING;
+    const nextGroupWidth = Math.min(maxWidth, Math.max(minWidth, Math.ceil(maxRight + horizontalPadding)));
+    const nextGroupHeight = Math.max(minHeight, Math.ceil(maxBottom + horizontalPadding));
+
+    let changed = false;
+    const nextNodes = currentNodes.map((node) => {
+      if (node.id === groupId) {
+        const currentWidth = Number((node.style as any)?.width ?? 0);
+        const currentHeight = Number((node.style as any)?.height ?? 0);
+        if (currentWidth === nextGroupWidth && currentHeight === nextGroupHeight) {
+          return node;
+        }
+        changed = true;
+        return {
+          ...node,
+          style: {
+            ...(node.style ?? {}),
+            width: nextGroupWidth,
+            height: nextGroupHeight,
+          } as any,
+        };
+      }
+
+      if (isOutlineGroup && node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) {
+        const targetWidth = Math.max(
+          nextGroupWidth - OUTLINE_GROUP_HORIZONTAL_PADDING * 2,
+          OUTLINE_GROUP_SETTINGS_CARD_WIDTH
+        );
+        const currentWidth = Number((node.style as any)?.width ?? 0);
+        if (currentWidth === targetWidth) {
+          return node;
+        }
+        changed = true;
+        return {
+          ...node,
+          style: {
+            ...(node.style ?? {}),
+            width: targetWidth,
+          } as any,
+        };
+      }
+
+      return node;
+    });
+
+    return changed ? nextNodes : currentNodes;
+  };
+
+  const fitAllGroupNodesToChildren = (currentNodes: CustomNode[]) => {
+    const groupIds = currentNodes
+      .filter((node) => node.type === "roleGroup")
+      .map((node) => node.id);
+
+    return groupIds.reduce((nodesAcc, groupId) => fitGroupNodeToChildren(nodesAcc, groupId), currentNodes);
+  };
+
+  const previewGroupedSiblingPositions = (currentNodes: CustomNode[], draggedNodeId: string) => {
+    if (!draggedNodeId) return currentNodes;
+
+    const draggedNode = currentNodes.find((node) => node.id === draggedNodeId);
+    const groupId = getCanvasNodeGroupId(draggedNode);
+    if (!draggedNode || !groupId) return currentNodes;
+
+    const groupNode = currentNodes.find((node) => node.id === groupId && node.type === "roleGroup");
+    if (!groupNode) return currentNodes;
+
+    const groupLabel = getTextValue(groupNode.data?.label);
+    const isRoleGroup = groupLabel === "角色";
+    const isOutlineGroup = groupLabel === "大纲";
+    if (!isRoleGroup && !isOutlineGroup) return currentNodes;
+
+    const groupChildren = currentNodes
+      .filter((node) =>
+        isRoleGroup
+          ? node.parentId === groupId && node.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE
+          : node.parentId === groupId && node.type === "outlineCard"
+      )
+      .sort((a, b) => {
+        const ay = Number(a.position?.y ?? 0);
+        const by = Number(b.position?.y ?? 0);
+        if (ay !== by) return ay - by;
+        return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+      });
+
+    if (groupChildren.length <= 1) return currentNodes;
+
+    const siblingChildren = groupChildren.filter((node) => node.id !== draggedNodeId);
+    if (!siblingChildren.length) return currentNodes;
+
+    const buildPreviewPositions = (orderedNodes: CustomNode[]) => {
+      const nextPositionById = new Map<string, { x: number; y: number }>();
+      if (isRoleGroup) {
+        let rowStartY = ROLE_GROUP_PADDING_TOP;
+        for (let start = 0; start < orderedNodes.length; start += ROLE_GROUP_MAX_COLS) {
+          const rowNodes = orderedNodes.slice(start, start + ROLE_GROUP_MAX_COLS);
+          const rowHeight = rowNodes.reduce((max, node) => {
+            const { height } = getCanvasNodeLayoutSize(node);
+            return Math.max(max, height);
+          }, 0);
+
+          let nextRowX = ROLE_GROUP_PADDING;
+          rowNodes.forEach((node) => {
+            const { width } = getCanvasNodeLayoutSize(node);
+            nextPositionById.set(node.id, { x: nextRowX, y: rowStartY });
+            nextRowX += width + ROLE_GROUP_CARD_GAP_X;
+          });
+          rowStartY += rowHeight + ROLE_GROUP_CARD_GAP_Y;
+        }
+      } else {
+        const settingsHeight = getOutlineGroupSettingsHeight(currentNodes, groupId);
+        const groupPaddingTop = getOutlineGroupCardsTop(settingsHeight);
+        orderedNodes.forEach((node, index) => {
+          const col = index % OUTLINE_GROUP_MAX_COLS;
+          const row = Math.floor(index / OUTLINE_GROUP_MAX_COLS);
+          nextPositionById.set(node.id, {
+            x: OUTLINE_GROUP_HORIZONTAL_PADDING + col * (OUTLINE_GROUP_CARD_WIDTH + OUTLINE_GROUP_CARD_GAP_X),
+            y: groupPaddingTop + row * (OUTLINE_GROUP_CARD_HEIGHT + OUTLINE_GROUP_CARD_GAP_Y),
+          });
+        });
+      }
+      return nextPositionById;
+    };
+
+    const draggedSize = getCanvasNodeLayoutSize(draggedNode);
+    const draggedCenterX = Number(draggedNode.position?.x ?? 0) + draggedSize.width / 2;
+    const draggedCenterY = Number(draggedNode.position?.y ?? 0) + draggedSize.height / 2;
+
+    let orderedChildren = [...siblingChildren, draggedNode];
+    let nextPositionById = buildPreviewPositions(orderedChildren);
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (let insertionIndex = 0; insertionIndex <= siblingChildren.length; insertionIndex += 1) {
+      const candidateOrder = [
+        ...siblingChildren.slice(0, insertionIndex),
+        draggedNode,
+        ...siblingChildren.slice(insertionIndex),
+      ];
+      const candidatePositions = buildPreviewPositions(candidateOrder);
+      const draggedSlot = candidatePositions.get(draggedNodeId);
+      if (!draggedSlot) continue;
+
+      const draggedSlotCenterX = draggedSlot.x + draggedSize.width / 2;
+      const draggedSlotCenterY = draggedSlot.y + draggedSize.height / 2;
+      const distance = Math.hypot(draggedCenterX - draggedSlotCenterX, draggedCenterY - draggedSlotCenterY);
+      if (distance >= bestDistance) continue;
+
+      bestDistance = distance;
+      orderedChildren = candidateOrder;
+      nextPositionById = candidatePositions;
+    }
+
+    let changed = false;
+    const nextNodes = currentNodes.map((node) => {
+      if (node.id === draggedNodeId) return node;
+      const nextPosition = nextPositionById.get(node.id);
+      if (!nextPosition) return node;
+
+      const currentX = Number(node.position?.x ?? 0);
+      const currentY = Number(node.position?.y ?? 0);
+      if (currentX === nextPosition.x && currentY === nextPosition.y) {
+        return node;
+      }
+
+      changed = true;
+      return {
+        ...node,
+        position: nextPosition,
+      };
+    });
+
+    return changed ? nextNodes : currentNodes;
+  };
+
+  const compactRoleGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
+    if (!groupId) return currentNodes;
+
+    const groupNode = currentNodes.find(
+      (node) =>
+        node.id === groupId &&
+        node.type === "roleGroup" &&
+        getTextValue(node.data?.label) === "角色"
+    );
+    if (!groupNode) return currentNodes;
+
+    const roleChildren = currentNodes
+      .filter((node) => node.parentId === groupId && node.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE)
+      .sort((a, b) => {
+        const ay = Number(a.position?.y ?? 0);
+        const by = Number(b.position?.y ?? 0);
+        if (ay !== by) return ay - by;
+        return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+      });
+
+    if (!roleChildren.length) return currentNodes;
+
+    const nextPositionById = new Map<string, { x: number; y: number }>();
+    let rowStartY = ROLE_GROUP_PADDING_TOP;
+
+    for (let start = 0; start < roleChildren.length; start += ROLE_GROUP_MAX_COLS) {
+      const rowNodes = roleChildren.slice(start, start + ROLE_GROUP_MAX_COLS);
+      const rowHeight = rowNodes.reduce((max, node) => {
+        const { height } = getCanvasNodeLayoutSize(node);
+        return Math.max(max, height);
+      }, 0);
+
+      let nextRowX = ROLE_GROUP_PADDING;
+      rowNodes.forEach((node) => {
+        const { width } = getCanvasNodeLayoutSize(node);
+        nextPositionById.set(node.id, {
+          x: nextRowX,
+          y: rowStartY,
+        });
+        nextRowX += width + ROLE_GROUP_CARD_GAP_X;
+      });
+
+      rowStartY += rowHeight + ROLE_GROUP_CARD_GAP_Y;
+    }
+
+    let changed = false;
+    const nextNodes = currentNodes.map((node) => {
+      const nextPosition = nextPositionById.get(node.id);
+      if (!nextPosition) return node;
+
+      const currentX = Number(node.position?.x ?? 0);
+      const currentY = Number(node.position?.y ?? 0);
+      if (currentX === nextPosition.x && currentY === nextPosition.y) {
+        return node;
+      }
+
+      changed = true;
+      return {
+        ...node,
+        position: nextPosition,
+      };
+    });
+
+    return changed ? nextNodes : currentNodes;
+  };
+
+  const compactGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
+    if (!groupId) return currentNodes;
+
+    const groupNode = currentNodes.find((node) => node.id === groupId && node.type === "roleGroup");
+    if (!groupNode) return currentNodes;
+
+    const groupLabel = getTextValue(groupNode.data?.label);
+    const compactedNodes =
+      groupLabel === "角色"
+        ? compactRoleGroupNodes(currentNodes, groupId)
+        : groupLabel === "大纲"
+          ? compactOutlineGroupNodes(currentNodes, groupId)
+          : currentNodes;
+
+    return fitGroupNodeToChildren(compactedNodes, groupId);
+  };
 
   const compactOutlineGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
     if (!groupId) return currentNodes;
@@ -1225,9 +1684,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const groupNode = currentNodes.find((node) => node.id === groupId);
     if (!groupNode) return currentNodes;
 
-    const hasSettingsNode = currentNodes.some(
-      (node) => node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
-    );
+    const settingsHeight = getOutlineGroupSettingsHeight(currentNodes, groupId);
+    const hasSettingsNode = settingsHeight > 0;
     const outlineChildren = currentNodes
       .filter((node) => node.parentId === groupId && node.type === "outlineCard")
       .sort((a, b) => {
@@ -1239,11 +1697,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const cardWidth = 300;
     const cardHeight = 260;
-    const gapX = 20;
-    const gapY = 24;
+    const gapX = OUTLINE_GROUP_CARD_GAP_X;
+    const gapY = OUTLINE_GROUP_CARD_GAP_Y;
     const cols = 3;
     const groupPadding = OUTLINE_GROUP_HORIZONTAL_PADDING;
-    const groupPaddingTop = getOutlineGroupCardsTop(hasSettingsNode);
+    const groupPaddingTop = getOutlineGroupCardsTop(settingsHeight);
     const minGroupWidth = hasSettingsNode
       ? OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2
       : 340;
@@ -1267,10 +1725,10 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     );
     const nextGroupHeight = hasSettingsNode
       ? Math.max(
-          OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding,
+          OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + groupPadding,
           totalCount > 0
             ? groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
-            : OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding
+            : OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + groupPadding
         )
       : totalCount > 0
         ? groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
@@ -1389,15 +1847,111 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     };
   };
 
-  const createDirectedCanvasEdge = (source: string, target: string): CustomEdge => ({
+  const shiftDownstreamTopLevelNodes = (
+    currentNodes: CustomNode[],
+    currentEdges: CustomEdge[],
+    sourceNodeId: string,
+    deltaY: number
+  ) => {
+    if (!sourceNodeId || deltaY <= 0) return currentNodes;
+
+    const sourceNode = currentNodes.find((node) => node.id === sourceNodeId);
+    if (!sourceNode) return currentNodes;
+
+    const topLevelOwnerIdByNodeId = new Map<string, string>();
+    currentNodes.forEach((node) => {
+      const ownerId =
+        getTextValue(node.parentId) ||
+        getTextValue((node.data as any)?.roleGroupId) ||
+        getTextValue((node.data as any)?.outlineGroupId) ||
+        node.id;
+      topLevelOwnerIdByNodeId.set(node.id, ownerId);
+    });
+
+    const topLevelNodeById = new Map(
+      currentNodes.filter((node) => !node.parentId).map((node) => [node.id, node] as const)
+    );
+    const downstreamByTopLevelId = new Map<string, Set<string>>();
+    const connectTopLevel = (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) return;
+      if (!downstreamByTopLevelId.has(fromId)) {
+        downstreamByTopLevelId.set(fromId, new Set());
+      }
+      downstreamByTopLevelId.get(fromId)?.add(toId);
+    };
+
+    currentEdges.forEach((edge) => {
+      const sourceOwnerId = topLevelOwnerIdByNodeId.get(String(edge.source ?? "")) ?? "";
+      const targetOwnerId = topLevelOwnerIdByNodeId.get(String(edge.target ?? "")) ?? "";
+      connectTopLevel(sourceOwnerId, targetOwnerId);
+    });
+
+    const sourceBottom = getCanvasNodeBottom(sourceNode);
+    const queue: string[] = [];
+    const idsToShift = new Set<string>();
+
+    downstreamByTopLevelId.get(sourceNodeId)?.forEach((targetId) => {
+      const targetNode = topLevelNodeById.get(targetId);
+      if (!targetNode) return;
+      if (Number(targetNode.position?.y ?? 0) < sourceBottom) return;
+      queue.push(targetId);
+    });
+
+    while (queue.length > 0) {
+      const currentId = queue.shift() as string;
+      if (!currentId || idsToShift.has(currentId) || currentId === sourceNodeId) continue;
+      idsToShift.add(currentId);
+      downstreamByTopLevelId.get(currentId)?.forEach((nextId) => {
+        if (!idsToShift.has(nextId)) {
+          queue.push(nextId);
+        }
+      });
+    }
+
+    if (!idsToShift.size) return currentNodes;
+
+    return currentNodes.map((node) =>
+      !node.parentId && idsToShift.has(node.id)
+        ? {
+            ...node,
+            position: {
+              ...node.position,
+              y: Number(node.position?.y ?? 0) + deltaY,
+            },
+          }
+        : node
+    );
+  };
+
+  const createDirectedCanvasEdge = (
+    source: string,
+    target: string,
+    options?: {
+      sourceHandle?: string;
+      targetHandle?: string;
+    }
+  ): CustomEdge => ({
     id: `e${source}-${target}-${Date.now()}`,
     source,
     target,
+    sourceHandle: options?.sourceHandle,
+    targetHandle: options?.targetHandle,
     type: "bezier",
     animated: false,
   });
 
   const withVerticalPorts = (node: CustomNode): CustomNode => {
+    if (isInfoCanvasNode(node)) {
+      if (node.sourcePosition === Position.Right && node.targetPosition === Position.Left) {
+        return node;
+      }
+      return {
+        ...node,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      };
+    }
+
     if (node.sourcePosition === Position.Bottom && node.targetPosition === Position.Top) {
       return node;
     }
@@ -1423,11 +1977,15 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
   }: InsCanvasInnerProps) {
     const navigate = useNavigate();
     const containerRef = useRef<HTMLDivElement>(null);
-    const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>(initialNodes);
+    const [nodes, setNodes] = useNodesState<CustomNode>(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
     // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
     const nodesRef = useRef<CustomNode[]>(initialNodes);
     const edgesRef = useRef<CustomEdge[]>(initialEdges);
+    const canvasAutoSaveTimerRef = useRef<number | null>(null);
+    const hasCanvasAutoSaveInitializedRef = useRef(false);
+    const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
+    const hasInitialSnapshotFittedRef = useRef(false);
     const hasIdeaRef = useRef(false);
     const layoutRequestIdRef = useRef(0);
     const canvasNodeIdSeqRef = useRef(0);
@@ -1449,7 +2007,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const [reqPanelDetail, setReqPanelDetail] = useState<string>("");
     const [reqPanelBodyDetail, setReqPanelBodyDetail] = useState<string>("");
     const [reqPanelFooterDetail, setReqPanelFooterDetail] = useState<string>("");
+    const [reqPanelUseSmartTheme, setReqPanelUseSmartTheme] = useState(false);
     const [creationIdeaContent, setCreationIdeaContent] = useState<string>("");
+    const [ideaInputSource, setIdeaInputSource] = useState<"default" | "carousel">("default");
     const reqPanelDetailRef = useRef("");
     const reqPanelBodyDetailRef = useRef("");
     const reqPanelFooterDetailRef = useRef("");
@@ -1457,12 +2017,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const [reqPanelAction, setReqPanelAction] = useState<ReqPanelAction | null>(null);
     const [latestGeneratedNodeId, setLatestGeneratedNodeId] = useState("");
     const latestGeneratedNodeIdRef = useRef("");
-    const locateHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const locateHighlightTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const generatedWriteFilesRef = useRef<Record<string, string>>({});
     const preparedContextFilesRef = useRef<Record<string, string> | undefined>(undefined);
+    const preparedGenerateSourceNodeIdRef = useRef<string | undefined>(undefined);
     const [smartSuggestionsActive, setSmartSuggestionsActive] = useState(false);
     const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestionItem[]>([]);
     const [pendingSuggestionIdea, setPendingSuggestionIdea] = useState("");
+    const [pendingContextActionLabel, setPendingContextActionLabel] = useState("");
     const [dialogCardPreviews, setDialogCardPreviews] = useState<DialogReferenceCard[]>([]);
     const [inputDockResetKey, setInputDockResetKey] = useState(0);
     const [outlineCompletionCelebrationVisible, setOutlineCompletionCelebrationVisible] = useState(false);
@@ -1472,6 +2034,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     const [historyDialogShow, setHistoryDialogShow] = useState(false);
     const [moreActionsOpen, setMoreActionsOpen] = useState(false);
     const [currentChain, setCurrentChain] = useState<ParentNode | null>(null);
+    const [canvasViewportWidth, setCanvasViewportWidth] = useState(0);
     // 是否在画布中
     const [canvasReady, setCanvasReady] = useState(false);
     // “随机选题创建”的 3 张脑洞卡占位（用于接口返回后回填）
@@ -1491,7 +2054,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           ideaOverride?: string,
           outputTypeOverride?: CanvasOutputType,
           sourceNodeId?: string,
-          filesOverride?: Record<string, string>
+          filesOverride?: Record<string, string>,
+          contextActionLabelOverride?: string,
+          requestSourceOverride?: "default" | "carousel"
         ) => void | Promise<void>)
       | null
     >(null);
@@ -1500,6 +2065,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       canvasNodeIdSeqRef.current += 1;
       return `${prefix}-${Date.now()}-${canvasNodeIdSeqRef.current}`;
     }, []);
+    const updateCanvasViewportWidth = useCallback(() => {
+      const nextWidth = containerRef.current?.clientWidth ?? 0;
+      setCanvasViewportWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+    }, []);
+    const shouldHideCanvasAuxControls =
+      canvasViewportWidth > 0 && canvasViewportWidth < 960;
 
     const launchOutlineCompletionConfetti = useCallback(() => {
       const messageRect = outlineCompletionMessageRef.current?.getBoundingClientRect();
@@ -1542,9 +2113,187 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     }, [launchOutlineCompletionConfetti]);
 
     useEffect(() => {
+      console.log({nodes, edges}, 'nodes & edges')
       nodesRef.current = nodes;
       edgesRef.current = edges;
     }, [nodes, edges]);
+    const ensureInspirationDrawId = useCallback(async (): Promise<string> => {
+      const existingId = String(inspirationDrawId || "").trim();
+      if (existingId) return existingId;
+      if (!workId) return "";
+
+      if (!ensureDrawIdPromiseRef.current) {
+        ensureDrawIdPromiseRef.current = (async () => {
+          const res: any = await generateInspirationDrawIdReq(workId, {
+            nodes: nodesRef.current as unknown[],
+            edges: edgesRef.current as unknown[],
+          });
+          const nextId = String(res?.id || "").trim();
+          if (!nextId) return "";
+          setInspirationDrawId(nextId);
+          return nextId;
+        })().finally(() => {
+          ensureDrawIdPromiseRef.current = null;
+        });
+      }
+
+      return ensureDrawIdPromiseRef.current;
+    }, [inspirationDrawId, workId]);
+
+    // 画布节点/连线变化后自动保存灵感画布（含布局信息）。
+    useEffect(() => {
+      if (!workId) return;
+      if (!hasCanvasAutoSaveInitializedRef.current) {
+        hasCanvasAutoSaveInitializedRef.current = true;
+        return;
+      }
+      if (canvasAutoSaveTimerRef.current) {
+        window.clearTimeout(canvasAutoSaveTimerRef.current);
+      }
+      canvasAutoSaveTimerRef.current = window.setTimeout(() => {
+        void (async () => {
+          const drawId = await ensureInspirationDrawId();
+          if (!drawId) return;
+          await saveInspirationCanvasReq(drawId, {
+            nodes: nodesRef.current as unknown[],
+            edges: edgesRef.current as unknown[],
+          });
+        })().catch(() => {});
+      }, 1000);
+    }, [ensureInspirationDrawId, nodes, edges, workId]);
+
+    useEffect(() => {
+      return () => {
+        if (canvasAutoSaveTimerRef.current) {
+          window.clearTimeout(canvasAutoSaveTimerRef.current);
+          canvasAutoSaveTimerRef.current = null;
+        }
+      };
+    }, []);
+
+    const relayoutGroupsForNodeIds = useCallback((currentNodes: CustomNode[], nodeIds: string[]) => {
+      if (!nodeIds.length) return currentNodes;
+
+      const groupIds = Array.from(
+        new Set(
+          nodeIds
+            .map((nodeId) => currentNodes.find((node) => node.id === nodeId))
+            .map((node) => getCanvasNodeGroupId(node))
+            .filter(Boolean)
+        )
+      );
+
+      if (!groupIds.length) return currentNodes;
+
+      let nextNodes = currentNodes;
+      groupIds.forEach((groupId) => {
+        const beforeGroupNode = nextNodes.find((node) => node.id === groupId);
+        const beforeHeight = beforeGroupNode
+          ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
+          : 0;
+
+        nextNodes = compactGroupNodes(nextNodes, groupId);
+
+        const afterGroupNode = nextNodes.find((node) => node.id === groupId);
+        const afterHeight = afterGroupNode
+          ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
+          : beforeHeight;
+        const heightDelta = Math.max(0, afterHeight - beforeHeight);
+        if (heightDelta > 0) {
+          nextNodes = shiftDownstreamTopLevelNodes(
+            nextNodes,
+            edgesRef.current as CustomEdge[],
+            groupId,
+            heightDelta
+          );
+        }
+      });
+
+      return nextNodes;
+    }, []);
+
+    const scheduleGroupMeasureRelayout = useCallback((groupId: string) => {
+      if (!groupId) return;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setNodes((prev) => {
+            const beforeGroupNode = prev.find((node) => node.id === groupId);
+            const beforeHeight = beforeGroupNode
+              ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
+              : 0;
+            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId);
+            const afterGroupNode = nextNodes.find((node) => node.id === groupId);
+            const afterHeight = afterGroupNode
+              ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
+              : beforeHeight;
+            const heightDelta = Math.max(0, afterHeight - beforeHeight);
+            if (heightDelta > 0) {
+              nextNodes = shiftDownstreamTopLevelNodes(
+                nextNodes,
+                edgesRef.current as CustomEdge[],
+                groupId,
+                heightDelta
+              );
+            }
+            nodesRef.current = nextNodes;
+            return nextNodes;
+          });
+        });
+      });
+    }, [setNodes]);
+
+    const onNodesChange = useCallback((changes: any[]) => {
+      setNodes((prev) => {
+        const appliedNodes = applyNodeChanges(changes, prev) as CustomNode[];
+        const positionChanges = changes.filter((change) => change?.type === "position");
+        const movedNodeIds = positionChanges
+          .map((change) => String(change.id ?? ""))
+          .filter(Boolean);
+
+        if (!movedNodeIds.length) {
+          nodesRef.current = appliedNodes;
+          return appliedNodes;
+        }
+
+        const hasGroupedChildMove = movedNodeIds.some((nodeId) => {
+          const node = appliedNodes.find((candidate) => candidate.id === nodeId);
+          return Boolean(getCanvasNodeGroupId(node));
+        });
+
+        if (!hasGroupedChildMove) {
+          nodesRef.current = appliedNodes;
+          return appliedNodes;
+        }
+
+        const clampedNodes = clampGroupedChildNodePositions(appliedNodes, movedNodeIds);
+        const isDraggingGroupedChild = positionChanges.some((change) => {
+          if (change?.dragging !== true) return false;
+          const nodeId = String(change.id ?? "");
+          const node = clampedNodes.find((candidate) => candidate.id === nodeId);
+          return Boolean(getCanvasNodeGroupId(node));
+        });
+
+        if (isDraggingGroupedChild) {
+          const draggingGroupedNodeId =
+            positionChanges.find((change) => {
+              if (change?.dragging !== true) return false;
+              const nodeId = String(change.id ?? "");
+              const node = clampedNodes.find((candidate) => candidate.id === nodeId);
+              return Boolean(getCanvasNodeGroupId(node));
+            })?.id ?? "";
+          const previewNodes = previewGroupedSiblingPositions(
+            clampedNodes,
+            String(draggingGroupedNodeId)
+          );
+          nodesRef.current = previewNodes;
+          return previewNodes;
+        }
+
+        const relayoutNodes = relayoutGroupsForNodeIds(clampedNodes, movedNodeIds);
+        nodesRef.current = relayoutNodes;
+        return relayoutNodes;
+      });
+    }, [relayoutGroupsForNodeIds, setNodes]);
 
     useEffect(() => {
       return () => {
@@ -1614,6 +2363,21 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         }
       }
     }, [setNodes]);
+
+    const clearBrainstormPlaceholderBatch = useCallback(() => {
+      const ids = [...brainstormBatchIdsRef.current];
+      stopBrainstormProgress();
+      brainstormProgressValueRef.current = 0;
+      brainstormBatchIdsRef.current = [];
+      if (!ids.length) return;
+
+      setNodes((prev) => prev.filter((node) => !ids.includes(node.id)));
+      setEdges((prev) =>
+        (prev as CustomEdge[]).filter(
+          (edge) => !ids.includes(edge.source) && !ids.includes(edge.target)
+        )
+      );
+    }, [setEdges, setNodes, stopBrainstormProgress]);
 
     const stopLoadingProgress = useCallback((finalValue?: number) => {
       if (loadingProgressTimerRef.current) {
@@ -1827,6 +2591,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const resetGenerationSettings = useCallback(() => {
       setIdeaContent("");
+      setIdeaInputSource("default");
       setGenerateMode("smart");
       setCanvasModeCategory("smart");
       setSettingsPopoverOpen(false);
@@ -1835,7 +2600,18 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       setCanvasModelType("max");
     }, []);
 
-    const { zoomIn, zoomOut, setCenter, getViewport, getNode } = useReactFlow();
+    const { zoomIn, zoomOut, setCenter, getViewport, getNode, screenToFlowPosition, fitView } = useReactFlow();
+
+    useEffect(() => {
+      if (hasInitialSnapshotFittedRef.current) return;
+      if (nodes.length === 0) return;
+      hasInitialSnapshotFittedRef.current = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          void fitView({ duration: 500, padding: 0.2 });
+        });
+      });
+    }, [fitView, nodes.length]);
 
     const rememberLatestGeneratedNode = useCallback((nodeId?: string) => {
       const normalizedNodeId = getTextValue(nodeId);
@@ -1922,6 +2698,70 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       return Object.keys(files).length > 0 ? files : undefined;
     }, [getDialogReferenceSnapshot]);
 
+    const getConnectedContextFiles = useCallback((targetId: string) => {
+      const normalizedTargetId = getTextValue(targetId);
+      if (!normalizedTargetId) return undefined;
+
+      const latestNodes = nodesRef.current;
+      const latestEdges = edgesRef.current as CustomEdge[];
+      const nodeMap = new Map(latestNodes.map((node) => [node.id, node]));
+      const adjacency = new Map<string, Set<string>>();
+      const files: Record<string, string> = {};
+
+      const connect = (from: string, to: string) => {
+        const normalizedFrom = getTextValue(from);
+        const normalizedTo = getTextValue(to);
+        if (!normalizedFrom || !normalizedTo || normalizedFrom === normalizedTo) return;
+        if (!adjacency.has(normalizedFrom)) adjacency.set(normalizedFrom, new Set());
+        if (!adjacency.has(normalizedTo)) adjacency.set(normalizedTo, new Set());
+        adjacency.get(normalizedFrom)?.add(normalizedTo);
+        adjacency.get(normalizedTo)?.add(normalizedFrom);
+      };
+
+      latestEdges.forEach((edge) => {
+        connect(String(edge.source ?? ""), String(edge.target ?? ""));
+      });
+
+      latestNodes.forEach((node) => {
+        const parentGroupId =
+          getTextValue(node.parentId) ||
+          getTextValue((node.data as any)?.roleGroupId) ||
+          getTextValue((node.data as any)?.outlineGroupId);
+        if (parentGroupId) {
+          connect(node.id, parentGroupId);
+        }
+      });
+
+      const visited = new Set<string>();
+      const queue: string[] = [normalizedTargetId];
+
+      while (queue.length > 0) {
+        const currentId = queue.shift() as string;
+        if (!currentId || visited.has(currentId)) continue;
+        visited.add(currentId);
+
+        const currentNode = nodeMap.get(currentId);
+        if (
+          currentNode &&
+          currentNode.type !== "roleGroup" &&
+          currentNode.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE
+        ) {
+          const snapshot = getDialogReferenceSnapshot(currentId);
+          if (snapshot?.filePath && snapshot.content.trim()) {
+            files[snapshot.filePath] = snapshot.content;
+          }
+        }
+
+        adjacency.get(currentId)?.forEach((relatedId) => {
+          if (!visited.has(relatedId)) {
+            queue.push(relatedId);
+          }
+        });
+      }
+
+      return Object.keys(files).length > 0 ? files : undefined;
+    }, [getDialogReferenceSnapshot]);
+
     const getAbsoluteNodePosition = useCallback((nodeId: string) => {
       const latestNodes = nodesRef.current;
       const nodeMap = new Map(latestNodes.map((node) => [node.id, node]));
@@ -1939,9 +2779,10 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       return visit(nodeId);
     }, []);
 
-    const resolveLocateTargetNodeId = useCallback((nodeId: string) => {
+    const resolveLocateTargetNodeId = useCallback((nodeId: string, preferGroup = true) => {
       const normalizedNodeId = getTextValue(nodeId);
       if (!normalizedNodeId) return "";
+      if (!preferGroup) return normalizedNodeId;
 
       const latestNodes = nodesRef.current;
       const targetNode = latestNodes.find((node) => node.id === normalizedNodeId);
@@ -1961,9 +2802,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
     const focusCanvasNode = useCallback((
       nodeId: string,
-      options?: { zoom?: number; duration?: number }
+      options?: { zoom?: number; duration?: number; preferGroup?: boolean }
     ) => {
-      const normalizedNodeId = resolveLocateTargetNodeId(nodeId);
+      const normalizedNodeId = resolveLocateTargetNodeId(nodeId, options?.preferGroup ?? true);
       if (!normalizedNodeId) return;
 
       const latestNodes = nodesRef.current;
@@ -1998,11 +2839,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         )
       );
 
-      if (locateHighlightTimerRef.current) {
-        clearTimeout(locateHighlightTimerRef.current);
+      const existingHighlightTimer = locateHighlightTimersRef.current.get(normalizedNodeId);
+      if (existingHighlightTimer) {
+        clearTimeout(existingHighlightTimer);
       }
-      locateHighlightTimerRef.current = setTimeout(() => {
-        locateHighlightTimerRef.current = null;
+      const nextHighlightTimer = setTimeout(() => {
+        locateHighlightTimersRef.current.delete(normalizedNodeId);
         setNodes((prev) =>
           prev.map((node) =>
             node.id === normalizedNodeId
@@ -2011,6 +2853,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           )
         );
       }, 1800);
+      locateHighlightTimersRef.current.set(normalizedNodeId, nextHighlightTimer);
 
       void setCenter(
         (absolutePosition?.x ?? 0) + width / 2,
@@ -2019,15 +2862,90 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       );
     }, [getAbsoluteNodePosition, getNode, resolveLocateTargetNodeId, setCenter, setNodes]);
 
+    const focusCanvasNodeWhenReady = useCallback((
+      nodeId?: string,
+      options?: { zoom?: number; duration?: number; maxAttempts?: number; preferGroup?: boolean }
+    ) => {
+      const normalizedNodeId = getTextValue(nodeId);
+      if (!normalizedNodeId) return;
+
+      const maxAttempts = Math.max(1, options?.maxAttempts ?? 12);
+      const attemptFocus = (attempt: number) => {
+        const latestNodes = nodesRef.current;
+        const hasTargetNode = latestNodes.some((node) => node.id === normalizedNodeId);
+
+        if (hasTargetNode || attempt >= maxAttempts) {
+          focusCanvasNode(normalizedNodeId, options);
+          return;
+        }
+
+        requestAnimationFrame(() => {
+          attemptFocus(attempt + 1);
+        });
+      };
+
+      requestAnimationFrame(() => {
+        attemptFocus(0);
+      });
+    }, [focusCanvasNode]);
+
+    const normalizeCanvasFilePath = useCallback((value: unknown) => {
+      const normalized = getTextValue(value).trim().replace(/\\/g, "/").replace(/^\/+/, "");
+      return normalized;
+    }, []);
+
+    const focusFileByPath = useCallback((
+      filePath: string,
+      options?: { zoom?: number; duration?: number; maxAttempts?: number }
+    ) => {
+      const normalizedPath = normalizeCanvasFilePath(filePath);
+      if (!normalizedPath) return false;
+      const suffixPath = `/${normalizedPath}`;
+      const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nodesRef.current);
+      const syncPathMatchedNodeId =
+        syncPathNodeIdMap[normalizedPath] ||
+        Object.entries(syncPathNodeIdMap).find(([syncPath]) => syncPath.endsWith(suffixPath))?.[1] ||
+        "";
+      if (syncPathMatchedNodeId) {
+        focusCanvasNodeWhenReady(syncPathMatchedNodeId, {
+          ...options,
+          preferGroup: false,
+        });
+        return true;
+      }
+
+      const reversedNodes = [...nodesRef.current].reverse();
+      const matchesPath = (candidate: string) =>
+        !!candidate && (candidate === normalizedPath || candidate.endsWith(suffixPath));
+      const targetNode =
+        reversedNodes.find((node) => {
+          const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+          return nodeFilePath === normalizedPath;
+        }) ||
+        reversedNodes.find((node) => {
+          const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+          return matchesPath(nodeFilePath);
+        }) ||
+        reversedNodes.find((node) => {
+          const nodeIdPath = normalizeCanvasFilePath(node.id);
+          return matchesPath(nodeIdPath);
+        });
+
+      if (!targetNode) return false;
+      focusCanvasNodeWhenReady(targetNode.id, {
+        ...options,
+        preferGroup: false,
+      });
+      return true;
+    }, [focusCanvasNodeWhenReady, normalizeCanvasFilePath]);
+
     const focusNewlyCreatedBlankNode = useCallback((nodeId?: string) => {
       const normalizedNodeId = getTextValue(nodeId);
       if (!normalizedNodeId) return;
 
       rememberLatestGeneratedNode(normalizedNodeId);
-      window.setTimeout(() => {
-        focusCanvasNode(normalizedNodeId, { zoom: 0.95, duration: 500 });
-      }, 0);
-    }, [focusCanvasNode, rememberLatestGeneratedNode]);
+      focusCanvasNodeWhenReady(normalizedNodeId, { zoom: 0.95, duration: 500 });
+    }, [focusCanvasNodeWhenReady, rememberLatestGeneratedNode]);
 
     const connectReferenceNodesToTargets = useCallback((
       sourceNodeIds: string[],
@@ -2129,13 +3047,38 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       return { addedCount, duplicateCount, firstSnapshot };
     }, [appendDialogReferenceByNodeId, getDialogReferenceSnapshot]);
 
+    const getGroupChildReferenceNodeIds = useCallback((groupNodeId: string) => {
+      const normalizedGroupNodeId = getTextValue(groupNodeId);
+      if (!normalizedGroupNodeId) return [] as string[];
+
+      return nodesRef.current
+        .filter((node) => {
+          if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
+          const roleGroupId = getTextValue((node.data as any)?.roleGroupId);
+          const outlineGroupId = getTextValue((node.data as any)?.outlineGroupId);
+          const parentId = getTextValue(node.parentId);
+          return (
+            roleGroupId === normalizedGroupNodeId ||
+            outlineGroupId === normalizedGroupNodeId ||
+            parentId === normalizedGroupNodeId
+          );
+        })
+        .sort((a, b) => {
+          const ay = Number(a.position?.y ?? 0);
+          const by = Number(b.position?.y ?? 0);
+          if (ay !== by) return ay - by;
+          return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+        })
+        .map((node) => node.id);
+    }, []);
+
     useEffect(() => {
       return () => {
         stopBrainstormProgress();
-        if (locateHighlightTimerRef.current) {
-          clearTimeout(locateHighlightTimerRef.current);
-          locateHighlightTimerRef.current = null;
-        }
+        locateHighlightTimersRef.current.forEach((timerId) => {
+          clearTimeout(timerId);
+        });
+        locateHighlightTimersRef.current.clear();
       };
     }, [stopBrainstormProgress]);
 
@@ -2218,6 +3161,17 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         if (containerRef.current && ro) ro.unobserve(containerRef.current);
       };
     }, [updateMainCardsPosition]);
+  
+    useEffect(() => {
+      updateCanvasViewportWidth();
+      const ro = containerRef.current
+        ? new ResizeObserver(updateCanvasViewportWidth)
+        : null;
+      if (containerRef.current && ro) ro.observe(containerRef.current);
+      return () => {
+        if (containerRef.current && ro) ro.unobserve(containerRef.current);
+      };
+    }, [updateCanvasViewportWidth]);
   
     useEffect(() => {
       setNodes((nds) =>
@@ -2314,21 +3268,74 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     }, [autoLayout]);
 
     const updateNodeContent = useCallback(
-      (nodeId: string, content: string) => {
+      (
+        nodeId: string,
+        content: string,
+        options?: {
+          title?: string;
+          filePath?: string;
+          image?: string;
+          images?: string[];
+        }
+      ) => {
         setNodes((nds) =>
-          nds.map((n) =>
-            n.id === nodeId
-              ? {
-                  ...n,
-                  // 受控 nodes 模式下，必须在父层把 isStreaming 写回 false，
-                  // 否则子组件里 updateNodeData 的变更会被下一次 render 覆盖，导致 props.data.isStreaming 仍为 true
-                  data: { ...n.data, content, isStreaming: false },
-                }
-              : n
-          )
+          nds.map((n) => {
+            if (n.id !== nodeId) return n;
+
+            const hasTitleUpdate = Object.prototype.hasOwnProperty.call(options ?? {}, "title");
+            const hasFilePathUpdate = Object.prototype.hasOwnProperty.call(options ?? {}, "filePath");
+            const nextTitle = hasTitleUpdate ? String(options?.title ?? "") : String(n.data?.title ?? "");
+            const nextLabel = String(n.data?.label ?? "");
+            const nextFilePath = hasFilePathUpdate
+              ? String(options?.filePath ?? "")
+              : hasTitleUpdate
+                ? buildCanvasNodeFilePath({ label: nextLabel, title: nextTitle })
+                : String(n.data?.filePath ?? "");
+            const nextImage = Object.prototype.hasOwnProperty.call(options ?? {}, "image")
+              ? options?.image
+              : n.data?.image;
+            const nextImages = Object.prototype.hasOwnProperty.call(options ?? {}, "images")
+              ? options?.images
+              : (n.data as { images?: string[] })?.images;
+
+            const nextNode: CustomNode = {
+              ...n,
+              // 受控 nodes 模式下，必须在父层把 isStreaming 写回 false，
+              // 否则子组件里 updateNodeData 的变更会被下一次 render 覆盖，导致 props.data.isStreaming 仍为 true
+              data: {
+                ...n.data,
+                content,
+                isStreaming: false,
+                ...(hasTitleUpdate ? { title: nextTitle } : {}),
+                ...(hasFilePathUpdate || hasTitleUpdate ? { filePath: nextFilePath } : {}),
+                ...(Object.prototype.hasOwnProperty.call(options ?? {}, "image") ? { image: nextImage } : {}),
+                ...(Object.prototype.hasOwnProperty.call(options ?? {}, "images") ? { images: nextImages } : {}),
+              },
+            };
+
+            const previousFilePath = getTextValue((n.data as any)?.filePath).trim();
+            const normalizedNextFilePath = getTextValue(nextFilePath).trim();
+            if (previousFilePath && previousFilePath !== normalizedNextFilePath) {
+              delete generatedWriteFilesRef.current[previousFilePath];
+            }
+
+            const nextHasContent = Boolean(String(content || "").trim());
+            const nextHasImages = Array.isArray(nextImages)
+              ? nextImages.filter(Boolean).length > 0
+              : Boolean(nextImage);
+            if (normalizedNextFilePath) {
+              if (nextHasContent || nextHasImages) {
+                generatedWriteFilesRef.current[normalizedNextFilePath] = buildCanvasNodeMarkdown(nextNode);
+              } else {
+                delete generatedWriteFilesRef.current[normalizedNextFilePath];
+              }
+            }
+
+            return nextNode;
+          })
         );
       },
-      [setNodes]
+      [buildCanvasNodeFilePath, buildCanvasNodeMarkdown, setNodes]
     );
   
     const collectChildren = useCallback( 
@@ -2592,6 +3599,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           id: nid,
           type: "settingCard",
           position,
+          sourcePosition: opts?.label === "信息" ? Position.Right : Position.Bottom,
+          targetPosition: opts?.label === "信息" ? Position.Left : Position.Top,
           draggable: hasIdea,
           data: {
             label: opts?.label ?? "故事设定",
@@ -2613,7 +3622,16 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             skipAutoStream: opts?.skipAutoStream ?? false,
           },
         };
-        const newEdge = createDirectedCanvasEdge(sourceNodeId, nid);
+        const newEdge = createDirectedCanvasEdge(
+          sourceNodeId,
+          nid,
+          opts?.label === "信息"
+            ? {
+                sourceHandle: "source-right",
+                targetHandle: "target-left",
+              }
+            : undefined
+        );
         setNodes((prev) => [...prev, newNode]);
         setEdges((prev) => [...prev, newEdge]);
         setCanvasReady(true);
@@ -2632,10 +3650,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         );
         const request = buildRoleRequestPayload(outlineSourceId);
         const summaryNode = getNearestSummaryNode(sourceNodeId);
-        if (!summaryNode) {
-          msg("warning", "请先生成故事梗概");
-          return;
-        }
+        const summaryTitle =
+          getTextValue((summaryNode?.data as any)?.title) ||
+          getTextValue((source.data as any)?.title) ||
+          "当前链路内容";
+        const summaryIntro =
+          getTextValue(summaryNode?.data?.content) ||
+          request.description ||
+          getTextValue(source.data?.content);
 
         const settingsContent = getTextValue(source.data?.content);
         const chapterNumMatch =
@@ -2647,7 +3669,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           : 10;
 
         setReqPanelVisible(true);
+        setReqPanelUseSmartTheme(false);
         setCardKeyLabel("大纲");
+        setPendingContextActionLabel("");
         setReqPanelStatus("loading");
         setReqPanelDetail("正在根据当前梗概与设置生成故事大纲，请稍等...");
         setReqPanelAction(null);
@@ -2659,8 +3683,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             {
               description: [request.description, settingsContent].filter(Boolean).join("\n"),
               brainStorm: {
-                title: getTextValue((summaryNode.data as any)?.title) || "故事梗概",
-                intro: getTextValue(summaryNode.data?.content),
+                title: summaryTitle,
+                intro: summaryIntro,
               },
               roleCard: request.roleCard,
               chapterNum,
@@ -2765,6 +3789,66 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       [nodes, edges]
     );
 
+    const getNearestConnectedSummaryNode = useCallback(
+      (targetId: string) => {
+        const normalizedTargetId = getTextValue(targetId);
+        if (!normalizedTargetId) return undefined;
+
+        const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+        const adjacency = new Map<string, Set<string>>();
+        const connect = (from: string, to: string) => {
+          const normalizedFrom = getTextValue(from);
+          const normalizedTo = getTextValue(to);
+          if (!normalizedFrom || !normalizedTo || normalizedFrom === normalizedTo) return;
+          if (!adjacency.has(normalizedFrom)) adjacency.set(normalizedFrom, new Set());
+          if (!adjacency.has(normalizedTo)) adjacency.set(normalizedTo, new Set());
+          adjacency.get(normalizedFrom)?.add(normalizedTo);
+          adjacency.get(normalizedTo)?.add(normalizedFrom);
+        };
+
+        (edges as CustomEdge[]).forEach((edge) => {
+          connect(String(edge.source ?? ""), String(edge.target ?? ""));
+        });
+
+        nodes.forEach((node) => {
+          const parentGroupId =
+            getTextValue(node.parentId) ||
+            getTextValue((node.data as any)?.roleGroupId) ||
+            getTextValue((node.data as any)?.outlineGroupId);
+          if (parentGroupId) {
+            connect(node.id, parentGroupId);
+          }
+        });
+
+        const visited = new Set<string>();
+        const queue: string[] = [normalizedTargetId];
+
+        while (queue.length > 0) {
+          const currentId = queue.shift() as string;
+          if (!currentId || visited.has(currentId)) continue;
+          visited.add(currentId);
+
+          const currentNode = nodeMap.get(currentId);
+          if (
+            currentNode &&
+            currentId !== normalizedTargetId &&
+            String(currentNode.data?.label ?? "").includes("梗概")
+          ) {
+            return currentNode;
+          }
+
+          adjacency.get(currentId)?.forEach((relatedId) => {
+            if (!visited.has(relatedId)) {
+              queue.push(relatedId);
+            }
+          });
+        }
+
+        return undefined;
+      },
+      [edges, nodes]
+    );
+
     const getNearestSummaryNode = useCallback(
       (targetId: string) => {
         const contextNodes = getIncomingContextNodes(targetId);
@@ -2772,11 +3856,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         if (currentNode && String(currentNode.data?.label ?? "").includes("梗概")) {
           return currentNode;
         }
-        return contextNodes
+        const incomingSummaryNode = contextNodes
           .reverse()
           .find((node) => node.id !== targetId && String(node.data?.label ?? "").includes("梗概"));
+        return incomingSummaryNode || getNearestConnectedSummaryNode(targetId);
       },
-      [getIncomingContextNodes]
+      [getIncomingContextNodes, getNearestConnectedSummaryNode]
     );
 
     const buildContextDescription = useCallback(
@@ -2830,6 +3915,22 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       [focusCanvasNode]
     );
 
+    const getLatestRoleGroupId = useCallback(() => {
+      const roleGroups = nodesRef.current.filter(
+        (node) => node.type === "roleGroup" && getTextValue(node.data?.label) === "角色"
+      );
+      if (!roleGroups.length) return "";
+      return roleGroups[roleGroups.length - 1]?.id ?? "";
+    }, []);
+
+    const getLatestOutlineGroupId = useCallback(() => {
+      const outlineGroups = nodesRef.current.filter(
+        (node) => node.type === "roleGroup" && getTextValue(node.data?.label) === "大纲"
+      );
+      if (!outlineGroups.length) return "";
+      return outlineGroups[outlineGroups.length - 1]?.id ?? "";
+    }, []);
+
     const appendRoleCardsToGroup = useCallback(
       (
         sourceNodeId: string,
@@ -2840,6 +3941,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           image?: string;
           isStreaming?: boolean;
           fromApi?: boolean;
+          isBlankDraft?: boolean;
           skipAutoStream?: boolean;
         }>
       ) => {
@@ -2852,11 +3954,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const groupId = isSourceRoleGroup ? source.id : source.parentId || `role-group-${sourceNodeId}`;
         const roleCardWidth = 300;
         const roleCardHeight = 450;
-        const gapX = 20;
-        const gapY = 24;
+        const gapX = ROLE_GROUP_CARD_GAP_X;
+        const gapY = ROLE_GROUP_CARD_GAP_Y;
         const cols = 3;
-        const groupPaddingTop = 56;
-        const groupPadding = 20;
+        const groupPaddingTop = ROLE_GROUP_PADDING_TOP;
+        const groupPadding = ROLE_GROUP_PADDING;
         const minGroupWidth = 340;
         const existingGroup = latestNodes.find((node) => node.id === groupId);
         const groupSourceId = isSourceRoleGroup
@@ -2878,17 +3980,29 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const currentGroupSource =
             (groupSourceId ? prev.find((node) => node.id === groupSourceId) : undefined) ?? currentSource;
           if (!currentSource || !currentGroupSource) return prev;
-          const existingRoles = prev.filter((node) => (node.data as any)?.roleGroupId === groupId);
-          const startIndex = existingRoles.length;
+          const existingRoles = prev
+            .filter((node) => {
+              const belongsToGroup =
+                node.parentId === groupId ||
+                getTextValue((node.data as any)?.roleGroupId) === groupId;
+              if (!belongsToGroup) return false;
+              return node.type === "settingCard" && getTextValue(node.data?.label) === "角色";
+            })
+            .sort((a, b) => {
+              const ay = Number(a.position?.y ?? 0);
+              const by = Number(b.position?.y ?? 0);
+              if (ay !== by) return ay - by;
+              return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+            });
+
           const roleNodes = roleCards.map((item, index) => {
-            const idx = startIndex + index;
-            const col = idx % cols;
+            const idx = existingRoles.length + index;
             const row = Math.floor(idx / cols);
+            const col = idx % cols;
             return {
               id: roleNodeIds[index],
               type: "settingCard",
               parentId: groupId,
-              extent: "parent" as any,
               position: {
                 x: groupPadding + col * (roleCardWidth + gapX),
                 y: groupPaddingTop + row * (roleCardHeight + gapY),
@@ -2903,6 +4017,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 fromApi: item.fromApi ?? true,
                 roleGroupId: groupId,
                 isStreaming: item.isStreaming ?? false,
+                isBlankDraft: item.isBlankDraft ?? false,
+                isBlankBrainstormDraft: false,
                 expandable: true,
                 allowTitleEdit: true,
                 allowImageUpload: true,
@@ -2917,13 +4033,15 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           });
           const totalCount = existingRoles.length + roleNodes.length;
           const rows = Math.max(1, Math.ceil(totalCount / cols));
-          const colsUsed = Math.min(cols, totalCount);
+          const colsUsed = Math.max(1, Math.min(cols, totalCount));
           const nextGroupWidth = Math.max(
             minGroupWidth,
             groupPadding * 2 + colsUsed * roleCardWidth + Math.max(0, colsUsed - 1) * gapX
           );
-          const nextGroupHeight =
-            groupPaddingTop + rows * roleCardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
+          const nextGroupHeight = Math.max(
+            ROLE_GROUP_MIN_HEIGHT,
+            groupPaddingTop + rows * roleCardHeight + Math.max(0, rows - 1) * gapY + groupPadding
+          );
           const next = [...prev];
           const hasGroup = next.some((node) => node.id === groupId);
           if (!hasGroup) {
@@ -2941,6 +4059,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const groupIndex = next.findIndex((node) => node.id === groupId);
           if (groupIndex >= 0) {
             const currentGroup = next[groupIndex] as any;
+            const currentGroupHeight = Number(
+              currentGroup?.style?.height ?? getCanvasNodeLayoutSize(currentGroup).height
+            );
             next[groupIndex] = {
               ...currentGroup,
               style: {
@@ -2950,10 +4071,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 zIndex: Number(currentGroup?.style?.zIndex ?? 0),
               },
             };
+            const groupHeightDelta = Math.max(0, nextGroupHeight - currentGroupHeight);
+            if (groupHeightDelta > 0) {
+              const shifted = shiftDownstreamTopLevelNodes(next, latestEdges, groupId, groupHeightDelta);
+              if (shifted !== next) {
+                next.length = 0;
+                next.push(...shifted);
+              }
+            }
           }
           next.push(...roleNodes);
-          nodesRef.current = next;
-          return next;
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          nodesRef.current = normalizedNext;
+          return normalizedNext;
         });
 
         setEdges((prev) => {
@@ -2972,10 +4102,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           return next;
         });
         setCanvasReady(true);
+        scheduleGroupMeasureRelayout(groupId);
 
         return { groupId, roleNodeIds };
       },
-      [getNextCanvasNodeId, hasIdea, inspirationDrawId, setNodes, setEdges]
+      [getNextCanvasNodeId, getNode, hasIdea, inspirationDrawId, scheduleGroupMeasureRelayout, setNodes, setEdges]
     );
 
     const appendOutlineSettingsToGroup = useCallback(
@@ -3044,6 +4175,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             outlineSourceId: sourceNodeId,
             files: options?.files,
             title: options?.title,
+            outlineSettingCollapsed: Boolean((existingSettingsNode?.data as any)?.outlineSettingCollapsed),
             outlinePerspective: getTextValue((existingSettingsNode?.data as any)?.outlinePerspective),
             outlineArticleType: getTextValue((existingSettingsNode?.data as any)?.outlineArticleType),
             outlineChapterTag:
@@ -3056,20 +4188,34 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               id: settingsNodeId,
               type: OUTLINE_GROUP_SETTINGS_NODE_TYPE,
               parentId: groupId,
-              extent: "parent" as any,
               position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
               draggable: false,
               selectable: true,
+              style: {
+                width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
+                height: OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
+              } as any,
               data: nextSettingsData,
             } as CustomNode);
           } else {
             next[settingsIndex] = {
               ...next[settingsIndex],
               parentId: groupId,
-              extent: "parent" as any,
               position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
               draggable: false,
               selectable: true,
+              style: {
+                ...((next[settingsIndex] as any)?.style ?? {}),
+                width: Boolean((nextSettingsData as any)?.outlineSettingCollapsed)
+                  ? Math.max(
+                      Number((next[groupIndex] as any)?.style?.width ?? groupWidth) - OUTLINE_GROUP_HORIZONTAL_PADDING * 2,
+                      OUTLINE_GROUP_SETTINGS_CARD_WIDTH
+                    )
+                  : OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
+                height: Boolean((nextSettingsData as any)?.outlineSettingCollapsed)
+                  ? OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT
+                  : OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
+              } as any,
               data: nextSettingsData,
             } as CustomNode;
           }
@@ -3138,6 +4284,85 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       return Boolean(nodeData.isBlankDraft ?? nodeData.isBlankBrainstormDraft);
     }, []);
 
+    const createStandaloneRoleGroupDraftCard = useCallback(
+      (options?: { insertPosition?: "center" | "right" }) => {
+        const groupId = getNextCanvasNodeId("role-group");
+        const roleNodeId = getNextCanvasNodeId("role");
+        const roleCardWidth = 300;
+        const roleCardHeight = 450;
+        const groupPaddingTop = ROLE_GROUP_PADDING_TOP;
+        const groupPadding = ROLE_GROUP_PADDING;
+        const minGroupWidth = 340;
+        const groupWidth = Math.max(minGroupWidth, groupPadding * 2 + roleCardWidth);
+        const groupHeight = Math.max(
+          ROLE_GROUP_MIN_HEIGHT,
+          groupPaddingTop + roleCardHeight + groupPadding
+        );
+        const groupPosition = options?.insertPosition === "right"
+          ? getStandaloneNextRightInsertPosition(nodesRef.current)
+          : getViewportCenteredCanvasPosition(groupWidth, groupHeight);
+
+        setCanvasReady(true);
+        setNodes((prev) => {
+          const next = [
+            ...prev,
+            {
+              id: groupId,
+              type: "roleGroup",
+              position: groupPosition,
+              draggable: hasIdea,
+              dragHandle: ".role-group-drag-handle",
+              selectable: true,
+              data: { label: "角色" } as any,
+              style: { width: groupWidth, height: groupHeight, zIndex: 0 } as any,
+            } as CustomNode,
+            {
+              id: roleNodeId,
+              type: "settingCard",
+              parentId: groupId,
+              position: {
+                x: groupPadding,
+                y: groupPaddingTop,
+              },
+              draggable: hasIdea,
+              data: {
+                label: "角色",
+                title: "",
+                filePath: "",
+                content: "",
+                image: "",
+                fromApi: false,
+                roleGroupId: groupId,
+                isStreaming: false,
+                isBlankDraft: true,
+                isBlankBrainstormDraft: false,
+                expandable: true,
+                allowTitleEdit: true,
+                allowImageUpload: true,
+                autoEdit: true,
+                inspirationDrawId: inspirationDrawId || undefined,
+                skipAutoStream: false,
+              } as any,
+            } as CustomNode,
+          ];
+          nodesRef.current = next;
+          return next;
+        });
+        scheduleGroupMeasureRelayout(groupId);
+
+        return { groupId, roleNodeId };
+      },
+      [
+        getNextCanvasNodeId,
+        getStandaloneNextRightInsertPosition,
+        getViewportCenteredCanvasPosition,
+        hasIdea,
+        inspirationDrawId,
+        scheduleGroupMeasureRelayout,
+        setNodes,
+      ]
+    );
+
     const createStandaloneOutlineSettingsGroup = useCallback(
       (options?: {
         files?: Record<string, string>;
@@ -3176,15 +4401,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               id: settingsNodeId,
               type: OUTLINE_GROUP_SETTINGS_NODE_TYPE,
               parentId: groupId,
-              extent: "parent" as any,
               position: { x: OUTLINE_GROUP_HORIZONTAL_PADDING, y: OUTLINE_GROUP_SETTINGS_TOP },
               draggable: false,
               selectable: true,
+              style: {
+                width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
+                height: OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
+              } as any,
               data: {
                 label: "大纲设置",
                 outlineSourceId: "",
                 files: options?.files,
                 title: options?.title,
+                outlineSettingCollapsed: false,
                 outlinePerspective: "",
                 outlineArticleType: "",
                 outlineChapterTag: "10章",
@@ -3219,30 +4448,46 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const source = latestNodes.find((node) => node.id === sourceNodeId);
         if (!source || !outlineCards.length) return { groupId: "", outlineNodeIds: [] as string[] };
 
-        const groupId = `outline-group-${sourceNodeId}`;
+        const isSourceOutlineGroup =
+          source.type === "roleGroup" && getTextValue(source.data?.label) === "大纲";
+        const groupId = isSourceOutlineGroup ? source.id : `outline-group-${sourceNodeId}`;
         const cardWidth = 300;
         const cardHeight = 260;
-        const gapX = 20;
-        const gapY = 24;
+        const gapX = OUTLINE_GROUP_CARD_GAP_X;
+        const gapY = OUTLINE_GROUP_CARD_GAP_Y;
         const cols = 3;
-        const hasSettingsNode = latestNodes.some(
-          (node) => node.parentId === groupId && node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE
-        );
-        const groupPaddingTop = getOutlineGroupCardsTop(hasSettingsNode);
+        const settingsHeight = getOutlineGroupSettingsHeight(latestNodes, groupId);
+        const hasSettingsNode = settingsHeight > 0;
+        const groupPaddingTop = getOutlineGroupCardsTop(settingsHeight);
         const groupPadding = OUTLINE_GROUP_HORIZONTAL_PADDING;
         const minGroupWidth = hasSettingsNode
           ? OUTLINE_GROUP_SETTINGS_CARD_WIDTH + OUTLINE_GROUP_HORIZONTAL_PADDING * 2
           : 340;
         const existingGroup = latestNodes.find((node) => node.id === groupId);
+        const groupSourceId = isSourceOutlineGroup
+          ? getTextValue((source.data as any)?.outlineSourceId) ||
+            getTextValue(latestEdges.find((edge) => edge.target === groupId)?.source) ||
+            sourceNodeId
+          : sourceNodeId;
         const groupPosition = existingGroup
           ? existingGroup.position
-          : getLinkedCardPosition(sourceNodeId, latestNodes, latestEdges, "attribute");
+          : getLinkedCardPosition(groupSourceId, latestNodes, latestEdges, "attribute");
         const outlineNodeIds = outlineCards.map(() => getNextCanvasNodeId("outline-group-card"));
 
         setNodes((prev) => {
           const currentSource = prev.find((node) => node.id === sourceNodeId);
           if (!currentSource) return prev;
-          const existingOutlineNodes = prev.filter((node) => (node.data as any)?.outlineGroupId === groupId);
+          const existingOutlineNodes = prev
+            .filter((node) =>
+              node.parentId === groupId ||
+              getTextValue((node.data as any)?.outlineGroupId) === groupId
+            )
+            .sort((a, b) => {
+              const ay = Number(a.position?.y ?? 0);
+              const by = Number(b.position?.y ?? 0);
+              if (ay !== by) return ay - by;
+              return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
+            });
           const startIndex = existingOutlineNodes.length;
           const outlineNodes = outlineCards.map((item, index) => {
             const idx = startIndex + index;
@@ -3252,7 +4497,6 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               id: outlineNodeIds[index],
               type: "outlineCard",
               parentId: groupId,
-              extent: "parent" as any,
               position: {
                 x: groupPadding + col * (cardWidth + gapX),
                 y: groupPaddingTop + row * (cardHeight + gapY),
@@ -3288,7 +4532,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           );
           const nextGroupHeight = hasSettingsNode
             ? Math.max(
-                OUTLINE_GROUP_SETTINGS_TOP + OUTLINE_GROUP_SETTINGS_CARD_HEIGHT + groupPadding,
+                OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + groupPadding,
                 groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
               )
             : groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
@@ -3320,11 +4564,16 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             };
           }
           next.push(...outlineNodes);
-          nodesRef.current = next;
-          return next;
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          nodesRef.current = normalizedNext;
+          return normalizedNext;
         });
 
         setEdges((prev) => {
+          if (isSourceOutlineGroup) {
+            edgesRef.current = prev as CustomEdge[];
+            return prev;
+          }
           const next = [...prev];
           const groupEdgeId = `e${sourceNodeId}-${groupId}`;
           if (!next.some((edge) => edge.id === groupEdgeId)) {
@@ -3360,6 +4609,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           autoEdit?: boolean;
           skipAutoStream?: boolean;
           insertPosition?: "center" | "right";
+          position?: { x: number; y: number };
         }
       ) => {
         const typeToCreate: CustomNode["type"] =
@@ -3389,18 +4639,22 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             !options?.image &&
             !options?.filePath &&
             !options?.fromApi;
-          const { x, y } = isBlankDraft
-            ? options?.insertPosition === "right"
-              ? getStandaloneNextRightInsertPosition(prev)
-              : getViewportCenteredCanvasPosition(
-                  getDraftCardSize(key).width,
-                  getDraftCardSize(key).height
-                )
-            : getStandaloneNextRowPosition(prev);
+          const { x, y } = options?.position
+            ? options.position
+            : isBlankDraft
+              ? options?.insertPosition === "right"
+                ? getStandaloneNextRightInsertPosition(prev)
+                : getViewportCenteredCanvasPosition(
+                    getDraftCardSize(key).width,
+                    getDraftCardSize(key).height
+                  )
+              : getStandaloneNextRowPosition(prev);
           const newNode: CustomNode = {
             id: idToCreate,
             type: typeToCreate,
             position: { x, y },
+            sourcePosition: key === "info" ? Position.Right : Position.Bottom,
+            targetPosition: key === "info" ? Position.Left : Position.Top,
             draggable: true,
             data: {
               label: labelToCreate,
@@ -3429,11 +4683,39 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       [getDraftCardSize, getNextCanvasNodeId, getViewportCenteredCanvasPosition, inspirationDrawId, setNodes]
     );
 
+    const addInfoCardFromExternalFile = useCallback(
+      (options: {
+        title: string;
+        content: string;
+        filePath: string;
+        clientX?: number;
+        clientY?: number;
+      }) => {
+        setForceCanvasView(true);
+        const nodeId = createCardByKey("info", {
+          title: options.title,
+          content: options.content,
+          filePath: options.filePath,
+          allowTitleEdit: true,
+          allowImageUpload: false,
+          autoEdit: true,
+          insertPosition: "right",
+        });
+        rememberLatestGeneratedNode(nodeId);
+        focusCanvasNodeWhenReady(nodeId, { zoom: 0.95, duration: 500 });
+        return nodeId;
+      },
+      [
+        createCardByKey,
+        focusCanvasNodeWhenReady,
+        rememberLatestGeneratedNode,
+      ]
+    );
+
     const handlePrepareBrainstormCard = useCallback(
       (nodeId: string) => {
         const currentNode = nodesRef.current.find((node) => node.id === nodeId);
-        const containerEl = containerRef.current;
-        if (!currentNode || !containerEl) return;
+        if (!currentNode) return;
 
         const normalizedLabel = getTextValue((currentNode.data as any)?.label);
         const outputType =
@@ -3443,34 +4725,31 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               ? "summary"
               : normalizedLabel === "信息"
                 ? "info"
-                : "brainstorm";
+                : normalizedLabel === "大纲" || normalizedLabel === "故事大纲"
+                  ? "outline"
+                  : "brainstorm";
         const promptSuffix =
           outputType === "role"
-            ? "角色卡"
+            ? "角色"
             : outputType === "summary"
-              ? "梗概卡"
+              ? "故事梗概"
               : outputType === "info"
-                ? "信息卡"
-                : "脑洞";
-        const viewport = getViewport();
-        const containerRect = containerEl.getBoundingClientRect();
-        const dockRect = dockRef.current?.getBoundingClientRect();
-        const { width: cardWidth, height: cardHeight } = getDraftCardSize(outputType);
-        const gapToDock = 24;
-        const dockTop = dockRect?.top ?? (containerRect.top + containerRect.height - 180);
-        const targetScreenTop = Math.max(containerRect.top + 24, dockTop - cardHeight - gapToDock);
-        const targetScreenLeft = containerRect.left + (containerRect.width - cardWidth) / 2;
-        const targetX = (targetScreenLeft - containerRect.left - viewport.x) / viewport.zoom;
-        const targetY = (targetScreenTop - containerRect.top - viewport.y) / viewport.zoom;
-        const title = getTextValue((currentNode.data as any)?.title) || "";
+                ? "信息"
+                : outputType === "outline"
+                  ? "故事大纲"
+                  : "脑洞";
+        const title = getTextValue((currentNode.data as any)?.title).trim() || "中元节";
         const brainstormPrompt = `帮我生成${title}${promptSuffix}`;
+
+        preparedGenerateSourceNodeIdRef.current = nodeId;
+        preparedContextFilesRef.current = undefined;
+        handleOutputTypeChange(outputType);
 
         setNodes((prev) =>
           prev.map((node) =>
             node.id === nodeId
               ? {
                   ...node,
-                  position: { x: targetX, y: targetY },
                   data: {
                     ...node.data,
                     brainstormAiMode: true,
@@ -3482,16 +4761,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           )
         );
 
+        setIdeaInputSource("default");
         setIdeaContent(brainstormPrompt);
         setForceCanvasView(true);
         setCanvasReady(true);
-        void setCenter(targetX + cardWidth / 2, targetY + cardHeight / 2, {
-          zoom: 0.9,
-          duration: 500,
-        } as any);
-        void handleGenerateInsRef.current?.("manual", brainstormPrompt, outputType, nodeId);
+        focusCanvasNodeWhenReady(nodeId, { zoom: 0.95, duration: 500, preferGroup: false });
+        msg("success", "已填充到输入框，请发送开始生成");
       },
-      [getDraftCardSize, getViewport, setCenter, setNodes]
+      [focusCanvasNodeWhenReady, handleOutputTypeChange, msg, setNodes]
     );
 
     const createLoadingCardByKey = useCallback((key: CanvasCardKey) => {
@@ -3666,7 +4943,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             data: {
               ...(node.data as any),
               label: "脑洞",
-              title: extractMarkdownTitle(item.content, `${fallbackTitle}${idx + 1}`),
+              title: extractWriteFileTitle(item.filePath, `${fallbackTitle}${idx + 1}`),
               content: item.content,
               image: extractMarkdownImage(item.content),
               fromApi: true,
@@ -3719,13 +4996,15 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               : key === "info"
                 ? "信息"
                 : "大纲";
-      setNodes((prev) =>
-        prev.map((node) =>
+      setNodes((prev) => {
+        const updatedNodes = prev.map((node) =>
           node.id !== nodeId
             ? node
             : {
                 ...node,
                 type: nextType,
+                sourcePosition: key === "info" ? Position.Right : Position.Bottom,
+                targetPosition: key === "info" ? Position.Left : Position.Top,
                 data: {
                   ...node.data,
                   label: nextLabel,
@@ -3748,9 +5027,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   skipAutoStream: options?.skipAutoStream ?? false,
                 } as any,
               }
-        )
-      );
-    }, [inspirationDrawId, setNodes]);
+        );
+        const relayoutNodes = relayoutGroupsForNodeIds(updatedNodes, [nodeId]);
+        nodesRef.current = relayoutNodes;
+        return relayoutNodes;
+      });
+    }, [inspirationDrawId, relayoutGroupsForNodeIds, setNodes]);
 
     const removeLoadingCard = useCallback((nodeId: string) => {
       const currentNode = nodes.find((node) => node.id === nodeId);
@@ -3812,7 +5094,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       async (nodeId: string) => {
         const request = buildRoleRequestPayload(nodeId);
         setReqPanelVisible(true);
+        setReqPanelUseSmartTheme(false);
         setCardKeyLabel("角色");
+        setPendingContextActionLabel("");
         setReqPanelStatus("loading");
         setReqPanelDetail("正在随机生成更多人物，请稍等...");
         setReqPanelAction(null);
@@ -3880,7 +5164,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const request = buildRoleRequestPayload(nodeId);
         const currentNode = nodes.find((node) => node.id === nodeId);
         setReqPanelVisible(true);
+        setReqPanelUseSmartTheme(false);
         setCardKeyLabel("梗概");
+        setPendingContextActionLabel("");
         setReqPanelStatus("loading");
         setReqPanelDetail("正在根据当前角色与链路信息生成故事梗概，请稍等...");
         setReqPanelAction(null);
@@ -3924,8 +5210,10 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           requirement?: string;
           files?: Record<string, string>;
           title?: string;
+          actionLabel?: string;
         }
       ) => {
+        handleOutputTypeChange("outline");
         const shouldOpenOutlineConfig =
           !options ||
           (!Number.isFinite(Number(options.chapterNum)) && !String(options.requirement ?? "").trim());
@@ -3939,34 +5227,29 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           }
           return;
         }
-        const request = buildRoleRequestPayload(nodeId);
-        const summaryNode = getNearestSummaryNode(nodeId);
-        if (!summaryNode) {
-          msg("warning", "请先生成故事梗概");
-          return;
-        }
         const chapterNumRaw = Number(options?.chapterNum ?? 10);
         const chapterNum = Number.isFinite(chapterNumRaw)
           ? Math.min(200, Math.max(1, Math.round(chapterNumRaw)))
           : 10;
         const requirement = String(options?.requirement ?? "").trim();
-        const currentNode = nodes.find((node) => node.id === nodeId);
-        const contextIdea = [
-          `故事梗概标题：${getTextValue((summaryNode.data as any)?.title) || "故事梗概"}`,
-          `当前节点标题：${
-            getTextValue(options?.title) ||
-            getTextValue((currentNode?.data as any)?.title) ||
-            request.roleCard?.name ||
-            "当前节点"
-          }`,
+        const outlineIdea = [
           `章节数：${chapterNum}`,
           requirement,
         ]
           .filter(Boolean)
           .join("\n");
-        void handleGenerateInsRef.current?.("manual", contextIdea, "outline", nodeId, options?.files);
+        const linkedFiles = getConnectedContextFiles(nodeId);
+        const mergedFiles = mergeFileRecords(options?.files, linkedFiles);
+        void handleGenerateInsRef.current?.(
+          "manual",
+          outlineIdea,
+          "outline",
+          nodeId,
+          mergedFiles,
+          options?.actionLabel
+        );
       },
-      [appendOutlineSettingsToGroup, buildRoleRequestPayload, getNearestSummaryNode, msg, nodes]
+      [appendOutlineSettingsToGroup, getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg]
     );
 
     const handleGenerateInfoFromContext = useCallback(
@@ -3975,21 +5258,26 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         options?: {
           files?: Record<string, string>;
           title?: string;
+          actionLabel?: string;
         }
       ) => {
+        handleOutputTypeChange("info");
         if (options?.files && Object.keys(options.files).length > 0) {
           void handleGenerateInsRef.current?.(
             "manual",
             getTextValue(options.title) || "角色组",
             "info",
             nodeId,
-            options.files
+            options.files,
+            options.actionLabel
           );
           return;
         }
         const request = buildRoleRequestPayload(nodeId);
         setReqPanelVisible(true);
+        setReqPanelUseSmartTheme(false);
         setCardKeyLabel("信息");
+        setPendingContextActionLabel("");
         setReqPanelStatus("loading");
         setReqPanelDetail("正在根据当前角色与链路信息整理信息卡，请稍等...");
         setReqPanelAction(null);
@@ -4013,7 +5301,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           msg("error", String(error?.message ?? "信息卡生成失败"));
         }
       },
-      [addSettingCard, buildRoleRequestPayload, msg]
+      [addSettingCard, buildRoleRequestPayload, handleOutputTypeChange, msg]
     );
 
     const handleAutoGenerateByResponse = useCallback(
@@ -4162,32 +5450,62 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       ideaOverride?: string,
       outputTypeOverride?: CanvasOutputType,
       sourceNodeId?: string,
-      filesOverride?: Record<string, string>
+      filesOverride?: Record<string, string>,
+      contextActionLabelOverride?: string,
+      requestSourceOverride?: "default" | "carousel"
     ) => {
       
       if (isLoading) return;
       const ideaSource = typeof ideaOverride === "string" ? ideaOverride : ideaContent;
       const trimmedIdea = ideaSource?.trim?.() ? ideaSource.trim() : "";
       const effectiveOutputType = outputTypeOverride ?? canvasOutputType;
+      if (outputTypeOverride && outputTypeOverride !== canvasOutputType) {
+        handleOutputTypeChange(outputTypeOverride);
+      }
       const cardOutputType: Exclude<CanvasOutputType, "auto"> =
         effectiveOutputType === "auto" ? "brainstorm" : effectiveOutputType;
       const isAutoRequest = requestType === "auto";
       const isAutoEmptyRequest = isAutoRequest && !trimmedIdea;
-      const sourceNode = sourceNodeId
-        ? nodes.find((node) => node.id === sourceNodeId)
+      const effectiveSourceNodeId =
+        getTextValue(sourceNodeId) || getTextValue(preparedGenerateSourceNodeIdRef.current);
+      const sourceNode = effectiveSourceNodeId
+        ? nodes.find((node) => node.id === effectiveSourceNodeId)
         : undefined;
+      const sourceNodeData = (sourceNode?.data ?? {}) as any;
+      const isContextGenerateAction = Boolean(getTextValue(contextActionLabelOverride));
       const shouldReuseSourceDraftNode =
         !isAutoRequest &&
-        Boolean(sourceNodeId) &&
-        isBlankDraftNode(sourceNode) &&
-        cardOutputType !== "outline";
+        !isContextGenerateAction &&
+        Boolean(effectiveSourceNodeId) &&
+        Boolean(sourceNodeData?.isBlankBrainstormDraft) &&
+        cardOutputType !== "outline" &&
+        cardOutputType !== "role";
       const sourceNodeFilePath = getTextValue((sourceNode?.data as any)?.filePath);
       const sourceNodeFileContent = getTextValue(sourceNode?.data?.content);
       const selectedDialogReferences = [...dialogCardPreviews];
       const selectedDialogReferenceIds = selectedDialogReferences
         .map((item) => getTextValue(item.nodeId))
         .filter(Boolean);
+      const selectedDialogReferenceEdgeSourceIds =
+        sourceNode?.type === "roleGroup" && cardOutputType === "info"
+          ? selectedDialogReferenceIds.filter((referenceNodeId) => {
+              const referenceNode = nodesRef.current.find((node) => node.id === referenceNodeId);
+              if (!referenceNode || !effectiveSourceNodeId) return true;
+              const parentGroupId =
+                getTextValue(referenceNode.parentId) ||
+                getTextValue((referenceNode.data as any)?.roleGroupId) ||
+                getTextValue((referenceNode.data as any)?.outlineGroupId);
+              return parentGroupId !== effectiveSourceNodeId;
+            })
+          : selectedDialogReferenceIds;
       const selectedDialogReferenceFiles = getDialogReferenceFiles(selectedDialogReferences);
+      const shouldUseSmartThemeForRequest = selectedDialogReferences.length > 0;
+      const effectiveRequestSource = requestSourceOverride ?? ideaInputSource;
+      const shouldUseCarouselSmartTheme =
+        effectiveRequestSource === "carousel" &&
+        !sourceNodeId &&
+        !filesOverride &&
+        !contextActionLabelOverride;
       const baseRequestFiles = mergeFileRecords(
         filesOverride && Object.keys(filesOverride).length > 0
           ? filesOverride
@@ -4199,6 +5517,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       );
       const requestFiles = mergeCreationIdeaIntoFiles(baseRequestFiles);
       preparedContextFilesRef.current = undefined;
+      preparedGenerateSourceNodeIdRef.current = undefined;
       setDialogCardPreviews([]);
       const hasExplicitCardTypeInIdea =
         !isAutoRequest &&
@@ -4214,7 +5533,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       const outputTypeLabel =
         OUTPUT_TYPE_OPTIONS.find((item) => item.key === cardOutputType)?.label ?? cardOutputType;
       try {
+        setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
+        setReqPanelUseSmartTheme(shouldUseSmartThemeForRequest || shouldUseCarouselSmartTheme);
         setSmartSuggestionsActive(false);
         setSmartSuggestions([]);
         resetReqPanelTextRefs();
@@ -4223,6 +5544,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         setForceCanvasView(true);
         setCanvasReady(true);
         resetGenerationSettings();
+        if (effectiveOutputType !== "auto") {
+          handleOutputTypeChange(effectiveOutputType);
+        }
         rememberLatestGeneratedNode("");
 
         if (isAutoRequest) {
@@ -4267,6 +5591,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   syncReqPanelTextRefs(detail, body, footer);
                 }
                 return;
+              }
+              if (streamData?.event === "end") {
+                setPendingSuggestionIdea('');
               }
               if (streamData?.event !== "updates") return;
               const latestCreationIdea = extractCreationIdeaFileContent(streamData?.data);
@@ -4358,6 +5685,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const partialNodeIdsByCallId = new Map<string, string>();
           const partialFilePathByCallId = new Map<string, string>();
           const streamedNodeIdsByFilePath = new Map<string, string>();
+          const streamPendingNodeIds = new Set<string>();
           const finalizedWriteFilePaths = new Set<string>();
           const standaloneGroupIdsByKey = new Map<"role" | "outline", string>();
           const requestedCardKey =
@@ -4368,9 +5696,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               outline: "outline",
               info: "info",
             }[cardOutputType] as CanvasCardKey);
-          const useBrainstormBatchLoading = false;
-          const useContextLinkedCreation = Boolean(sourceNodeId);
+          const useContextLinkedCreation = Boolean(effectiveSourceNodeId);
+          const useBrainstormBatchLoading =
+            requestedCardKey === "brainstorm" && !shouldReuseSourceDraftNode;
           // manual 请求一开始就创建占位；角色/大纲优先创建分组占位。
+          // 但当“AI生成”是从空白脑洞草稿触发时，应直接复用当前草稿卡，而不是新建一张脑洞占位卡。
           const shouldCreateLoadingCard = !useBrainstormBatchLoading;
           const createStandaloneGroupedCardByKey = (
             key: "role" | "outline",
@@ -4387,11 +5717,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             let createdNodeId = "";
             const cardWidth = 300;
             const cardHeight = key === "role" ? 450 : 260;
-            const gapX = 20;
-            const gapY = 24;
+            const gapX = key === "role" ? ROLE_GROUP_CARD_GAP_X : OUTLINE_GROUP_CARD_GAP_X;
+            const gapY = key === "role" ? ROLE_GROUP_CARD_GAP_Y : OUTLINE_GROUP_CARD_GAP_Y;
             const cols = 3;
-            const groupPaddingTop = 56;
-            const groupPadding = 20;
+            const groupPaddingTop = key === "role" ? ROLE_GROUP_PADDING_TOP : OUTLINE_GROUP_DEFAULT_TOP;
+            const groupPadding = key === "role" ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING;
             const minGroupWidth = 340;
             const groupLabel = key === "role" ? "角色" : "大纲";
 
@@ -4418,13 +5748,15 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                       : ({ label: groupLabel } as any),
                   style: {
                     width: minGroupWidth,
-                    height: groupPaddingTop + cardHeight + groupPadding,
+                    height:
+                      key === "role"
+                        ? Math.max(ROLE_GROUP_MIN_HEIGHT, groupPaddingTop + cardHeight + groupPadding)
+                        : groupPaddingTop + cardHeight + groupPadding,
                     zIndex: 0,
                   } as any,
                 } as any;
                 next.push(groupNode as CustomNode);
               }
-
               const existingChildren = next.filter((node) =>
                 key === "role"
                   ? (node.data as any)?.roleGroupId === groupId
@@ -4439,7 +5771,6 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 id: createdNodeId,
                 type: key === "role" ? "settingCard" : "outlineCard",
                 parentId: groupId,
-                extent: "parent" as any,
                 position: {
                   x: groupPadding + col * (cardWidth + gapX),
                   y: groupPaddingTop + row * (cardHeight + gapY),
@@ -4472,7 +5803,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 groupPadding * 2 + colsUsed * cardWidth + Math.max(0, colsUsed - 1) * gapX
               );
               const nextGroupHeight =
-                groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
+                key === "role"
+                  ? Math.max(
+                      ROLE_GROUP_MIN_HEIGHT,
+                      groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding
+                    )
+                  : groupPaddingTop + rows * cardHeight + Math.max(0, rows - 1) * gapY + groupPadding;
               const groupIndex = next.findIndex((node) => node.id === groupId);
               if (groupIndex >= 0) {
                 const currentGroup = next[groupIndex] as any;
@@ -4487,8 +5823,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 };
               }
 
-              nodesRef.current = next;
-              return next;
+              const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+              nodesRef.current = normalizedNext;
+              return normalizedNext;
             });
 
             return createdNodeId;
@@ -4496,8 +5833,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const createManualLoadingCard = () => {
             if (!shouldCreateLoadingCard) return "";
 
-            if (shouldReuseSourceDraftNode && sourceNodeId) {
-              return sourceNodeId;
+            if (shouldReuseSourceDraftNode && effectiveSourceNodeId) {
+              return effectiveSourceNodeId;
             }
 
             const commonOptions = {
@@ -4510,29 +5847,29 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             };
 
             if (requestedCardKey === "role") {
-              if (useContextLinkedCreation && sourceNodeId) {
-                return appendRoleCardsToGroup(sourceNodeId, [commonOptions]).roleNodeIds[0] ?? "";
+              if (useContextLinkedCreation && effectiveSourceNodeId) {
+                return appendRoleCardsToGroup(effectiveSourceNodeId, [commonOptions]).roleNodeIds[0] ?? "";
               }
             return createStandaloneGroupedCardByKey("role", commonOptions);
             }
 
             if (requestedCardKey === "outline") {
-              if (useContextLinkedCreation && sourceNodeId) {
-                return appendOutlineCardsToGroup(sourceNodeId, [commonOptions]).outlineNodeIds[0] ?? "";
+              if (useContextLinkedCreation && effectiveSourceNodeId) {
+                return appendOutlineCardsToGroup(effectiveSourceNodeId, [commonOptions]).outlineNodeIds[0] ?? "";
               }
               return createStandaloneGroupedCardByKey("outline", commonOptions);
             }
 
-            if (useContextLinkedCreation && sourceNodeId) {
+            if (useContextLinkedCreation && effectiveSourceNodeId) {
               if (requestedCardKey === "summary") {
-                return addSummaryCard(sourceNodeId, {
+                return addSummaryCard(effectiveSourceNodeId, {
                   ...commonOptions,
                   allowTitleEdit: true,
                   allowImageUpload: true,
                 });
               }
               if (requestedCardKey === "info") {
-                return addSettingCard(sourceNodeId, {
+                return addSettingCard(effectiveSourceNodeId, {
                   ...commonOptions,
                   label: "信息",
                   allowTitleEdit: true,
@@ -4551,44 +5888,289 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           const loadingCardId = shouldCreateLoadingCard
             ? createManualLoadingCard()
             : "";
+          const brainstormPlaceholderIds = useBrainstormBatchLoading
+            ? startBrainstormPlaceholderBatch(
+                [{ filePath: `brainstorm-placeholder-${Date.now()}.md`, content: "" }],
+                brainstormBatchIdsRef.current.length > 0 || nodesRef.current.length > 0
+                  ? "append"
+                  : "replace"
+              )
+            : [];
+          const brainstormLoadingCardId =
+            brainstormPlaceholderIds[brainstormPlaceholderIds.length - 1] ?? "";
           if (loadingCardId) {
             rememberLatestGeneratedNode(loadingCardId);
-            connectReferenceNodesToTargets(selectedDialogReferenceIds, [loadingCardId]);
+            connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [loadingCardId]);
             startLoadingProgressForNodes([loadingCardId]);
+            focusCanvasNodeWhenReady(loadingCardId, { zoom: 0.95, duration: 500 });
+          } else if (brainstormLoadingCardId) {
+            rememberLatestGeneratedNode(brainstormLoadingCardId);
+            connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [brainstormLoadingCardId]);
+            focusCanvasNodeWhenReady(brainstormLoadingCardId, { zoom: 0.95, duration: 500 });
           }
           let loadingCardConsumed = false;
-          let loadingCardBoundToFinalFile = false;
+          const resolveRoleTargetSourceNodeId = () => {
+            if (requestedCardKey !== "role") return effectiveSourceNodeId;
+            const loadingNode = loadingCardId
+              ? nodesRef.current.find((node) => node.id === loadingCardId)
+              : undefined;
+            const loadingGroupId =
+              getTextValue(loadingNode?.parentId) ||
+              getTextValue((loadingNode?.data as any)?.roleGroupId) ||
+              "";
+            if (loadingGroupId) {
+              const loadingGroupNode = nodesRef.current.find((node) => node.id === loadingGroupId);
+              if (loadingGroupNode?.type === "roleGroup") {
+                return loadingGroupNode.id;
+              }
+            }
+            const resolvedGroupId = resolveRoleRelationGroupId();
+            if (resolvedGroupId) return resolvedGroupId;
+            return effectiveSourceNodeId;
+          };
+
           const getWriteFileFallbackTitle = (filePath: string, fallback: string) =>
             filePath.split("/").pop()?.replace(/\.md$/i, "") || fallback;
           const resolveWriteFileCardKey = (filePath: string): CanvasCardKey => {
             const inferredCardKey = inferCardKeyFromWriteFilePath(filePath);
             if (inferredCardKey !== "info") return inferredCardKey;
             if (requestedCardKey === "role") {
-              return isRelationshipInfoWriteFile(filePath) ? "info" : "role";
+              return "role";
             }
             return requestedCardKey;
           };
+          const resolveRoleRelationGroupId = () => {
+            if (requestedCardKey !== "role") return "";
+            const relationSourceNodeId = effectiveSourceNodeId || sourceNodeId;
+            const relationSourceNode = relationSourceNodeId
+              ? nodesRef.current.find((node) => node.id === relationSourceNodeId)
+              : undefined;
+            if (relationSourceNode?.type === "roleGroup") return relationSourceNode.id;
+            const groupIdFromSource = (
+              getTextValue(relationSourceNode?.parentId) ||
+              getTextValue((relationSourceNode?.data as any)?.roleGroupId) ||
+              ""
+            );
+            if (groupIdFromSource) return groupIdFromSource;
+
+            const loadingNode = loadingCardId
+              ? nodesRef.current.find((node) => node.id === loadingCardId)
+              : undefined;
+            const groupIdFromLoadingNode = getTextValue(loadingNode?.parentId) ||
+              getTextValue((loadingNode?.data as any)?.roleGroupId);
+            if (groupIdFromLoadingNode) return groupIdFromLoadingNode;
+
+            // 空白脑洞卡 -> 生成角色 场景下，source 不是 roleGroup，需要通过连线反查它新建出的角色组。
+            if (relationSourceNodeId) {
+              const linkedRoleGroup = nodesRef.current.find((node) => {
+                if (node.type !== "roleGroup") return false;
+                if (getTextValue(node.data?.label) !== "角色") return false;
+                return (edgesRef.current as CustomEdge[]).some(
+                  (edge) =>
+                    getTextValue(edge.source) === relationSourceNodeId &&
+                    getTextValue(edge.target) === node.id
+                );
+              });
+              if (linkedRoleGroup?.id) return linkedRoleGroup.id;
+            }
+
+            return "";
+          };
+          const findExistingRoleRelationNodeId = () => {
+            if (requestedCardKey !== "role") return "";
+            const relationSourceNodeId = effectiveSourceNodeId || sourceNodeId;
+            const relationSourceNode = relationSourceNodeId
+              ? nodesRef.current.find((node) => node.id === relationSourceNodeId)
+              : undefined;
+            const relationGroupId = relationSourceNode
+              ? relationSourceNode.type === "roleGroup"
+                ? relationSourceNode.id
+                : getTextValue(relationSourceNode.parentId) ||
+                  getTextValue((relationSourceNode.data as any)?.roleGroupId)
+              : "";
+            const relationGroupSourceId = relationGroupId
+              ? (edgesRef.current as CustomEdge[]).find((edge) => edge.target === relationGroupId)?.source ?? ""
+              : "";
+            const relationCandidateSourceIds = new Set(
+              [relationSourceNodeId, relationGroupId, relationGroupSourceId]
+                .map((value) => getTextValue(value))
+                .filter(Boolean)
+            );
+            if (!relationCandidateSourceIds.size && !relationGroupId) return "";
+            const relationNodeInGroup = relationGroupId
+              ? nodesRef.current.find((node) => {
+                  if (node.type !== "settingCard") return false;
+                  const belongsToRelationGroup =
+                    getTextValue(node.parentId) === relationGroupId ||
+                    getTextValue((node.data as any)?.roleGroupId) === relationGroupId;
+                  if (!belongsToRelationGroup) return false;
+                  const filePath = getTextValue((node.data as any)?.filePath);
+                  const title = getTextValue((node.data as any)?.title);
+                  return isRelationshipWriteFile(filePath) || /角色关系/i.test(title);
+                })
+              : undefined;
+            if (relationNodeInGroup?.id) {
+              return relationNodeInGroup.id;
+            }
+            const groupChildCards = relationGroupId
+              ? nodesRef.current
+                  .filter((node) =>
+                    getTextValue(node.parentId) === relationGroupId ||
+                    getTextValue((node.data as any)?.roleGroupId) === relationGroupId
+                  )
+                  .map((node) => ({
+                    id: node.id,
+                    type: node.type,
+                    label: getTextValue((node.data as any)?.label),
+                    title: getTextValue((node.data as any)?.title),
+                    filePath: getTextValue((node.data as any)?.filePath),
+                    parentId: getTextValue(node.parentId),
+                    roleGroupId: getTextValue((node.data as any)?.roleGroupId),
+                  }))
+              : [];
+            const existingNode = nodesRef.current.find((node) => {
+                if (node.type !== "settingCard") return false;
+                const filePath = getTextValue((node.data as any)?.filePath);
+                const title = getTextValue((node.data as any)?.title);
+                const isRelationNode =
+                  isRelationshipInfoWriteFile(filePath) || /角色关系/i.test(title);
+                if (!isRelationNode) return false;
+                const belongsToRelationGroup =
+                  Boolean(relationGroupId) &&
+                  (
+                    getTextValue(node.parentId) === relationGroupId ||
+                    getTextValue((node.data as any)?.roleGroupId) === relationGroupId
+                  );
+                if (belongsToRelationGroup) return true;
+                return (edgesRef.current as CustomEdge[]).some(
+                  (edge) =>
+                    relationCandidateSourceIds.has(getTextValue(edge.source)) &&
+                    edge.target === node.id
+                );
+              });
+            return existingNode?.id ?? "";
+          };
+          const findRoleGroupPlaceholderNodeId = (groupId: string) => {
+            if (!groupId) return "";
+            if (loadingCardId) {
+              const loadingNode = nodesRef.current.find((node) => node.id === loadingCardId);
+              const loadingBelongsToGroup =
+                getTextValue(loadingNode?.parentId) === groupId ||
+                getTextValue((loadingNode?.data as any)?.roleGroupId) === groupId;
+              const loadingIsPlaceholder =
+                Boolean((loadingNode?.data as any)?.fromApi) &&
+                (
+                  Boolean((loadingNode?.data as any)?.isStreaming) ||
+                  Boolean((loadingNode?.data as any)?.pendingGenerate)
+                );
+              if (loadingBelongsToGroup && loadingIsPlaceholder) {
+                return loadingCardId;
+              }
+            }
+            const placeholder = nodesRef.current.find((node) => {
+              if (node.type !== "settingCard") return false;
+              const belongsToGroup =
+                getTextValue(node.parentId) === groupId ||
+                getTextValue((node.data as any)?.roleGroupId) === groupId;
+              if (!belongsToGroup) return false;
+              if (isRelationshipWriteFile(getTextValue((node.data as any)?.filePath))) return false;
+              return (
+                Boolean((node.data as any)?.fromApi) &&
+                (
+                  Boolean((node.data as any)?.isStreaming) ||
+                  Boolean((node.data as any)?.pendingGenerate)
+                )
+              );
+            });
+            return placeholder?.id ?? "";
+          };
+          const findRoleGroupPendingRoleNodeId = (groupId: string) => {
+            if (!groupId) return "";
+            const pendingRoleNode = nodesRef.current.find((node) => {
+              if (node.type !== "settingCard") return false;
+              const belongsToGroup =
+                getTextValue(node.parentId) === groupId ||
+                getTextValue((node.data as any)?.roleGroupId) === groupId;
+              if (!belongsToGroup) return false;
+              if (isRelationshipWriteFile(getTextValue((node.data as any)?.filePath))) return false;
+              if (getTextValue(node.data?.label) !== "角色") return false;
+              return (
+                Boolean((node.data as any)?.fromApi) &&
+                (
+                  Boolean((node.data as any)?.isStreaming) ||
+                  Boolean((node.data as any)?.pendingGenerate)
+                )
+              );
+            });
+            return pendingRoleNode?.id ?? "";
+          };
+          const findExistingRoleRelationshipCardNodeId = () => {
+            if (requestedCardKey !== "role") return "";
+            const relationSourceNodeId = effectiveSourceNodeId || sourceNodeId;
+            const relationSourceNode = relationSourceNodeId
+              ? nodesRef.current.find((node) => node.id === relationSourceNodeId)
+              : undefined;
+            const relationGroupId = relationSourceNode
+              ? relationSourceNode.type === "roleGroup"
+                ? relationSourceNode.id
+                : getTextValue(relationSourceNode.parentId) ||
+                  getTextValue((relationSourceNode.data as any)?.roleGroupId)
+              : "";
+            if (!relationGroupId) return "";
+            const existingNode = nodesRef.current.find((node) => {
+              if (node.type !== "settingCard") return false;
+              const filePath = getTextValue((node.data as any)?.filePath);
+              const title = getTextValue((node.data as any)?.title);
+              const belongsToRelationGroup =
+                getTextValue(node.parentId) === relationGroupId ||
+                getTextValue((node.data as any)?.roleGroupId) === relationGroupId;
+              if (!belongsToRelationGroup) return false;
+              return isRelationshipWriteFile(filePath) || /角色关系/i.test(title);
+            });
+            return existingNode?.id ?? "";
+          };
+          const shouldConsumeLoadingCardForKey = (key: CanvasCardKey) =>
+            Boolean(loadingCardId) && !loadingCardConsumed && key === requestedCardKey;
+          const bindWriteFileToLoadingCard = (
+            item: CanvasWriteFileCall,
+            key: CanvasCardKey,
+            isFinalWrite: boolean
+          ) => {
+            if (!shouldConsumeLoadingCardForKey(key) || !loadingCardId) return "";
+            const filePath = getTextValue(item.filePath);
+            if (!filePath) return "";
+            loadingCardConsumed = true;
+            streamPendingNodeIds.add(loadingCardId);
+            streamedNodeIdsByFilePath.set(filePath, loadingCardId);
+
+            if (!isFinalWrite) {
+              startLoadingProgressForNodes([loadingCardId]);
+            }
+            return loadingCardId;
+          };
           const ensureStreamNodeId = (filePath: string, key: CanvasCardKey) => {
             const existingNodeId = streamedNodeIdsByFilePath.get(filePath);
-            if (existingNodeId) return existingNodeId;
+            if (existingNodeId) {
+              streamPendingNodeIds.add(existingNodeId);
+              return existingNodeId;
+            }
 
             let nextNodeId = "";
-            const fallbackTitle = getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片");
             const allowImageUpload = key !== "outline" && key !== "info";
 
-            if (loadingCardId && !loadingCardConsumed) {
+            if (shouldConsumeLoadingCardForKey(key)) {
               nextNodeId = loadingCardId;
               loadingCardConsumed = true;
             }
 
-            if (!nextNodeId && useContextLinkedCreation && sourceNodeId) {
+            if (!nextNodeId && useContextLinkedCreation && effectiveSourceNodeId) {
               if (shouldReuseSourceDraftNode && key === requestedCardKey) {
-                nextNodeId = sourceNodeId;
+                nextNodeId = effectiveSourceNodeId;
               } else if (key === "brainstorm") {
-                nextNodeId = sourceNodeId;
+                nextNodeId = effectiveSourceNodeId;
               } else if (key === "summary") {
-                nextNodeId = addSummaryCard(sourceNodeId, {
-                  title: fallbackTitle,
+                nextNodeId = addSummaryCard(effectiveSourceNodeId, {
+                  title: "",
                   content: "",
                   image: "",
                   fromApi: true,
@@ -4598,20 +6180,33 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   skipAutoStream: true,
                 });
               } else if (key === "info") {
-                nextNodeId = addSettingCard(sourceNodeId, {
-                  label: "信息",
-                  title: fallbackTitle,
-                  content: "",
-                  image: "",
-                  fromApi: true,
-                  isStreaming: true,
-                  allowTitleEdit: true,
-                  allowImageUpload: false,
-                  skipAutoStream: true,
-                });
+                const isRoleRelationInfo =
+                  requestedCardKey === "role" && isRelationshipInfoWriteFile(filePath);
+                const relationGroupId = isRoleRelationInfo ? resolveRoleRelationGroupId() : "";
+                nextNodeId = findExistingRoleRelationNodeId();
+                if (!nextNodeId && isRoleRelationInfo) {
+                  nextNodeId = findRoleGroupPlaceholderNodeId(relationGroupId);
+                }
+                // 角色关系文件只在“已有关系节点”或“组内占位节点”上替换，不新建节点。
+                if (isRoleRelationInfo && !nextNodeId) {
+                  return "";
+                }
+                if (!nextNodeId) {
+                  nextNodeId = addSettingCard(effectiveSourceNodeId, {
+                    label: "信息",
+                    title: "",
+                    content: "",
+                    image: "",
+                    fromApi: true,
+                    isStreaming: true,
+                    allowTitleEdit: true,
+                    allowImageUpload: false,
+                    skipAutoStream: true,
+                  });
+                }
               } else if (key === "outline") {
-                nextNodeId = appendOutlineCardsToGroup(sourceNodeId, [{
-                  title: fallbackTitle,
+                nextNodeId = appendOutlineCardsToGroup(effectiveSourceNodeId, [{
+                  title: "",
                   content: "",
                   image: "",
                   fromApi: true,
@@ -4619,19 +6214,54 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   skipAutoStream: true,
                 }]).outlineNodeIds[0] ?? "";
               } else if (key === "role") {
-                nextNodeId = appendRoleCardsToGroup(sourceNodeId, [{
-                  title: fallbackTitle,
+                const relationGroupId = isRelationshipWriteFile(filePath) ? resolveRoleRelationGroupId() : "";
+                if (isRelationshipWriteFile(filePath)) {
+                  nextNodeId = findExistingRoleRelationshipCardNodeId();
+                  if (!nextNodeId) {
+                    nextNodeId = findRoleGroupPlaceholderNodeId(relationGroupId);
+                  }
+                  if (!nextNodeId) {
+                    nextNodeId = findRoleGroupPendingRoleNodeId(relationGroupId);
+                  }
+                }
+                if (!nextNodeId) {
+                const roleTargetSourceNodeId = resolveRoleTargetSourceNodeId();
+                nextNodeId = appendRoleCardsToGroup(roleTargetSourceNodeId, [{
+                  title: "",
                   content: "",
                   image: "",
                   fromApi: true,
                   isStreaming: true,
                   skipAutoStream: true,
                 }]).roleNodeIds[0] ?? "";
+                }
               }
             } else {
-              if (key === "role" || key === "outline") {
+              if (key === "role") {
+                const roleTargetSourceNodeId = resolveRoleTargetSourceNodeId() || sourceNodeId || effectiveSourceNodeId;
+                if (roleTargetSourceNodeId) {
+                  nextNodeId = appendRoleCardsToGroup(roleTargetSourceNodeId, [{
+                    title: "",
+                    content: "",
+                    image: "",
+                    fromApi: true,
+                    isStreaming: true,
+                    skipAutoStream: true,
+                  }]).roleNodeIds[0] ?? "";
+                } else {
+                  // 仅在完全无法解析 source 的极端场景，才允许 standalone 兜底。
+                  nextNodeId = createStandaloneGroupedCardByKey("role", {
+                    title: "",
+                    content: "",
+                    image: "",
+                    fromApi: true,
+                    isStreaming: true,
+                    skipAutoStream: true,
+                  }) ?? "";
+                }
+              } else if (key === "outline") {
                 nextNodeId = createStandaloneGroupedCardByKey(key, {
-                  title: fallbackTitle,
+                  title: "",
                   content: "",
                   image: "",
                   fromApi: true,
@@ -4640,7 +6270,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 }) ?? "";
               } else {
                 nextNodeId = createCardByKey(key, {
-                  title: fallbackTitle,
+                  title: "",
                   content: "",
                   image: "",
                   fromApi: true,
@@ -4655,14 +6285,16 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
             if (nextNodeId) {
               streamedNodeIdsByFilePath.set(filePath, nextNodeId);
+              streamPendingNodeIds.add(nextNodeId);
               rememberLatestGeneratedNode(nextNodeId);
-              connectReferenceNodesToTargets(selectedDialogReferenceIds, [nextNodeId]);
+              connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [nextNodeId]);
             }
             return nextNodeId;
           };
           const ensurePartialStreamNodeId = (callId: string, filePath: string, key: CanvasCardKey) => {
             const existingNodeId = partialNodeIdsByCallId.get(callId);
             if (existingNodeId) {
+              streamPendingNodeIds.add(existingNodeId);
               const previousPath = partialFilePathByCallId.get(callId);
               if (previousPath && previousPath !== filePath) {
                 streamedNodeIdsByFilePath.delete(previousPath);
@@ -4673,16 +6305,82 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               }
               return existingNodeId;
             }
-            const seedPath = filePath || `__partial_write_file__/${callId}`;
-            const nextNodeId = ensureStreamNodeId(seedPath, key);
+            if (!filePath) {
+              return "";
+            }
+            const nextNodeId = ensureStreamNodeId(filePath, key);
             if (nextNodeId) {
+              streamPendingNodeIds.add(nextNodeId);
               partialNodeIdsByCallId.set(callId, nextNodeId);
-              if (filePath) {
-                partialFilePathByCallId.set(callId, filePath);
-                streamedNodeIdsByFilePath.set(filePath, nextNodeId);
-              }
+              partialFilePathByCallId.set(callId, filePath);
+              streamedNodeIdsByFilePath.set(filePath, nextNodeId);
             }
             return nextNodeId;
+          };
+          const updateWriteFilePlaceholderCard = (
+            nodeId: string,
+            key: CanvasCardKey
+          ) => {
+            if (!nodeId) return;
+            const reuseSourceDraft =
+              shouldReuseSourceDraftNode &&
+              key === requestedCardKey &&
+              nodeId === effectiveSourceNodeId;
+            startLoadingProgressForNodes([nodeId]);
+            updateLoadingCard(nodeId, key, {
+              title: "",
+              filePath: "",
+              content: "",
+              image: "",
+              fromApi: true,
+              isStreaming: true,
+              allowTitleEdit: true,
+              allowImageUpload: key !== "outline" && key !== "info",
+              autoEdit: true,
+              isBlankDraft: false,
+              isBlankBrainstormDraft: false,
+              brainstormAiMode: reuseSourceDraft,
+              pendingGenerate: true,
+              highlighted: reuseSourceDraft,
+              skipAutoStream: true,
+            });
+          };
+          const applyWriteFileResultToNode = (
+            nodeId: string,
+            key: CanvasCardKey,
+            item: CanvasWriteFileCall
+          ) => {
+            if (!nodeId) return;
+            const filePath = getTextValue(item.filePath);
+            const fallbackTitle = getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片");
+            finishLoadingProgressForNode(nodeId);
+            updateLoadingCard(nodeId, key, {
+              title: extractWriteFileTitle(filePath, fallbackTitle),
+              filePath,
+              content: getTextValue(item.content),
+              image: extractMarkdownImage(item.content),
+              fromApi: true,
+              isStreaming: true,
+              allowTitleEdit: true,
+              allowImageUpload: key !== "outline" && key !== "info",
+              autoEdit: true,
+              isBlankDraft: false,
+              isBlankBrainstormDraft: false,
+              brainstormAiMode: false,
+              pendingGenerate: true,
+              highlighted: false,
+              skipAutoStream: true,
+            });
+          };
+          const applyCollectedWriteFilesToStreamNodes = () => {
+            getLatestWriteFiles(collectedWriteFilesByPath).forEach((item) => {
+              const filePath = getTextValue(item.filePath);
+              if (!filePath) return;
+              const key = resolveWriteFileCardKey(filePath);
+              const nodeId = streamedNodeIdsByFilePath.get(filePath);
+              if (!nodeId) return;
+              applyWriteFileResultToNode(nodeId, key, item);
+            });
           };
           const syncWriteFileCard = (
             item: CanvasWriteFileCall,
@@ -4694,60 +6392,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             if (!filePath && !partialCallId) return;
             if (shouldSkipWriteFileCardCreation(filePath)) return;
             const key = resolveWriteFileCardKey(filePath);
-            const nodeId = partialCallId
+            const boundLoadingNodeId = bindWriteFileToLoadingCard(item, key, isFinalWrite);
+            const nodeId = boundLoadingNodeId || (partialCallId
               ? ensurePartialStreamNodeId(partialCallId, filePath, key)
-              : ensureStreamNodeId(filePath, key);
+              : ensureStreamNodeId(filePath, key));
             if (!nodeId) return;
-            const allowImageUpload = key !== "outline" && key !== "info";
-            if (!isFinalWrite) {
-              const partialContent = getTextValue(item.content);
-              startLoadingProgressForNodes([nodeId]);
-              updateLoadingCard(nodeId, key, {
-                title: extractMarkdownTitle(
-                  partialContent,
-                  getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片")
-                ),
-                filePath,
-                content: partialContent,
-                image: extractMarkdownImage(partialContent),
-                fromApi: true,
-                isStreaming: true,
-                allowTitleEdit: true,
-                allowImageUpload,
-                autoEdit: true,
-                isBlankDraft: false,
-                isBlankBrainstormDraft: false,
-                brainstormAiMode:
-                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
-                pendingGenerate:
-                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
-                highlighted:
-                  shouldReuseSourceDraftNode && key === requestedCardKey && nodeId === sourceNodeId,
-                skipAutoStream: true,
-              });
-              return;
-            }
-            finishLoadingProgressForNode(nodeId);
-            updateLoadingCard(nodeId, key, {
-              title: extractMarkdownTitle(
-                item.content,
-                getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片")
-              ),
-              filePath,
-              content: item.content,
-              image: extractMarkdownImage(item.content),
-              fromApi: true,
-              isStreaming: false,
-              allowTitleEdit: true,
-              allowImageUpload,
-              autoEdit: true,
-              isBlankDraft: false,
-              isBlankBrainstormDraft: false,
-              brainstormAiMode: false,
-              pendingGenerate: false,
-              highlighted: false,
-              skipAutoStream: true,
-            });
+            streamPendingNodeIds.add(nodeId);
+            if (boundLoadingNodeId) return;
+            updateWriteFilePlaceholderCard(nodeId, key);
           };
           const replaceLoadingCardWithFinalFile = (
             placeholderNodeId: string,
@@ -4762,19 +6414,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
             finishLoadingProgressForNode(placeholderNodeId);
             updateLoadingCard(placeholderNodeId, key, {
-              title: extractMarkdownTitle(item.content, fallbackTitle),
+              title: extractWriteFileTitle(item.filePath, fallbackTitle),
               filePath: normalizedPath,
               content: item.content,
               image: extractMarkdownImage(item.content),
               fromApi: true,
-              isStreaming: false,
+              isStreaming: true,
               allowTitleEdit: true,
               allowImageUpload: key !== "outline" && key !== "info",
               autoEdit: true,
               isBlankDraft: false,
               isBlankBrainstormDraft: false,
               brainstormAiMode: false,
-              pendingGenerate: false,
+              pendingGenerate: true,
               highlighted: false,
               skipAutoStream: true,
             });
@@ -4798,18 +6450,41 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               });
             }
           };
+          const finalizePendingStreamNodes = () => {
+            if (loadingCardId) {
+              streamPendingNodeIds.add(loadingCardId);
+            }
+            if (streamPendingNodeIds.size === 0) return;
+            setNodes((prev) =>
+              prev.map((node) =>
+                streamPendingNodeIds.has(node.id)
+                  ? {
+                      ...node,
+                      data: {
+                        ...node.data,
+                        isStreaming: false,
+                        pendingGenerate: false,
+                        brainstormAiMode: false,
+                        highlighted: false,
+                        progress: 100,
+                      } as any,
+                    }
+                  : node
+              )
+            );
+          };
 
           await postCanvasChoicesStream(
             {
               prompt:
                 shouldReuseSourceDraftNode
                   ? trimmedIdea
-                  : !isAutoRequest && sourceNodeId
-                  ? `帮我生成一个${outputTypeLabel}卡`
                   : !isAutoRequest
                     ? (hasExplicitCardTypeInIdea
                         ? trimmedIdea
-                        : `帮我生成${trimmedIdea}${outputTypeLabel}卡`)
+                        : sourceNodeId
+                          ? (trimmedIdea || `帮我生成一个${outputTypeLabel}卡`)
+                          : `帮我生成${trimmedIdea}${outputTypeLabel}卡`)
                     : `生成一个关于${trimmedIdea}${outputTypeLabel}卡`,
               mode: canvasModelType,
               type: requestType,
@@ -4883,19 +6558,6 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   if (!normalizedPath) return;
                   const normalizedCallId = getTextValue(item.callId);
                   const resolvedKey = resolveWriteFileCardKey(normalizedPath);
-                  if (
-                    loadingCardId &&
-                    !loadingCardBoundToFinalFile &&
-                    resolvedKey === requestedCardKey
-                  ) {
-                    streamedNodeIdsByFilePath.set(normalizedPath, loadingCardId);
-                    loadingCardConsumed = true;
-                    loadingCardBoundToFinalFile = true;
-                    if (normalizedCallId) {
-                      partialNodeIdsByCallId.set(normalizedCallId, loadingCardId);
-                      partialFilePathByCallId.set(normalizedCallId, normalizedPath);
-                    }
-                  }
                   const normalizedItem = {
                     filePath: normalizedPath,
                     content: getTextValue(item.content),
@@ -4946,6 +6608,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   latestCreationIdea
                 );
               }
+              if (streamData?.event === "end") {
+                setPendingSuggestionIdea('');
+              }
             },
             (error: any) => {
               streamError = error;
@@ -4956,6 +6621,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           if (streamError) {
             stopLoadingProgress();
             if (loadingCardId) removeLoadingCard(loadingCardId);
+            if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             throw streamError;
           }
 
@@ -4968,6 +6634,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
             if (useBrainstormBatchLoading) {
               updateBrainstormPlaceholderBatch(effectiveFiles, trimmedIdea || "脑洞", true);
+              finalizePendingStreamNodes();
+              setIsLoading(false);
+              return;
+            }
+            if (effectiveOutputType === "outline") {
+              triggerOutlineCompletionCelebration();
+            }
+            if (streamedNodeIdsByFilePath.size > 0) {
+              applyCollectedWriteFilesToStreamNodes();
+              if (loadingCardId && !loadingCardConsumed) {
+                removeLoadingCard(loadingCardId);
+              }
+              finalizePendingStreamNodes();
               setIsLoading(false);
               return;
             }
@@ -5006,13 +6685,6 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 );
               }
             }
-            if (effectiveOutputType === "outline") {
-              triggerOutlineCompletionCelebration();
-            }
-            if (streamedNodeIdsByFilePath.size > 0) {
-              setIsLoading(false);
-              return;
-            }
             if (effectiveOutputType === "role") {
               const roleFiles = effectiveFiles.filter(
                 (item) => item.filePath.endsWith(".md") && !isRelationshipInfoWriteFile(item.filePath)
@@ -5033,7 +6705,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   const firstTitleFallback =
                     firstRole.filePath.split("/").pop()?.replace(/\.md$/i, "") || "角色1";
                   updateLoadingCard(loadingCardId, "role", {
-                    title: extractMarkdownTitle(firstRole.content, firstTitleFallback),
+                    title: extractWriteFileTitle(firstRole.filePath, firstTitleFallback),
                     filePath: firstRole.filePath,
                     content: firstRole.content,
                     image: extractMarkdownImage(firstRole.content),
@@ -5050,7 +6722,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                           item.filePath.split("/").pop()?.replace(/\.md$/i, "") ||
                           `角色${index + (loadingCardId ? 2 : 1)}`;
                         return {
-                          title: extractMarkdownTitle(item.content, titleFallback),
+                          title: extractWriteFileTitle(item.filePath, titleFallback),
                           filePath: item.filePath,
                           content: item.content,
                           image: extractMarkdownImage(item.content),
@@ -5078,7 +6750,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                           draggable: true,
                           data: {
                             label: "角色",
-                            title: extractMarkdownTitle(item.content, titleFallback),
+                            title: extractWriteFileTitle(item.filePath, titleFallback),
                             filePath: item.filePath,
                             content: item.content,
                             image,
@@ -5094,17 +6766,53 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     ]);
                   }
                 }
-              } else if (loadingCardId) {
+              } else if (loadingCardId && !relationFiles.length) {
                 removeLoadingCard(loadingCardId);
               }
 
               relationFiles.forEach((item) => {
                 const fallbackTitle = item.filePath.split("/").pop()?.replace(/\.md$/i, "") || "角色关系";
-                createCardByKey("info", {
-                  title: extractMarkdownTitle(item.content, fallbackTitle),
-                  filePath: item.filePath,
-                  content: item.content,
-                });
+                const nextTitle = extractWriteFileTitle(item.filePath, fallbackTitle);
+                const nextImage = extractMarkdownImage(item.content);
+                const relationSourceNodeId = effectiveSourceNodeId || sourceNodeId;
+                const relationGroupId = resolveRoleRelationGroupId();
+                const existingRelationNodeId = findExistingRoleRelationNodeId();
+                const placeholderRelationNodeId = !existingRelationNodeId
+                  ? findRoleGroupPlaceholderNodeId(relationGroupId)
+                  : "";
+                const pendingRoleNodeId =
+                  !existingRelationNodeId && !placeholderRelationNodeId
+                    ? findRoleGroupPendingRoleNodeId(relationGroupId)
+                    : "";
+                const relationTargetNodeId = existingRelationNodeId || placeholderRelationNodeId || pendingRoleNodeId;
+                if (relationTargetNodeId) {
+                  setNodes((prev) => {
+                    const next = prev.map((node) =>
+                      node.id !== relationTargetNodeId
+                        ? node
+                        : {
+                            ...node,
+                            data: {
+                              ...node.data,
+                              label: "角色",
+                              title: nextTitle,
+                              filePath: item.filePath,
+                              content: item.content,
+                              image: nextImage,
+                              fromApi: true,
+                              isStreaming: false,
+                              allowTitleEdit: true,
+                              allowImageUpload: true,
+                              autoEdit: true,
+                            } as any,
+                          }
+                    );
+                    nodesRef.current = next;
+                    return next;
+                  });
+                  rememberLatestGeneratedNode(relationTargetNodeId);
+                  return;
+                }
               });
             } else {
               const primaryFile =
@@ -5119,16 +6827,16 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 }[cardOutputType] as CanvasCardKey);
               if (loadingCardId) {
                 updateLoadingCard(loadingCardId, targetCardKey, {
-                  title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                  title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                   filePath: primaryFile.filePath,
                   content: primaryFile.content,
                   image: extractMarkdownImage(primaryFile.content),
                 });
-                if (useContextLinkedCreation && sourceNodeId && targetCardKey === "outline" && effectiveFiles.length > 1) {
+                if (useContextLinkedCreation && effectiveSourceNodeId && targetCardKey === "outline" && effectiveFiles.length > 1) {
                   appendOutlineCardsToGroup(
-                    sourceNodeId,
+                    effectiveSourceNodeId,
                     effectiveFiles.slice(1).map((item) => ({
-                      title: extractMarkdownTitle(item.content, trimmedIdea),
+                      title: extractWriteFileTitle(item.filePath, trimmedIdea),
                       filePath: item.filePath,
                       content: item.content,
                       image: extractMarkdownImage(item.content),
@@ -5137,17 +6845,17 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     }))
                   );
                 }
-              } else if (useContextLinkedCreation && sourceNodeId) {
+              } else if (useContextLinkedCreation && effectiveSourceNodeId) {
                 if (targetCardKey === "brainstorm") {
-                  updateLoadingCard(sourceNodeId, targetCardKey, {
-                    title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                  updateLoadingCard(effectiveSourceNodeId, targetCardKey, {
+                    title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                     filePath: primaryFile.filePath,
                     content: primaryFile.content,
                     image: extractMarkdownImage(primaryFile.content),
                   });
                 } else if (targetCardKey === "summary") {
-                  addSummaryCard(sourceNodeId, {
-                    title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                  addSummaryCard(effectiveSourceNodeId, {
+                    title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                     filePath: primaryFile.filePath,
                     content: primaryFile.content,
                     image: extractMarkdownImage(primaryFile.content),
@@ -5157,9 +6865,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     allowImageUpload: true,
                   });
                 } else if (targetCardKey === "info") {
-                  addSettingCard(sourceNodeId, {
+                  addSettingCard(effectiveSourceNodeId, {
                     label: "信息",
-                    title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                    title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                     filePath: primaryFile.filePath,
                     content: primaryFile.content,
                     image: extractMarkdownImage(primaryFile.content),
@@ -5169,8 +6877,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     allowImageUpload: false,
                   });
                 } else if (targetCardKey === "outline") {
-                  appendOutlineCardsToGroup(sourceNodeId, [{
-                    title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                  appendOutlineCardsToGroup(effectiveSourceNodeId, [{
+                    title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                     filePath: primaryFile.filePath,
                     content: primaryFile.content,
                     image: extractMarkdownImage(primaryFile.content),
@@ -5179,7 +6887,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   }]);
                 } else {
                   createCardByKey(targetCardKey, {
-                    title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                    title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                     filePath: primaryFile.filePath,
                     content: primaryFile.content,
                     image: extractMarkdownImage(primaryFile.content),
@@ -5187,17 +6895,20 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 }
               } else {
                 createCardByKey(targetCardKey, {
-                  title: extractMarkdownTitle(primaryFile.content, trimmedIdea),
+                  title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
                   filePath: primaryFile.filePath,
                   content: primaryFile.content,
                   image: extractMarkdownImage(primaryFile.content),
                 });
               }
             }
+            finalizePendingStreamNodes();
           } else if (hasChoiceList) {
+            if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             setReqPanelStatus("success");
           } else {
             if (loadingCardId) removeLoadingCard(loadingCardId);
+            if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             setReqPanelStatus("error");
             setReqPanelDetail("状态：失败\n原因：返回数据格式不正确，请重试");
             msg("warning", "返回数据格式不正确，请重试");
@@ -5224,6 +6935,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       createCardByKey,
       createLoadingCardByKey,
       ideaContent,
+      ideaInputSource,
       isLoading,
       dialogCardPreviews,
       msg,
@@ -5232,6 +6944,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       appendOutlineCardsToGroup,
       appendRoleCardsToGroup,
       connectReferenceNodesToTargets,
+      clearBrainstormPlaceholderBatch,
+      focusCanvasNode,
       getDialogReferenceFiles,
       mergeFileRecords,
       persistGeneratedWriteFiles,
@@ -5264,6 +6978,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         options?: {
           files?: Record<string, string>;
           title?: string;
+          actionLabel?: string;
         }
       ) => {
         const currentNode = nodes.find((node) => node.id === nodeId);
@@ -5273,8 +6988,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           msg("warning", "当前卡片暂无可用标题");
           return;
         }
-        const referenceNodeId = resolveContextReferenceNodeId(nodeId);
-        const appended = appendDialogReferenceByNodeId(referenceNodeId);
+        preparedGenerateSourceNodeIdRef.current = nodeId;
+        const isGroupNode = currentNode?.type === "roleGroup";
+        const appended = isGroupNode
+          ? appendDialogReferencesByNodeIds(getGroupChildReferenceNodeIds(nodeId))
+          : appendDialogReferenceByNodeId(nodeId);
         if (options?.files && Object.keys(options.files).length > 0) {
           preparedContextFilesRef.current = mergeFileRecords(
             preparedContextFilesRef.current,
@@ -5282,9 +7000,19 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           );
         }
         if (!ideaContent.trim()) {
-          const fallbackTitle = appended?.snapshot?.title || contextIdea || "当前内容";
+          const appendedTitle = (() => {
+            if (isGroupNode && appended && "firstSnapshot" in appended) {
+              return getTextValue((appended.firstSnapshot as any)?.title);
+            }
+            if (!isGroupNode && appended && "snapshot" in appended) {
+              return getTextValue((appended.snapshot as any)?.title);
+            }
+            return "";
+          })();
+          const fallbackTitle = appendedTitle || contextIdea || "当前内容";
           const outputLabel =
             OUTPUT_TYPE_OPTIONS.find((item) => item.key === outputType)?.label ?? outputType;
+          setIdeaInputSource("default");
           setIdeaContent(`使用[${fallbackTitle}]生成${outputLabel}卡`);
         }
         if (outputType !== "auto") {
@@ -5296,13 +7024,33 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       },
       [
         appendDialogReferenceByNodeId,
+        appendDialogReferencesByNodeIds,
+        getGroupChildReferenceNodeIds,
         handleOutputTypeChange,
         ideaContent,
         mergeFileRecords,
         msg,
         nodes,
-        resolveContextReferenceNodeId,
       ]
+    );
+
+    const buildContextGeneratePrompt = useCallback(
+      (rawTitle: string, outputType: CanvasOutputType) => {
+        const normalizedTitle = getTextValue(rawTitle).trim();
+        const outputLabel =
+          OUTPUT_TYPE_OPTIONS.find((item) => item.key === outputType)?.label ?? outputType;
+        if (!normalizedTitle) {
+          return `生成${outputLabel}卡`;
+        }
+        if (normalizedTitle === outputLabel || normalizedTitle.endsWith(outputLabel)) {
+          return `生成${outputLabel}卡`;
+        }
+        if (normalizedTitle.includes(`${outputLabel}卡`)) {
+          return normalizedTitle;
+        }
+        return `生成${normalizedTitle}${outputLabel}卡`;
+      },
+      [getTextValue]
     );
 
     const handleGenerateInsFromContext = useCallback(
@@ -5312,24 +7060,36 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         options?: {
           files?: Record<string, string>;
           title?: string;
+          actionLabel?: string;
         }
       ) => {
+        if (outputType !== "auto") {
+          handleOutputTypeChange(outputType);
+        }
         const currentNode = nodes.find((node) => node.id === nodeId);
-        const contextIdea = getTextValue(options?.title) || getTextValue((currentNode?.data as any)?.title);
+        const nodeLabel = getTextValue(currentNode?.data?.label) || "当前内容";
+        const hasOptionFiles = Boolean(options?.files && Object.keys(options.files).length > 0);
+        const contextIdea = getTextValue(options?.title) ||
+          (hasOptionFiles ? nodeLabel : getTextValue((currentNode?.data as any)?.title));
         const hasFiles = Boolean(options?.files && Object.keys(options.files).length > 0);
         if (!contextIdea.trim() && !hasFiles) {
           msg("warning", "当前卡片暂无可用标题");
           return;
         }
+        const promptIdea = buildContextGeneratePrompt(
+          contextIdea || nodeLabel,
+          outputType
+        );
         void handleGenerateIns(
           "manual",
-          contextIdea || "角色组",
+          promptIdea,
           outputType,
           nodeId,
-          options?.files
+          options?.files,
+          options?.actionLabel
         );
       },
-      [handleGenerateIns, msg, nodes]
+      [buildContextGeneratePrompt, getTextValue, handleGenerateIns, handleOutputTypeChange, msg, nodes]
     );
 
     const createSingleSuggestionCard = useCallback(
@@ -5388,10 +7148,12 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
         stopBrainstormProgress();
         brainstormBatchIdsRef.current = [];
+        setIdeaInputSource("default");
         setIdeaContent(suggestion.theme);
         setCardKeyLabel(nextCardLabel);
         setReqPanelTitle(nextCardTitle);
         setSmartSuggestionsActive(false);
+        setPendingContextActionLabel("");
         setReqPanelStatus("loading");
         setReqPanelDetail(`正在根据所选${nextCardTitle}生成卡片，请稍等...`);
         setReqPanelFooterDetail("");
@@ -5409,8 +7171,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         const cardType = snapshot.label;
 
         if (!ideaContent.trim()) {
+          setIdeaInputSource("default");
           setIdeaContent(`使用[${cardType}卡片]，生成 ${snapshot.title}信息`);
         }
+        setReqPanelVisible(false);
+        setReqPanelExpanded(false);
         msg(added ? "success" : "warning", added ? "已添加到对话" : "该卡片已在引用列表中");
       },
       [appendDialogReferenceByNodeId, ideaContent, msg]
@@ -5422,37 +7187,20 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         if (!normalizedGroupNodeId) return;
 
         const latestNodes = nodesRef.current;
-        const childNodes = latestNodes
-          .filter((node) => {
-            if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
-            const roleGroupId = getTextValue((node.data as any)?.roleGroupId);
-            const outlineGroupId = getTextValue((node.data as any)?.outlineGroupId);
-            const parentId = getTextValue(node.parentId);
-            return (
-              roleGroupId === normalizedGroupNodeId ||
-              outlineGroupId === normalizedGroupNodeId ||
-              parentId === normalizedGroupNodeId
-            );
-          })
-          .sort((a, b) => {
-            const ay = Number(a.position?.y ?? 0);
-            const by = Number(b.position?.y ?? 0);
-            if (ay !== by) return ay - by;
-            return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
-          });
-
-        if (childNodes.length === 0) {
+        const childNodeIds = getGroupChildReferenceNodeIds(normalizedGroupNodeId);
+        if (childNodeIds.length === 0) {
           msg("warning", "当前卡片组暂无可引用卡片");
           return;
         }
 
-        const result = appendDialogReferencesByNodeIds(childNodes.map((node) => node.id));
+        const result = appendDialogReferencesByNodeIds(childNodeIds);
         if (!result) return;
 
         const groupNode = latestNodes.find((node) => node.id === normalizedGroupNodeId);
         const groupLabel = getTextValue((groupNode?.data as any)?.label) || "卡片";
 
         if (!ideaContent.trim()) {
+          setIdeaInputSource("default");
           setIdeaContent(`使用[${groupLabel}卡片组]生成信息卡`);
         }
 
@@ -5463,7 +7211,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
 
         msg("warning", result.duplicateCount > 0 ? "该卡片组已在引用列表中" : "当前卡片组暂无可引用卡片");
       },
-      [appendDialogReferencesByNodeIds, ideaContent, msg]
+      [appendDialogReferencesByNodeIds, getGroupChildReferenceNodeIds, ideaContent, msg]
     );
 
     const addNewCanvas = useCallback(() => {
@@ -5475,6 +7223,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       nodesRef.current = [];
       edgesRef.current = [];
       setIsLoading(false);
+      setIdeaInputSource("default");
       setIdeaContent("");
       setIdeaPlaceholderIndex(0);
       setGenerateMode("smart");
@@ -5486,6 +7235,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       setReqPanelVisible(false);
       setReqPanelExpanded(false);
       setCardKeyLabel("脑洞");
+      setReqPanelUseSmartTheme(false);
       setReqPanelTitle("");
       setReqPanelStatus("idle");
       setReqPanelDetail("");
@@ -5518,12 +7268,13 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
     }, [createNewCanvasSessionId, setNodes, setEdges, stopBrainstormProgress, workId]);
 
     const handleSaveCanvas = useCallback(async (sessionIdOverride?: string) => {
-      if (!inspirationDrawId) {
+      const targetId = await ensureInspirationDrawId();
+      if (!targetId) {
         msg("warning", "请先创建画布");
         return;
       }
       try {
-        await saveInspirationCanvasReq(inspirationDrawId, {
+        await saveInspirationCanvasReq(targetId, {
           nodes: nodes as unknown[],
           edges: edges as unknown[],
         });
@@ -5531,7 +7282,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       } catch {
         msg("error", "保存失败，请稍后重试");
       }
-    }, [inspirationDrawId, nodes, edges, msg, getOrCreateCanvasSessionId, workId]);
+    }, [ensureInspirationDrawId, nodes, edges, msg, getOrCreateCanvasSessionId]);
 
     const getCanvasSessionId = useCallback(() => {
       if (!workId) return "";
@@ -5550,12 +7301,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       canvasRef,
       () => ({
         addNewCanvas,
+        addInfoCardFromExternalFile,
+        focusFileByPath,
         openHistory,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, openHistory, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, openHistory, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
@@ -5609,24 +7362,51 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         handleSummaryGenerate: generateStorySettings,
         handleSummaryAdd: addSummaryCard,
         handleSummaryDelete: deleteNode,
-        handleSummaryUpdate: (id: string, c: string) => {
-          updateNodeContent(id, c);
+        handleSummaryUpdate: (
+          id: string,
+          c: string,
+          options?: {
+            title?: string;
+            filePath?: string;
+            image?: string;
+            images?: string[];
+          }
+        ) => {
+          updateNodeContent(id, c, options);
           // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
         handleSummaryExpand: () => scheduleAutoLayoutForExpand(),
         handleSettingGenerate: generateOutlineNodes,
         handleSettingAdd: addSettingCard,
         handleSettingDelete: deleteNode,
-        handleSettingUpdate: (id: string, c: string) => {
-          updateNodeContent(id, c);
+        handleSettingUpdate: (
+          id: string,
+          c: string,
+          options?: {
+            title?: string;
+            filePath?: string;
+            image?: string;
+            images?: string[];
+          }
+        ) => {
+          updateNodeContent(id, c, options);
           // 不触发 autoLayout，与 addSummaryCard 一致，避免流式输出时新节点被 dagre 排到顶部
         },
         handleSettingExpand: () => scheduleAutoLayoutForExpand(),
         handleOutlineGenerate,
         handleOutlineAdd: addOutlineCard,
         handleOutlineDelete: deleteNode,
-        handleOutlineUpdate: (id: string, c: string) => {
-          updateNodeContent(id, c);
+        handleOutlineUpdate: (
+          id: string,
+          c: string,
+          options?: {
+            title?: string;
+            filePath?: string;
+            image?: string;
+            images?: string[];
+          }
+        ) => {
+          updateNodeContent(id, c, options);
           // 不触发 autoLayout，避免流式接口结束后新节点被 dagre 排到顶部
         },
         handleOutlineExpand: () => scheduleAutoLayoutForExpand(),
@@ -5658,7 +7438,9 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       ]
     );
   
-    const showInit = !forceCanvasView;
+    // 有已回显的画布数据时，优先展示 React Flow，而不是初始化引导态。
+    const hasCanvasSnapshotData = nodes.length > 0 || edges.length > 0;
+    const showInit = !forceCanvasView && !hasCanvasSnapshotData;
 
     const dockRef = useRef<HTMLDivElement | null>(null);
     const prevShowInitRef = useRef(showInit);
@@ -5695,14 +7477,17 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       );
     }, [showInit]);
 
+    const panelThemeLabel = reqPanelUseSmartTheme ? "智能" : (cardKeyLabel || "脑洞");
     const panelTitleText =
       reqPanelStatus === "loading"
-        ? `${cardKeyLabel || "脑洞"}喵思考中`
+        ? `${panelThemeLabel}喵思考中`
         : reqPanelStatus === "success"
-          ? `${cardKeyLabel || "脑洞"}喵搞定了！`
+          ? `${panelThemeLabel}喵搞定了！`
           : reqPanelStatus === "error"
-            ? `${cardKeyLabel || "脑洞"}喵出错了`
-            : reqPanelTitle || (showInit ? "智能喵" : `${cardKeyLabel || "脑洞"}`);
+            ? `${panelThemeLabel}喵出错了`
+            : reqPanelUseSmartTheme
+              ? "智能喵"
+              : reqPanelTitle || (showInit ? "智能喵" : `${cardKeyLabel || "脑洞"}`);
     const panelTitleBackgroundImage = useMemo(() => {
       if (panelTitleText.includes("梗概")) {
         return "linear-gradient(90deg, #DBEAFE 0%, rgba(219,234,254,0) 100%)";
@@ -5734,24 +7519,55 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       return "#EFAF00";
     }, [panelTitleText]);
 
-    const panelDetailText = (reqPanelStatus === "loading"
-        ? (ideaContent.trim()
-            ? `你想要创建一个${ideaContent.trim()}题材的内容，听起来很炫，让我想想...`
-            : "呼~ 正在为您生成三个随机脑洞，请稍等。。")
-        : reqPanelStatus === "success"
-          ? `灵感大开！已经生成了${cardKeyLabel || "脑洞"}，快在画布中查看吧`
-          : "");
+    const panelDetailText = useMemo(() => {
+      if (reqPanelStatus === "loading") {
+        if (pendingContextActionLabel) {
+          return `正在${pendingContextActionLabel}，请稍等...`;
+        }
+        const trimmedIdeaContent = ideaContent.trim();
+        if (trimmedIdeaContent) {
+          return `你想要创建一个${trimmedIdeaContent}题材的内容，听起来很炫，让我想想...`;
+        } else if (pendingSuggestionIdea) {
+          return `你想要创建一个${pendingSuggestionIdea}题材的内容，提起来很炫，让我想想`;
+        }
+        return `呼~ 正在为您生成随机${['自动', '智能'].includes(cardKeyLabel) ? '脑洞' : cardKeyLabel}，请稍等。。。`;
+      }
 
-    const panelFooterText = reqPanelFooterDetail || "";
+      if (reqPanelStatus === "success") {
+        if (smartSuggestions.length) {
+          return `已经为你设计了三个创意脑洞，如果满意我将生成脑洞卡片并继续推进创作`
+        } 
+        return `灵感大开！已经生成了${['自动', '智能'].includes(cardKeyLabel) ? '脑洞' : cardKeyLabel}，快在画布中查看吧`;
+      }
+
+      return "";
+    }, [cardKeyLabel, ideaContent, reqPanelStatus, smartSuggestions, pendingSuggestionIdea, pendingContextActionLabel]);
+
+    const panelFooterText = reqPanelFooterDetail || "没找到合适的选项？你如果有其他想法，可以直接在下方输入框中输入。";
+    const hasSmartSuggestions = smartSuggestions.length > 0;
+    const hasReqPanelHeaderExtraContent = Boolean(
+      panelDetailText || latestGeneratedNodeId || reqPanelAction
+    );
+    const shouldAttachReqPanelToInput = reqPanelVisible;
     const shouldForceExpandReqPanel =
-      smartSuggestionsActive && reqPanelStatus === "success" && smartSuggestions.length > 0;
+      smartSuggestionsActive && reqPanelStatus === "success" && hasSmartSuggestions;
+    const shouldLockReqPanelCollapsed = !hasSmartSuggestions;
     useEffect(() => {
       if (shouldForceExpandReqPanel) {
         setReqPanelExpanded(true);
       }
     }, [shouldForceExpandReqPanel]);
-    const isReqPanelExpanded = reqPanelExpanded;
+    useEffect(() => {
+      if (shouldLockReqPanelCollapsed) {
+        setReqPanelExpanded(false);
+      }
+    }, [shouldLockReqPanelCollapsed]);
+    const isReqPanelExpanded = shouldLockReqPanelCollapsed ? false : reqPanelExpanded;
+    const shouldReleaseReqPanelOverlap =
+      !isReqPanelExpanded &&
+      hasReqPanelHeaderExtraContent;
     const toggleReqPanelExpanded = () => {
+      if (shouldLockReqPanelCollapsed) return;
       setReqPanelExpanded((v) => !v);
     };
     const inputTriggerRequestType: "auto" | "manual" =
@@ -5765,7 +7581,10 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
       >
         <div
           className={cn(
-            "relative w-full rounded-[21px] border border-[#f3f4f6] bg-white px-[15px] pt-[12px] shadow-[0px_22px_44px_0px_rgba(0,0,0,0.1)]",
+            "relative w-full border border-[#f3f4f6] bg-white px-[15px] pt-[12px] shadow-[0px_22px_44px_0px_rgba(0,0,0,0.1)]",
+            shouldAttachReqPanelToInput
+              ? "rounded-b-[21px] rounded-t-none border-t-0"
+              : "rounded-[21px]",
             dialogCardPreviews.length > 0 ? "min-h-[8.5rem]" : "h-[clamp(5rem,12vh,6.125rem)]"
           )}
         >
@@ -5816,11 +7635,14 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
               "placeholder:text-[#d9d9d9] focus:border-0 focus:outline-none focus-visible:ring-0 disabled:opacity-60"
             )}
             value={ideaContent}
-            onChange={(e) => setIdeaContent(e.target.value)}
+            onChange={(e) => {
+              setIdeaInputSource("default");
+              setIdeaContent(e.target.value);
+            }}
             onKeyDown={(e) => {
               if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
-              handleGenerateIns(inputTriggerRequestType);
+              handleGenerateIns(inputTriggerRequestType, undefined, undefined, undefined, undefined, undefined, ideaInputSource);
             }}
             placeholder={currentIdeaPlaceholder}
             rows={2}
@@ -5983,7 +7805,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 ideaContent === '' && showInit ? 'h-[35px]' : 'h-[28px] w-[28px]',
               )}
               disabled={isLoading}
-              onClick={() => handleGenerateIns(inputTriggerRequestType)}
+              onClick={() => handleGenerateIns(inputTriggerRequestType, undefined, undefined, undefined, undefined, undefined, ideaInputSource)}
             >
               {ideaContent === '' && showInit ? <span className="flex items-center gap-1.5">
                 <span>随机选题</span>
@@ -6002,7 +7824,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         className={cn(
           "pointer-events-none absolute inset-x-0 z-50 flex justify-center px-4",
           "bottom-5 will-change-transform",
-          showInit ? "-translate-y-[11.25rem]" : "translate-y-[-0.75rem]"
+          showInit ? "-translate-y-[8.5rem]" : "translate-y-[-0.75rem]"
         )}
       >
         <div className="pointer-events-none flex w-full max-w-[500px] flex-col">
@@ -6015,7 +7837,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 >
                   <p className="mt-2 text-[13px] leading-5 text-[#374151]">
                     <span className="mr-1 inline-block ins-celebration-emoji">🎉</span>
-                    恭喜您已经完成一篇小说的伟大摄像，点击左上角-&gt;写作可以定制化代写正文哦~
+                    恭喜您已经完成一篇小说的伟大设想，点击左上角-&gt;写作可以定制化代写正文哦~
                   </p>
                 </div>
               </div>
@@ -6029,28 +7851,44 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   ? panelFooterText
                     ? "-mb-[clamp(0.125rem,0.5vh,0.25rem)]"
                     : "-mb-[clamp(0.5rem,1vh,0.75rem)]"
-                  : "-mb-[clamp(0.75rem,1.5vh,1.25rem)]",
+                  : shouldReleaseReqPanelOverlap
+                    ? "-mb-px"
+                    : hasReqPanelHeaderExtraContent
+                      ? "-mb-[clamp(0.25rem,0.75vh,0.5rem)]"
+                      : "-mb-[clamp(0.75rem,1.5vh,1.25rem)]",
                 "transition-[margin,transform] duration-300 ease-out",
-                "translate-y-1 sm:translate-y-2 md:translate-y-3 lg:translate-y-5"
+                shouldReleaseReqPanelOverlap
+                  ? "translate-y-0"
+                  : "translate-y-1 sm:translate-y-2 md:translate-y-3 lg:translate-y-5"
               )}
             >
               <div
                 className={cn(
-                  "flex min-h-[clamp(4.75rem,10vh,6.25rem)] w-full items-start gap-3 px-4 py-3 text-left",
+                  "flex w-full items-start gap-3 px-4 text-left",
+                  hasReqPanelHeaderExtraContent
+                    ? "py-3.5"
+                    : "py-3",
                   "transition-colors duration-200",
+                  !shouldLockReqPanelCollapsed && "cursor-pointer"
                 )}
-                onClick={toggleReqPanelExpanded}
-                role="button"
-                tabIndex={0}
+                onClick={!shouldLockReqPanelCollapsed ? toggleReqPanelExpanded : undefined}
+                role={!shouldLockReqPanelCollapsed ? "button" : undefined}
+                tabIndex={!shouldLockReqPanelCollapsed ? 0 : undefined}
                 aria-expanded={isReqPanelExpanded}
                 onKeyDown={(e) => {
+                  if (shouldLockReqPanelCollapsed) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     toggleReqPanelExpanded();
                   }
                 }}
               >
-                <div className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    "min-w-0 flex-1",
+                    hasReqPanelHeaderExtraContent && "space-y-2"
+                  )}
+                >
                   <div
                     className="truncate inline-flex w-fit rounded-sm flex gap-1 items-center px-2 py-0.5 text-[13px] font-semibold text-[#111]"
                     style={{ backgroundImage: panelTitleBackgroundImage }}
@@ -6059,6 +7897,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     <span
                       style={{
                         color: panelTitleIconColor,
+                        lineHeight: 1
                       }}
                     >
                       <Iconfont unicode="&#xe789;" />
@@ -6066,16 +7905,18 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     {panelTitleText}
                   </div>
                   {panelDetailText || latestGeneratedNodeId ? (
-                    <div className="mt-0.5 flex items-center gap-2 text-[12px] text-[#6b7280]">
-                      {panelDetailText ? (
-                        <span className="min-w-0 flex-1 truncate">{panelDetailText}</span>
-                      ) : (
-                        <span className="min-w-0 flex-1" />
-                      )}
+                    <div className="flex w-full items-start justify-between gap-2 text-[12px] text-[#6b7280]">
+                      <div className="min-w-0 flex-1">
+                        {panelDetailText ? (
+                          <span className="block min-w-0 w-full whitespace-normal break-words leading-5">
+                            {panelDetailText}
+                          </span>
+                        ) : null}
+                      </div>
                       {latestGeneratedNodeId ? (
                         <button
                           type="button"
-                          className="shrink-0 inline-flex items-center gap-1 text-black transition-opacity hover:opacity-80"
+                          className="inline-flex shrink-0 items-center gap-1 self-start whitespace-nowrap text-black transition-opacity hover:opacity-80"
                           onClick={(e) => {
                             e.stopPropagation();
                             focusCanvasNode(latestGeneratedNodeId);
@@ -6107,13 +7948,13 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     </Button>
                   ) : null}
                 </div>
-                <Iconfont
+                {hasSmartSuggestions ? <Iconfont
                   unicode={isReqPanelExpanded ? "&#xeaa1;" : "&#xeaa6;"}
                   className={cn(
                     "shrink-0 text-[#6b7280] transition-transform cursor-pointer duration-300",
                     isReqPanelExpanded ? "rotate-0" : "rotate-0"
                   )}
-                />
+                /> : null}
               </div>
 
               <div
@@ -6164,7 +8005,11 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
             </div>
           )}
 
-          <div className="pointer-events-auto relative z-20">{IdeaInputPanel}</div>
+          <div
+            className="pointer-events-auto relative z-20"
+          >
+            {IdeaInputPanel}
+          </div>
         </div>
       </div>
     );
@@ -6177,22 +8022,25 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
         >
           {IdeaInputDock}
           {showInit ? (
-            <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 -translate-y-14 sm:-translate-y-16 md:-translate-y-18 lg:-translate-y-26">
+            <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 -translate-y-18 sm:-translate-y-20 md:-translate-y-22 lg:-translate-y-30">
               <InitCarousel
                 isAnimate
                 onPickType={(payload) => {
-                  setIdeaContent(payload.text);
-                  if (payload.source === "img") {
-                    setGenerateMode("brainstorm");
-                  }
+                  setIdeaInputSource(payload.source === "img" || payload.source === "label" ? "carousel" : "default");
+                  const cleanedText = String(payload.text || "")
+                    .replace(/^\s*脑洞喵[，,、:：]?\s*/i, "")
+                    .replace(/^\s*(?:请\s*)?(?:给我|帮我)?\s*生成\s*/i, "")
+                    .trim();
+                  setIdeaContent(cleanedText || payload.text);
+                  applyCanvasMode("brainstorm");
                 }}
               />
-              <h1 className="z-10 mt-[-10px] text-center text-[26px] font-semibold text-[#4f4f4f]">
+              <h1 className="z-10 mt-3 text-center text-[26px] font-semibold text-[#4f4f4f]">
                 {isLoading
-                  ? `爆文猫写作正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
-                  : "与爆文猫写作一起脑洞大开地创作"}
+                  ? `脑洞喵正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
+                  : "与脑洞喵一起脑洞大开地创作"}
               </h1>
-              <div className="flex gap-2 mt-2">
+              <div className="mt-4 flex gap-2">
                 <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => navigate("/workspace/creation-community/course")}>
                   <Iconfont unicode="&#xe64f;" className="text-[#E5E7EB]" />
                   创作灵感社区
@@ -6274,13 +8122,16 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     </ControlButton>
                   </Controls>
                 )}
-                <MiniMap
-                  pannable={!showInit}
-                  zoomable={!showInit}
-                  // 放到左下角缩放控件上方
-                  style={{ left: 5, right: "auto", bottom: 64 }}
-                />
-                <div className="pointer-events-auto absolute bottom-4 left-4 z-50 flex items-center rounded-[12px] border border-[#e5e7eb] bg-white/90 px-2 py-1 text-xs shadow-sm backdrop-blur">
+                {!shouldHideCanvasAuxControls ? (
+                  <MiniMap
+                    pannable={!showInit}
+                    zoomable={!showInit}
+                    // 放到左下角缩放控件上方
+                    style={{ left: 5, right: "auto", bottom: 64 }}
+                  />
+                ) : null}
+                {!shouldHideCanvasAuxControls && (
+                  <div className="pointer-events-auto absolute bottom-4 left-4 z-50 flex items-center rounded-[12px] border border-[#e5e7eb] bg-white/90 px-2 py-1 text-xs shadow-sm backdrop-blur">
                   <Button
                     type="button"
                     variant="ghost"
@@ -6304,7 +8155,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                   >
                     +
                   </Button>
-                </div>
+                  </div>
+                )}
 
                 <Background />
               </ReactFlow>
@@ -6347,7 +8199,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
           />
 
           {/* 画布右下角：+ 展开 4 个操作项（无整体背景，item 白底），展开时 + 变 - */}
-          <div className="pointer-events-auto absolute bottom-5 right-5 z-50">
+          {!shouldHideCanvasAuxControls && (
+            <div className="pointer-events-auto absolute bottom-5 right-5 z-50">
             <Popover open={moreActionsOpen} onOpenChange={setMoreActionsOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -6395,7 +8248,7 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     onClick={() => {
                       setMoreActionsOpen(false);
                       setForceCanvasView(true);
-                      const nodeId = createCardByKey("role", { insertPosition: "right" });
+                      const nodeId = createStandaloneRoleGroupDraftCard({ insertPosition: "right" }).roleNodeId;
                       focusNewlyCreatedBlankNode(nodeId);
                     }}
                   >
@@ -6406,8 +8259,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                     onClick={() => {
                       setMoreActionsOpen(false);
                       setForceCanvasView(true);
-                      const result = createStandaloneOutlineSettingsGroup({ insertPosition: "right" });
-                      focusNewlyCreatedBlankNode(result.groupId);
+                      const nodeId = createStandaloneOutlineSettingsGroup({ insertPosition: "right" }).groupId;
+                      focusNewlyCreatedBlankNode(nodeId);
                     }}
                   >
                     大纲卡
@@ -6426,7 +8279,8 @@ import naodongmiao from "@/assets/images/canvas/naodongmiao.png";
                 </div>
               </PopoverContent>
             </Popover>
-          </div>
+            </div>
+          )}
         </div>
         <style>{`
           /* 统一连接线样式：细灰色圆角，和 Vue 版保持一致风格 */
