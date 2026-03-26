@@ -364,6 +364,7 @@ const MarkdownEditorPage = () => {
     chatCurrentSession,
     faqCurrentSession,
     chatMessages,
+    faqMessages,
     setWorkId,
     createNewSession,
     loadSession,
@@ -372,7 +373,6 @@ const MarkdownEditorPage = () => {
     addMessage: addMessageToDualTab,
     updateLastChatMessage,
   } = useDualTabChat();
-
   const currentSessionId =
     activeTab === "chat"
       ? chatCurrentSession?.id ?? ""
@@ -387,6 +387,7 @@ const MarkdownEditorPage = () => {
   const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
   const latestChatSessionIdRef = useRef("");
+  const hiltApproveInFlightRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [isHiltApproveStreaming, setIsHiltApproveStreaming] = useState(false);
   const [todosExpanded, setTodosExpanded] = useState(false);
@@ -609,6 +610,7 @@ const MarkdownEditorPage = () => {
     },
     onComplete: async () => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       const finalized = streamingMessageRef.current;
       if (finalized) {
         const suffix = "(内容由AI生成，仅供参考)";
@@ -660,6 +662,7 @@ const MarkdownEditorPage = () => {
     },
     onSensitiveWord: () => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
       skipGuideForCurrentStreamRef.current = true;
       guideRequestRef.current = null;
@@ -685,6 +688,7 @@ const MarkdownEditorPage = () => {
     },
     onError: (err, needSendErrorMsg) => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
@@ -737,6 +741,7 @@ const MarkdownEditorPage = () => {
     guideRequestRef.current = null;
     stoppedByUserRef.current = true;
     setIsHiltApproveStreaming(false);
+    hiltApproveInFlightRef.current = false;
     if (needAIMessage) {
       finalizeStreamingMessageWithSuffix("\n\n智能体已暂停");
     } else {
@@ -1047,17 +1052,26 @@ const MarkdownEditorPage = () => {
     if (activeTab === "canvas") return;
     const hasCurrentSession =
       activeTab === "chat" ? !!chatCurrentSession : !!faqCurrentSession;
-    if (hasCurrentSession) return;
+    const hasCurrentMessages =
+      activeTab === "chat" ? chatMessages.length > 0 : faqMessages.length > 0;
+    if (hasCurrentSession && hasCurrentMessages) return;
+    if (hasCurrentMessages) return;
     const loadKey = `${workId}_${activeTab}`;
     if (lastAutoLoadSessionKeyRef.current === loadKey) return;
     lastAutoLoadSessionKeyRef.current = loadKey;
-    void loadLatestSession(activeTab);
+    void loadLatestSession(activeTab).then((session) => {
+      if (!session && lastAutoLoadSessionKeyRef.current === loadKey) {
+        lastAutoLoadSessionKeyRef.current = "";
+      }
+    });
   }, [
     workId,
     currentWorkId,
     activeTab,
     chatCurrentSession,
     faqCurrentSession,
+    chatMessages.length,
+    faqMessages.length,
     loadLatestSession,
   ]);
 
@@ -2430,6 +2444,10 @@ const MarkdownEditorPage = () => {
   );
   const handleHiltApprove = useCallback(
     (approvedMsg: AgentCustomMessageItem) => {
+      if (hiltApproveInFlightRef.current || isHiltApproveStreaming || langGraphStream.isStreaming) {
+        return;
+      }
+      hiltApproveInFlightRef.current = true;
       updateLastChatMessage((prev) => {
         const custom = prev.customMessage ?? [];
         return {
@@ -2442,7 +2460,7 @@ const MarkdownEditorPage = () => {
       setIsHiltApproveStreaming(true);
       sendChatText("", { command: "approve", addUserMessage: false, commandOnly: true });
     },
-    [updateLastChatMessage, sendChatText]
+    [isHiltApproveStreaming, langGraphStream.isStreaming, updateLastChatMessage, sendChatText]
   );
   const handleRendererSendMessage = useCallback(
     (text: string, reload = false) =>
