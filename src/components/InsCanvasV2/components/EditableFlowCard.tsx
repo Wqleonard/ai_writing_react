@@ -960,8 +960,7 @@ export default function EditableFlowCard({
     isBlankDraft &&
     isPendingGenerate &&
     isBrainstormAiMode &&
-    !isServerStreaming &&
-    !hasCardContent;
+    !isServerStreaming;
   const hasPendingApiResponse = !hasCompletedApiData && (isServerStreaming || isPendingGenerate);
   const hasAnyPendingCanvasOutput = useMemo(
     () =>
@@ -969,7 +968,6 @@ export default function EditableFlowCard({
         const content = String(node.data?.content ?? "").trim();
         return (
           Boolean((node.data as any)?.isStreaming) ||
-          Boolean((node.data as any)?.pendingGenerate) ||
           (Boolean((node.data as any)?.fromApi) && !content)
         );
       }),
@@ -1876,16 +1874,18 @@ export default function EditableFlowCard({
               <span className="min-w-0 h-full flex-1 overflow-y-auto whitespace-pre-wrap break-words overscroll-contain pr-1">
                 {readonlyTitleText}
               </span>
-              {isBlankDraft && !isGroupedOutlineCard && !isPendingGenerate ? (
+              {isBlankDraft && !isGroupedOutlineCard ? (
                 <button
                   type="button"
-                  className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center text-black transition-colors hover:text-[#EFAF00]"
+                  className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center text-black transition-colors hover:text-[#EFAF00] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-black"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (shouldDisableToolbarActions) return;
                     canvasHandlers.handlePrepareBrainstormCard?.(id);
                   }}
                   title="AI 生成"
                   aria-label="AI 生成"
+                  disabled={shouldDisableToolbarActions}
                 >
                   <Iconfont unicode="&#xe6d9;" className="size-3" />
                 </button>
