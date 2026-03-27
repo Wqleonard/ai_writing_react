@@ -33,7 +33,10 @@ import type {
   ChatMessage,
   FileItem as FileItemType,
 } from "@/stores/chatStore";
-import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
+import type {
+  AgentCustomMessage as DualTabAgentCustomMessage,
+  ChatMessage as DualTabChatMessage,
+} from "@/types/chat";
 import type { ChatTabType } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
 import type { ChatInputStore } from "@/stores/chatInputStore";
@@ -694,10 +697,54 @@ const MarkdownEditorPage = () => {
     if (needGuideRequest && workId) {
       const sessionId = latestChatSessionIdRef.current || chatCurrentSession?.id || "";
       if (sessionId) {
-        void langGraphStream.fetchSuggestions(sessionId, workId);
+        // 与 Vue stop 链路对齐：停止后单独拉 guide，并直接绑定到最后一条消息，
+        // 避免依赖 hook 内部 messagesRef 在 stop 场景下为空导致“接口调用成功但不展示”。
+        void (async () => {
+          try {
+            const res = await generateGuideReq(sessionId, Number(workId)) as {
+              guides?: string[] | string
+            } | undefined;
+            const guides = parseGuidesPayload(res?.guides);
+            if (guides.length === 0) return;
+            updateLastChatMessage((prev) => {
+              const custom = Array.isArray(prev.customMessage) ? [...prev.customMessage] : [];
+              if (custom.length > 0) {
+                const lastIdx = custom.length - 1;
+                custom[lastIdx] = {
+                  ...custom[lastIdx],
+                  suggestions: guides,
+                };
+                return {
+                  ...prev,
+                  customMessage: custom,
+                };
+              }
+              const suggestionCarrier: DualTabAgentCustomMessage = {
+                id: `stop_guide_${Date.now()}`,
+                type: "ai",
+                content: prev.content || "智能体已暂停",
+                resultType: "input",
+                additional_kwargs: {},
+                response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
+                name: null,
+                example: false,
+                tool_calls: [],
+                invalid_tool_calls: [],
+                usage_metadata: null,
+                suggestions: guides,
+              };
+              return {
+                ...prev,
+                customMessage: [suggestionCarrier],
+              };
+            });
+          } catch (_) {
+            // guide 获取失败不打断 stop 主流程
+          }
+        })();
       }
     }
-  }, [chatCurrentSession?.id, finalizeStreamingMessageWithSuffix, langGraphStream, workId]);
+  }, [chatCurrentSession?.id, finalizeStreamingMessageWithSuffix, langGraphStream, updateLastChatMessage, workId]);
 
   const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
     if (langGraphStream.error) return "error";
@@ -1156,27 +1203,23 @@ const MarkdownEditorPage = () => {
     }
   }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
+  const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
+    if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
+      return false;
+    }
+    const lastCustom = message.customMessage[message.customMessage.length - 1];
+    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+    return hiltStatus === "in_progress" && Array.isArray(hiltTodos) && hiltTodos.length > 0;
+  }, []);
+
   const handleBackClick = useCallback(async () => {
     const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
       Array.isArray(list) && list.some((item) => item.status === "pending")
     );
     const lastChat = chatMessages[chatMessages.length - 1];
-    const hasPendingHilt = (() => {
-      if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
-        return false;
-      }
-      const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
-      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
-      if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
-      const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
-      if (Array.isArray(hiltTodos) && hiltTodos.length > 0) return hiltStatus === "in_progress";
-      const toolCalls =
-        (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
-          ?.tool_calls ?? [];
-      return toolCalls.some(
-        (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-      );
-    })();
+    const hasPendingHilt = hasExplicitPendingHilt(lastChat);
 
     if (langGraphStream.isStreaming) {
       const ok = await confirm({
@@ -1221,6 +1264,7 @@ const MarkdownEditorPage = () => {
   }, [
     fileChangesMap,
     chatMessages,
+    hasExplicitPendingHilt,
     langGraphStream,
     confirm,
     clearAssociationTags,
@@ -1497,23 +1541,8 @@ const MarkdownEditorPage = () => {
 
   const hasPendingHiltInChat = useMemo(() => {
     const lastChat = chatMessages[chatMessages.length - 1];
-    if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
-      return false;
-    }
-    const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
-    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
-    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
-    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
-    if (Array.isArray(hiltTodos) && hiltTodos.length > 0) {
-      return hiltStatus === "in_progress";
-    }
-    const toolCalls =
-      (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
-        ?.tool_calls ?? [];
-    return toolCalls.some(
-      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-    );
-  }, [chatMessages]);
+    return hasExplicitPendingHilt(lastChat);
+  }, [chatMessages, hasExplicitPendingHilt]);
 
   type StreamingTaskStatus = "idle" | "streaming" | "pending" | "edit_pending" | "hilt_pending";
   const streamingTaskStatus = useMemo<StreamingTaskStatus>(() => {
