@@ -21,6 +21,7 @@ import { mtoast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/Button";
 import { Iconfont } from "@/components/Iconfont";
 import { cn } from "@/lib/utils";
+import { useBlocker } from "react-router-dom";
 
 import DEFAULT_CARD_IMAGE from "@/assets/images/m_ins/card_cover.png";
 import CAT_HAND from "@/assets/images/m_ins/cat_hand.png";
@@ -74,6 +75,7 @@ import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MConfirmDialog } from "@/components/ui/MConfirmDialog";
 const EMPTY_CARD_DATA = {
   title: "",
   summary: "",
@@ -86,6 +88,22 @@ const createEmptyCards = () => [
   EMPTY_CARD_DATA,
   EMPTY_CARD_DATA,
 ];
+
+const isRequestCanceled = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const requestError = error as {
+    name?: string;
+    code?: string;
+    message?: string;
+  };
+  return (
+    requestError.name === "AbortError" ||
+    requestError.name === "CanceledError" ||
+    requestError.code === "ERR_CANCELED" ||
+    requestError.message === "canceled" ||
+    requestError.message === "The operation was aborted."
+  );
+};
 
 const InspirationCard = ({
   data,
@@ -153,6 +171,7 @@ const MInspirationPage = () => {
   const [loadingBreathingScope, setLoadingBreathingScope] = useState<
     "all" | "active" | null
   >(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
   const [showPaw, setShowPaw] = useState(false);
   const [pawHit, setPawHit] = useState(false);
@@ -180,6 +199,31 @@ const MInspirationPage = () => {
   const suppressCardClickRef = useRef(false);
   const snapTimerRef = useRef<number | null>(null);
   const detailRequestIdRef = useRef(0);
+  const detailAbortRef = useRef<AbortController | null>(null);
+  const generationAbortRef = useRef<AbortController | null>(null);
+  const shouldBlockNavigation = loading || status === "rerolling";
+  const routeBlocker = useBlocker(shouldBlockNavigation);
+
+  const cancelGenerationTask = useCallback(() => {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    if (pawTimer.current) {
+      window.clearTimeout(pawTimer.current);
+      pawTimer.current = null;
+    }
+  }, []);
+
+  const createGenerationController = useCallback(() => {
+    generationAbortRef.current?.abort();
+    const controller = new AbortController();
+    generationAbortRef.current = controller;
+    return controller;
+  }, []);
+
+  const cancelDetailTask = useCallback(() => {
+    detailAbortRef.current?.abort();
+    detailAbortRef.current = null;
+  }, []);
 
   const normalizeCarouselOffset = useCallback(
     (value: number) => {
@@ -340,6 +384,30 @@ const MInspirationPage = () => {
     setDragPreviewOffset(0);
   }, [status]);
 
+  useEffect(() => {
+    if (routeBlocker.state !== "blocked") return;
+    setShowLeaveConfirm(true);
+  }, [routeBlocker.state]);
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "有正在生成的内容，是否中断并退出？";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [shouldBlockNavigation]);
+
+  useEffect(() => {
+    return () => {
+      cancelGenerationTask();
+      cancelDetailTask();
+    };
+  }, [cancelDetailTask, cancelGenerationTask]);
+
   const cardTransforms = useMemo(() => {
     const total = InspirationCardData.length;
     if (!total) return [];
@@ -402,9 +470,10 @@ const MInspirationPage = () => {
     setCarouselOffset(Math.floor(InspirationCardData.length / 2));
   }, [InspirationCardData.length]);
 
-  const fetchInspirationCards = useCallback(async (seed: string) => {
+  const fetchInspirationCards = useCallback(
+    async (seed: string, signal?: AbortSignal) => {
     try {
-      const req: any = await getInspirationCardsReq(seed);
+      const req: any = await getInspirationCardsReq(seed, { signal });
       const inspirations = Array.isArray(req?.inspirations)
         ? req.inspirations
         : [];
@@ -433,6 +502,7 @@ const MInspirationPage = () => {
       const imageReq: any = await getInspirationCardsImageReq(
         inspirationWord,
         inspirations,
+        { signal },
       );
       const imageList = Array.isArray(imageReq) ? imageReq : [];
 
@@ -454,6 +524,7 @@ const MInspirationPage = () => {
       setStatus("ready");
       return true;
     } catch (error) {
+      if (isRequestCanceled(error)) return false;
       console.error("获取灵感卡片失败:", error);
       mtoast.error("获取灵感失败，请稍后重试");
       setStatus("idle");
@@ -464,13 +535,16 @@ const MInspirationPage = () => {
 
   const handleGenerateSingleCenterCard = useCallback(async () => {
     if (loading) return;
+    const controller = createGenerationController();
     setLoadingBreathingScope("active");
     setLoading(true);
     setStatus("loading");
 
     try {
       const seed = ideaInput.trim();
-      const req: any = await getInspirationCardsReq(seed);
+      const req: any = await getInspirationCardsReq(seed, {
+        signal: controller.signal,
+      });
       const inspirations = Array.isArray(req?.inspirations)
         ? req.inspirations
         : [];
@@ -485,7 +559,7 @@ const MInspirationPage = () => {
 
       const imageReq: any = await getInspirationCardsImageReq(inspirationWord, [
         first,
-      ]);
+      ], { signal: controller.signal });
       const firstImage = Array.isArray(imageReq)
         ? (imageReq[0]?.imageUrl ?? "")
         : "";
@@ -504,17 +578,22 @@ const MInspirationPage = () => {
       setLastInspirationWord(inspirationWord);
       setStatus("ready");
     } catch (error) {
+      if (isRequestCanceled(error)) return;
       console.error("点击空白卡片生成灵感失败:", error);
       mtoast.error("生成灵感失败，请稍后重试");
       setStatus("idle");
     } finally {
+      if (generationAbortRef.current === controller) {
+        generationAbortRef.current = null;
+      }
       setLoading(false);
       setLoadingBreathingScope(null);
     }
-  }, [activeCardIndex, ideaInput, loading]);
+  }, [activeCardIndex, createGenerationController, ideaInput, loading]);
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
+    const controller = createGenerationController();
     setInspirationCardData(createEmptyCards());
     setLoadingBreathingScope("all");
     setLoading(true);
@@ -522,12 +601,15 @@ const MInspirationPage = () => {
     setStatus("loading");
 
     try {
-      await fetchInspirationCards(ideaInput.trim());
+      await fetchInspirationCards(ideaInput.trim(), controller.signal);
     } finally {
+      if (generationAbortRef.current === controller) {
+        generationAbortRef.current = null;
+      }
       setLoading(false);
       setLoadingBreathingScope(null);
     }
-  }, [fetchInspirationCards, ideaInput, loading]);
+  }, [createGenerationController, fetchInspirationCards, ideaInput, loading]);
 
   const handleReroll = useCallback(async () => {
     if (loading || status === "loading" || status === "rerolling") return;
@@ -553,17 +635,22 @@ const MInspirationPage = () => {
 
     pawTimer.current = window.setTimeout(async () => {
       setShowPaw(false);
+      const controller = createGenerationController();
       setLoadingBreathingScope("all");
       setLoading(true);
       setStatus("loading");
       try {
-        await fetchInspirationCards(seed);
+        await fetchInspirationCards(seed, controller.signal);
       } finally {
+        if (generationAbortRef.current === controller) {
+          generationAbortRef.current = null;
+        }
         setLoading(false);
         setLoadingBreathingScope(null);
       }
     }, 260);
   }, [
+    createGenerationController,
     fetchInspirationCards,
     ideaInput,
     lastInspirationWord,
@@ -579,6 +666,9 @@ const MInspirationPage = () => {
         return false;
       }
 
+      cancelDetailTask();
+      const controller = new AbortController();
+      detailAbortRef.current = controller;
       const requestId = detailRequestIdRef.current + 1;
       detailRequestIdRef.current = requestId;
       setInsDetailLoading(true);
@@ -586,6 +676,7 @@ const MInspirationPage = () => {
         const req: any = await getInspirationDetail(
           inspirationWord,
           inspirationTheme,
+          { signal: controller.signal },
         );
         const detail = req?.data ?? req ?? {};
         if (detailRequestIdRef.current !== requestId) return;
@@ -602,16 +693,20 @@ const MInspirationPage = () => {
         );
         return true;
       } catch (error) {
+        if (isRequestCanceled(error)) return false;
         console.error("获取灵感详情失败:", error);
         mtoast.error("获取详情失败，请稍后重试");
         return false;
       } finally {
+        if (detailAbortRef.current === controller) {
+          detailAbortRef.current = null;
+        }
         if (detailRequestIdRef.current === requestId) {
           setInsDetailLoading(false);
         }
       }
     },
-    [ideaInput, lastInspirationWord],
+    [cancelDetailTask, ideaInput, lastInspirationWord],
   );
 
   const handleCardClick = useCallback(
@@ -682,6 +777,9 @@ const MInspirationPage = () => {
       const source: NoteSourceType = "MINI_APP_INSPIRATION";
       await addNote(title, content, source);
       mtoast.success("已添加到笔记");
+      cancelDetailTask();
+      detailRequestIdRef.current += 1;
+      setInsDetailLoading(false);
       setOpenInsDetail(false);
     } catch (error) {
       console.error("添加灵感到笔记失败:", error);
@@ -689,7 +787,32 @@ const MInspirationPage = () => {
     } finally {
       setNoteSaving(false);
     }
-  }, [insDetailData, noteSaving]);
+  }, [cancelDetailTask, insDetailData, noteSaving]);
+
+  const closeDetailDialog = useCallback(() => {
+    cancelDetailTask();
+    detailRequestIdRef.current += 1;
+    setInsDetailLoading(false);
+    setOpenInsDetail(false);
+  }, [cancelDetailTask]);
+
+  const handleLeaveConfirmChange = useCallback(
+    (open: boolean) => {
+      setShowLeaveConfirm(open);
+      if (!open && routeBlocker.state === "blocked") {
+        routeBlocker.reset();
+      }
+    },
+    [routeBlocker],
+  );
+
+  const handleConfirmLeave = useCallback(() => {
+    setShowLeaveConfirm(false);
+    cancelGenerationTask();
+    if (routeBlocker.state === "blocked") {
+      routeBlocker.proceed();
+    }
+  }, [cancelGenerationTask, routeBlocker]);
 
   return (
     <div className="w-full flex flex-col overflow-x-hidden h-full overflow-y-auto bg-[#f3f3f3]">
@@ -797,11 +920,11 @@ const MInspirationPage = () => {
       <Dialog
         open={openInsDetail && Boolean(insDetailData)}
         onOpenChange={(open) => {
-          setOpenInsDetail(open);
-          if (!open) {
-            detailRequestIdRef.current += 1;
-            setInsDetailLoading(false);
+          if (open) {
+            setOpenInsDetail(true);
+            return;
           }
+          closeDetailDialog();
         }}
       >
         <DialogContent
@@ -895,12 +1018,22 @@ const MInspirationPage = () => {
           </div>
           <div
             className="absolute size-14 top-7 right-7 flex justify-center items-center bg-[#e1e8ed] rounded-full cursor-pointer custom-btn"
-            onClick={() => setOpenInsDetail(false)}
+            onClick={closeDetailDialog}
           >
             <Iconfont unicode="&#xe633;" className="text-[28px] text-white" />
           </div>
         </DialogContent>
       </Dialog>
+      
+      <MConfirmDialog
+        open={showLeaveConfirm}
+        onOpenChange={handleLeaveConfirmChange}
+        title="提示"
+        message="有正在生成的内容，是否中断并退出？"
+        cancelText="取消"
+        confirmText="确认"
+        onConfirm={handleConfirmLeave}
+      />
     </div>
   );
 };
