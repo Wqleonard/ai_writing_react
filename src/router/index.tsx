@@ -13,7 +13,6 @@ import { AppRouteGuard } from "@/router/guards/AppRouteGuard";
 import UserServiceAgreementPage from "@/pages/agreement/user-service-agreement";
 import PrivacyPolicyPage from "@/pages/agreement/privacy-policy";
 import ChildrenPrivacyProtectionPolicyPage from "@/pages/agreement/children-privacy-protection-policy";
-import TestPage from "@/pages/test";
 
 const StoryClawLandingPage = lazy(() => import("@/pages/story-claw-landing"));
 // 懒加载页面组件
