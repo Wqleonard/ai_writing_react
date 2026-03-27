@@ -981,6 +981,7 @@ export default function EditableFlowCard({
     !hasAnyPendingCanvasOutput &&
     !isRoleCard &&
     !isGroupedOutlineCard;
+  const shouldDisableToolbarActions = hasAnyPendingCanvasOutput;
   useEffect(() => {
     if (!shouldShowCardFloatingControls) {
       setShowFloatingButtons(false);
@@ -1749,6 +1750,7 @@ export default function EditableFlowCard({
                 await handleAddNote();
               }}
               title="添加到笔记"
+              disabled={shouldDisableToolbarActions}
               className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground"
             >
               <Notebook className="size-3" />
@@ -1761,6 +1763,7 @@ export default function EditableFlowCard({
                 handleEdit();
               }}
               title="编辑"
+              disabled={shouldDisableToolbarActions}
               className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground"
             >
               <Pencil className="size-3" />
@@ -1773,6 +1776,7 @@ export default function EditableFlowCard({
                 void handleCopyCard();
               }}
               title="复制"
+              disabled={shouldDisableToolbarActions}
               className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground"
             >
               <Copy className="size-3" />
@@ -1785,7 +1789,7 @@ export default function EditableFlowCard({
                 canvasHandlers.handleAddCardToDialog?.(id);
               }}
               title={hasCardContent ? "添加到对话" : "卡片内容为空，无法添加到对话"}
-              disabled={!hasCardContent}
+              disabled={shouldDisableToolbarActions || !hasCardContent}
               className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
             >
               <MessageSquarePlus className="size-3" />
@@ -1798,6 +1802,7 @@ export default function EditableFlowCard({
                 await handleDelete();
               }}
               title="删除"
+              disabled={shouldDisableToolbarActions}
               className="rounded-full text-muted-foreground hover:bg-[#f5f5f5] hover:text-destructive"
             >
               <Trash2 className="size-3" />
