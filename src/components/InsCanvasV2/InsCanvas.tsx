@@ -1169,17 +1169,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       "未命名卡片"
     );
     const body = String(node.data?.content ?? "").trim();
-    const rawImages = Array.isArray((node.data as { images?: unknown[] })?.images)
-      ? ((node.data as { images?: unknown[] }).images ?? []).filter(Boolean).map(String)
-      : node.data?.image
-        ? [String(node.data.image)]
-        : [];
     const bodyHasHeading = /^\s*#{1,6}\s+.+/.test(body);
     const sections = bodyHasHeading ? [] : [`# ${title}`];
     if (body) sections.push(body);
-    if (rawImages.length > 0) {
-      sections.push(rawImages.map((url, idx) => `![${title}-${idx + 1}](${url})`).join("\n\n"));
-    }
     return sections.join("\n\n").trim();
   };
 
@@ -4902,7 +4894,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       files: CanvasWriteFileCall[],
       mode: "replace" | "append" = "replace"
     ) => {
-      const markdownFiles = files.filter((item) => item.filePath.endsWith(".md")).slice(0, 3);
+      const markdownFiles = files.filter((item) => item.filePath.endsWith(".md"));
       if (!markdownFiles.length) return brainstormBatchIdsRef.current;
 
       const existingIds = [...brainstormBatchIdsRef.current];
@@ -4920,10 +4912,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       const cardSpacing = 25;
       const startY = 100;
       const centerX = w / 2;
-      const secondCardX = centerX - cardWidth / 2;
-      const firstCardX = secondCardX - (cardWidth + cardSpacing);
-      const thirdCardX = secondCardX + (cardWidth + cardSpacing);
-      const positions = [firstCardX, secondCardX, thirdCardX];
+      const totalWidth =
+        markdownFiles.length * cardWidth + Math.max(0, markdownFiles.length - 1) * cardSpacing;
+      const replaceBaseX = centerX - totalWidth / 2;
       const currentNodes = nodesRef.current;
       const appendBasePosition = getStandaloneNextRowPosition(currentNodes);
       const currentProgress = brainstormProgressValueRef.current;
@@ -4941,7 +4932,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           type: "summaryCard",
           position:
             mode === "replace" && existingIds.length === 0
-              ? { x: positions[globalIndex] ?? positions[positions.length - 1], y: startY }
+              ? { x: replaceBaseX + globalIndex * (cardWidth + cardSpacing), y: startY }
               : {
                   x: appendBasePosition.x + index * (cardWidth + cardSpacing),
                   y: appendBasePosition.y,
@@ -4998,7 +4989,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       fallbackTitle: string,
       isFinalWrite: boolean
     ) => {
-      const markdownFiles = files.filter((item) => item.filePath.endsWith(".md")).slice(0, 3);
+      const markdownFiles = files.filter((item) => item.filePath.endsWith(".md"));
       const ids = [...brainstormBatchIdsRef.current];
       if (isFinalWrite) {
         stopBrainstormProgress(100);
@@ -5604,7 +5595,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         preparedContextFilesRef.current,
         selectedDialogReferenceFiles
       );
-      const requestFiles = mergeCreationIdeaIntoFiles(baseRequestFiles);
+      const hasReferenceFiles = Boolean(baseRequestFiles && Object.keys(baseRequestFiles).length > 0);
+      const requestFiles = hasReferenceFiles ? mergeCreationIdeaIntoFiles(baseRequestFiles) : undefined;
       preparedContextFilesRef.current = undefined;
       preparedGenerateSourceNodeIdRef.current = undefined;
       setDialogCardPreviews([]);
@@ -5810,6 +5802,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           const useContextLinkedCreation = Boolean(effectiveSourceNodeId);
           const useBrainstormBatchLoading =
             requestedCardKey === "brainstorm" && !shouldReuseSourceDraftNode;
+          if (useBrainstormBatchLoading) {
+            // Reset cross-request batch state to avoid replacing previous brainstorm cards.
+            stopBrainstormProgress();
+            brainstormBatchIdsRef.current = [];
+            brainstormProgressValueRef.current = 0;
+          }
           // manual 请求一开始就创建占位；角色/大纲优先创建分组占位。
           // 当“AI生成”来自可复用的空白草稿（脑洞/梗概/信息）时，应直接复用当前草稿卡。
           const shouldCreateLoadingCard = !useBrainstormBatchLoading;
@@ -6785,6 +6783,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             if (useBrainstormBatchLoading) {
               updateBrainstormPlaceholderBatch(effectiveFiles, trimmedIdea || "脑洞", true);
               finalizePendingStreamNodes();
+              brainstormBatchIdsRef.current = [];
               setIsLoading(false);
               return;
             }
@@ -7113,6 +7112,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       startLoadingProgressForNodes,
       finishLoadingProgressForNode,
       stopLoadingProgress,
+      stopBrainstormProgress,
       triggerOutlineCompletionCelebration,
       mergeCreationIdeaIntoFiles,
       syncCreationIdeaContent,
@@ -7127,13 +7127,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const handlePrepareGenerateToDialog = useCallback(
       (
         nodeId: string,
-        outputType: CanvasOutputType,
+        _outputType: CanvasOutputType,
         options?: {
           files?: Record<string, string>;
           title?: string;
           actionLabel?: string;
         }
       ) => {
+        const targetOutputType: CanvasOutputType = "auto";
         const currentNode = nodes.find((node) => node.id === nodeId);
         const contextIdea = getTextValue(options?.title) || getTextValue((currentNode?.data as any)?.title);
         const hasFiles = Boolean(options?.files && Object.keys(options.files).length > 0);
@@ -7164,13 +7165,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           })();
           const fallbackTitle = appendedTitle || contextIdea || "当前内容";
           const outputLabel =
-            OUTPUT_TYPE_OPTIONS.find((item) => item.key === outputType)?.label ?? outputType;
+            targetOutputType === "auto"
+              ? "内容"
+              : OUTPUT_TYPE_OPTIONS.find((item) => item.key === targetOutputType)?.label ?? targetOutputType;
           setIdeaInputSource("default");
-          setIdeaContent(`使用[${fallbackTitle}]生成${outputLabel}卡`);
+          setIdeaContent(`使用[${fallbackTitle}]生成${outputLabel}`);
         }
-        if (outputType !== "auto") {
-          handleOutputTypeChange(outputType);
-        }
+        handleOutputTypeChange(targetOutputType);
         setForceCanvasView(true);
         setCanvasReady(true);
         msg("success", "已加入对话引用，请发送开始生成");

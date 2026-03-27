@@ -252,7 +252,7 @@ export default function RoleGroupNode(props: any) {
       label: "我想用它生成...",
       onClick: (event) => {
         event.stopPropagation();
-        handlers.handlePrepareGenerateToDialog?.(props.id, "info", {
+        handlers.handlePrepareGenerateToDialog?.(props.id, "auto", {
           ...groupOptions,
           title: "信息",
           actionLabel: "我想用它生成...",
