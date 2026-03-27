@@ -306,41 +306,64 @@ const AgentCustomMessageRenderer = ({
     return !!(msg.tool_calls && msg.tool_calls.length > 0);
   }, []);
 
-  /** 从消息中最后一个 write_todos 的 args.todos 推导出外层卡片用的列表（当父级未设置 msg.hiltTodos 时） */
-  const getDerivedHiltTodosFromWriteTodos = useCallback((msg: AgentCustomMessageItem): HiltTodoItem[] | undefined => {
-    const list = msg.tool_calls ?? [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const tc = list[i] as ToolCallItemForRender;
-      if (tc.name !== "write_todos" || !tc.args) continue;
-      const todos = tc.args.todos;
-      if (!Array.isArray(todos) || todos.length === 0) continue;
-      return todos.map((t: unknown) => {
-        const o = t as { content?: string; status?: string };
-        return { content: o.content ?? "", status: (o.status as HiltTodoItem["status"]) ?? "pending" };
-      });
-    }
-    return undefined;
-  }, []);
-
-  /** 当前消息用于外层卡片与互斥逻辑的待办列表：优先 msg.hiltTodos，否则从 write_todos 推导 */
+  /** 当前消息用于外层卡片与互斥逻辑的待办列表：仅使用显式的 msg.hiltTodos（与 Vue 行为一致） */
   const getEffectiveHiltTodos = useCallback(
     (msg: AgentCustomMessageItem): HiltTodoItem[] | undefined => {
-      if (msg.hiltTodos && msg.hiltTodos.length > 0) return msg.hiltTodos;
-      return getDerivedHiltTodosFromWriteTodos(msg);
+      return msg.hiltTodos && msg.hiltTodos.length > 0 ? msg.hiltTodos : undefined;
     },
-    [getDerivedHiltTodosFromWriteTodos]
+    []
   );
 
   /** 当前消息的 hilt 状态：本地点击优先，否则用 msg.hiltStatus，推导场景默认为 in_progress */
   const getEffectiveHiltStatus = useCallback(
     (msg: AgentCustomMessageItem, effectiveTodos: HiltTodoItem[] | undefined): "in_progress" | "approved" | "rejected" => {
       if (!effectiveTodos?.length) return "in_progress";
+      if (msg.hiltStatus === "in_progress") return "in_progress";
       const local = localHiltStatusByMessageId[msg.id];
       if (local) return local;
       return msg.hiltStatus ?? "in_progress";
     },
     [localHiltStatusByMessageId]
   );
+
+  // 新一轮 __interrupt__ 到来（hiltStatus=in_progress）时，清理上一轮本地“已接受/已拒绝/已收起”状态
+  // 避免同一 message id 下第二次中断被历史本地状态挡住而不展示面板。
+  useEffect(() => {
+    if (!customMessage?.length) return;
+    const resetIds = new Set<string>();
+    customMessage.forEach((msg) => {
+      const todos = getEffectiveHiltTodos(msg);
+      if (!todos?.length) return;
+      if (msg.hiltStatus === "in_progress") {
+        resetIds.add(msg.id);
+      }
+    });
+    if (resetIds.size === 0) return;
+
+    setLocalHiltStatusByMessageId((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      resetIds.forEach((id) => {
+        if (id in next) {
+          delete next[id];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+
+    setDismissedHiltCardKeyByMessageId((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      resetIds.forEach((id) => {
+        if (id in next) {
+          delete next[id];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [customMessage, getEffectiveHiltTodos]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -808,20 +831,11 @@ const AgentCustomMessageRenderer = ({
                   {/* 人在回路：外层确认卡仅在真正收到 msg.hiltTodos（interrupt/HILT 最终态）后展示，避免跟随 write_todos 的流式中间态实时变化 */}
                   {(() => {
                     const outerCardTodos = msg.hiltTodos && msg.hiltTodos.length > 0 ? msg.hiltTodos : undefined;
-                    const effectiveStatus = getEffectiveHiltStatus(msg, outerCardTodos);
-                    const currentTodosKey = getHiltTodosProgressKey(outerCardTodos);
-                    const isLastCustomMessage = index === customMessage.length - 1;
-                    const isDismissedForCurrentTodos =
-                      !!currentTodosKey &&
-                      dismissedHiltCardKeyByMessageId[msg.id] === currentTodosKey;
                     const showOuterCard =
                       outerCardTodos &&
                       outerCardTodos.length > 0 &&
                       isLastMessage &&
-                      isLastCustomMessage &&
-                      streamingStatus !== "streaming" &&
-                      effectiveStatus === "in_progress" &&
-                      !isDismissedForCurrentTodos;
+                      msg.hiltStatus === "in_progress";
                     if (!showOuterCard) return null;
                     return (
                       <div className="hilt-todos-container">
