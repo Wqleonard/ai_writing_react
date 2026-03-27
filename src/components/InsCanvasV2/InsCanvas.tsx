@@ -399,7 +399,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         : [];
 
     for (const message of messages) {
+      const messageType = getTextValue((message as { type?: unknown })?.type)
+        .trim()
+        .toLowerCase();
       const messageName = getTextValue(message?.name).trim().toLowerCase();
+      // 仅保留 write_file 工具消息；其它工具（如 internet_search_tool）不参与面板文案渲染。
+      if (messageType === "tool" && messageName !== "write_file") continue;
       if (
         messageName === "read_file" ||
         messageName === "generate_image" ||
@@ -429,6 +434,51 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       middle: sections.slice(1, -1),
       tail: sections.length > 1 ? (sections[sections.length - 1] ?? "") : "",
     };
+  };
+
+  type ReplySegments = {
+    start: string;
+    middle: string;
+    end: string;
+  };
+
+  const normalizeReplyFilePath = (filePath: string): "start" | "middle" | "end" | "" => {
+    const normalized = getTextValue(filePath).trim().toLowerCase();
+    if (!normalized) return "";
+    if (normalized.endsWith("/start_reply.md") || normalized === "start_reply.md") return "start";
+    if (normalized.endsWith("/middle_reply.md") || normalized === "middle_reply.md") return "middle";
+    if (normalized.endsWith("/end_reply.md") || normalized === "end_reply.md") return "end";
+    return "";
+  };
+
+  const extractReplySegmentsFromToolFiles = (value: unknown): ReplySegments => {
+    const result: ReplySegments = { start: "", middle: "", end: "" };
+
+    const visit = (input: unknown) => {
+      if (!input) return;
+      if (Array.isArray(input)) {
+        input.forEach(visit);
+        return;
+      }
+      if (typeof input !== "object") return;
+      const record = input as Record<string, unknown>;
+
+      const files = (record.tools as { files?: Record<string, unknown> } | undefined)?.files;
+      if (files && typeof files === "object") {
+        Object.entries(files).forEach(([path, content]) => {
+          const segment = normalizeReplyFilePath(path);
+          if (!segment) return;
+          const text = getTextValue(content).trim();
+          if (!text) return;
+          result[segment] = text;
+        });
+      }
+
+      Object.values(record).forEach(visit);
+    };
+
+    visit(value);
+    return result;
   };
 
   const collectPartialPanelMessagesById = (
@@ -5596,6 +5646,18 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 setPendingSuggestionIdea('');
               }
               if (streamData?.event !== "updates") return;
+              const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
+              const hasReplySegmentContent = Boolean(
+                replySegments.start || replySegments.middle || replySegments.end
+              );
+              if (hasReplySegmentContent) {
+                syncReqPanelTextRefs(
+                  replySegments.start || reqPanelDetailRef.current,
+                  replySegments.middle || reqPanelBodyDetailRef.current,
+                  replySegments.end || reqPanelFooterDetailRef.current
+                );
+                hasUpdatesContent = true;
+              }
               const latestCreationIdea = extractCreationIdeaFileContent(streamData?.data);
               if (latestCreationIdea) {
                 syncCreationIdeaContent(latestCreationIdea);
@@ -5630,11 +5692,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   };
 
               setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
+              const mergedDetail = replySegments.start || head || updatesContent;
+              const mergedBody = replySegments.middle || middle.join("\n\n");
+              const mergedFooter = replySegments.end || tail;
               syncReqPanelWithCreationIdea(
-                head || updatesContent,
-                middle.join("\n\n"),
-                tail,
-                latestCreationIdea
+                mergedDetail,
+                mergedBody,
+                mergedFooter,
+                replySegments.middle ? undefined : latestCreationIdea
               );
 
               if (hasWriteFileSuggestions) {
@@ -6592,6 +6657,17 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 return;
               }
               if (!isFinalWrite) return;
+              const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
+              const hasReplySegmentContent = Boolean(
+                replySegments.start || replySegments.middle || replySegments.end
+              );
+              if (hasReplySegmentContent) {
+                syncReqPanelTextRefs(
+                  replySegments.start || reqPanelDetailRef.current,
+                  replySegments.middle || reqPanelBodyDetailRef.current,
+                  replySegments.end || reqPanelFooterDetailRef.current
+                );
+              }
               if (updatesContent || latestCreationIdea) {
                 const { head, middle, tail } = updatesContent
                   ? splitAutoUpdatesContent(updatesContent)
@@ -6601,11 +6677,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                       tail: reqPanelFooterDetailRef.current,
                     };
                 setReqPanelTitle(`${outputTypeLabel}卡`);
+                const mergedDetail = replySegments.start || head || updatesContent;
+                const mergedBody = replySegments.middle || middle.join("\n\n");
+                const mergedFooter = replySegments.end || tail;
                 syncReqPanelWithCreationIdea(
-                  head || updatesContent,
-                  middle.join("\n\n"),
-                  tail,
-                  latestCreationIdea
+                  mergedDetail,
+                  mergedBody,
+                  mergedFooter,
+                  replySegments.middle ? undefined : latestCreationIdea
                 );
               }
               if (streamData?.event === "end") {
@@ -7520,6 +7599,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }, [panelTitleText]);
 
     const panelDetailText = useMemo(() => {
+      if (reqPanelDetail.trim()) {
+        return reqPanelDetail.trim();
+      }
       if (reqPanelStatus === "loading") {
         if (pendingContextActionLabel) {
           return `正在${pendingContextActionLabel}，请稍等...`;
@@ -7541,7 +7623,15 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       }
 
       return "";
-    }, [cardKeyLabel, ideaContent, reqPanelStatus, smartSuggestions, pendingSuggestionIdea, pendingContextActionLabel]);
+    }, [
+      cardKeyLabel,
+      ideaContent,
+      reqPanelDetail,
+      reqPanelStatus,
+      smartSuggestions,
+      pendingSuggestionIdea,
+      pendingContextActionLabel,
+    ]);
 
     const panelFooterText = reqPanelFooterDetail || "没找到合适的选项？你如果有其他想法，可以直接在下方输入框中输入。";
     const hasSmartSuggestions = smartSuggestions.length > 0;
