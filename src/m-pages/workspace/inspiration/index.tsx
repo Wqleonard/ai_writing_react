@@ -66,6 +66,7 @@ interface InspirationCardProps {
   style: CSSProperties;
   side3dClassName?: string;
   isActive: boolean;
+  isBreathing?: boolean;
   onClick: (data: InspirationIdea, isActive: boolean) => void;
 }
 
@@ -91,6 +92,7 @@ const InspirationCard = ({
   style,
   side3dClassName,
   isActive,
+  isBreathing = false,
   onClick,
 }: InspirationCardProps) => {
   const hasData = Boolean(data.title);
@@ -100,6 +102,8 @@ const InspirationCard = ({
       className={cn(
         "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 overflow-hidden p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
         hasData && "cursor-pointer",
+        isBreathing &&
+          "inspiration-card--breathing animate-[inspiration-breath_1.6s_ease-in-out_infinite] shadow-[0_0_40.305px_16.122px_rgba(255,204,0,0.25)]",
         side3dClassName,
       )}
       style={style}
@@ -146,6 +150,9 @@ const MInspirationPage = () => {
   const pawTimer = useRef<number | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [loadingBreathingScope, setLoadingBreathingScope] = useState<
+    "all" | "active" | null
+  >(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const [showPaw, setShowPaw] = useState(false);
   const [pawHit, setPawHit] = useState(false);
@@ -163,12 +170,6 @@ const MInspirationPage = () => {
     if (status === "ready") return "灵感池已就绪";
     return "没有灵感？抽张卡试试！";
   }, [status]);
-
-  const clearTimers = useCallback(() => {
-    if (loadingTimer.current) window.clearTimeout(loadingTimer.current);
-    if (imageTimer.current) window.clearTimeout(imageTimer.current);
-    if (pawTimer.current) window.clearTimeout(pawTimer.current);
-  }, []);
 
   const wheelTickRef = useRef(0);
   const pointerIdRef = useRef<number | null>(null);
@@ -463,6 +464,7 @@ const MInspirationPage = () => {
 
   const handleGenerateSingleCenterCard = useCallback(async () => {
     if (loading) return;
+    setLoadingBreathingScope("active");
     setLoading(true);
     setStatus("loading");
 
@@ -507,11 +509,14 @@ const MInspirationPage = () => {
       setStatus("idle");
     } finally {
       setLoading(false);
+      setLoadingBreathingScope(null);
     }
   }, [activeCardIndex, ideaInput, loading]);
 
   const handleGenerate = useCallback(async () => {
     if (loading) return;
+    setInspirationCardData(createEmptyCards());
+    setLoadingBreathingScope("all");
     setLoading(true);
     setHasGenerated(true);
     setStatus("loading");
@@ -520,6 +525,7 @@ const MInspirationPage = () => {
       await fetchInspirationCards(ideaInput.trim());
     } finally {
       setLoading(false);
+      setLoadingBreathingScope(null);
     }
   }, [fetchInspirationCards, ideaInput, loading]);
 
@@ -532,6 +538,7 @@ const MInspirationPage = () => {
       return;
     }
 
+    setInspirationCardData(createEmptyCards());
     setStatus("rerolling");
     setShowPaw(true);
     setPawHit(false);
@@ -546,12 +553,14 @@ const MInspirationPage = () => {
 
     pawTimer.current = window.setTimeout(async () => {
       setShowPaw(false);
+      setLoadingBreathingScope("all");
       setLoading(true);
       setStatus("loading");
       try {
         await fetchInspirationCards(seed);
       } finally {
         setLoading(false);
+        setLoadingBreathingScope(null);
       }
     }, 260);
   }, [
@@ -708,6 +717,13 @@ const MInspirationPage = () => {
                 style={cardTransforms[index]?.style ?? {}}
                 side3dClassName={cardTransforms[index]?.side3dClassName}
                 isActive={index === activeCardIndex}
+                isBreathing={
+                  loading &&
+                  status === "loading" &&
+                  (loadingBreathingScope === "all" ||
+                    (loadingBreathingScope === "active" &&
+                      index === activeCardIndex))
+                }
                 onClick={handleCardClick}
               />
             ))}
