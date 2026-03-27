@@ -1148,7 +1148,6 @@ const MarkdownEditorPage = () => {
           }
         | undefined;
       const inspirationDraws = Array.isArray(req?.inspirationDraws) ? req.inspirationDraws : [];
-      console.log(inspirationDraws, 'inspirationDraws')
       const parseCanvasContent = (raw: unknown) => {
         if (raw && typeof raw === "object") return raw as Record<string, unknown>;
         if (typeof raw !== "string") return {};
