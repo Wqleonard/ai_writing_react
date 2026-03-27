@@ -25,6 +25,7 @@ import {
 } from "@/api/writing-styles";
 import { useLLM } from "@/hooks/useLLM";
 import { postWritingStyle } from "@/api/tools-square";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 export interface WritingStyleOption {
   label: string;
@@ -468,7 +469,7 @@ export const WritingStylePopup = ({
         onAdd={handleAddSuccess}
       />
 
-      <MConfirmDialog
+      <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title="删除确认"
