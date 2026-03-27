@@ -125,6 +125,7 @@ export const MarkdownEditor = React.forwardRef<MarkdownEditorRef, MarkdownEditor
         Placeholder.configure({
           placeholder,
           showOnlyCurrent: false,
+          showOnlyWhenEditable: false,
         }),
         StarterKit.configure({
           codeBlock: false,
