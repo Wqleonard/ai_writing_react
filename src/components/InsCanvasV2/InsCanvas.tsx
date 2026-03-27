@@ -502,9 +502,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       const messageType = getTextValue(record.type).trim().toLowerCase();
       const messageName = getTextValue(record.name).trim().toLowerCase();
 
+      const shouldIgnorePartialPanelMessage =
+        messageType === "ai" || messageType === "assistant";
+
       if (
         messageId &&
         messageContent &&
+        !shouldIgnorePartialPanelMessage &&
         messageType !== "tool" &&
         messageName !== "read_file" &&
         messageName !== "generate_image" &&
@@ -990,7 +994,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
   const isRelationshipWriteFile = (filePath: string) =>
     /(^|\/)relationship\.json$/i.test(filePath) || /(^|\/)角色关系\.md$/i.test(filePath);
   const shouldSkipWriteFileCardCreation = (filePath: string) =>
-    /(^|\/)relationship\.json$/i.test(filePath);
+    /(^|\/)relationship\.json$/i.test(filePath) || Boolean(normalizeReplyFilePath(filePath));
   const isRelationshipInfoWriteFile = (filePath: string) =>
     isRelationshipWriteFile(filePath);
 
@@ -2080,6 +2084,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const [outlineCompletionCelebrationVisible, setOutlineCompletionCelebrationVisible] = useState(false);
     // 允许在“尚无节点”时也进入画布视图（例如 smart 空输入的推荐列表）
     const [forceCanvasView, setForceCanvasView] = useState(false);
+    // 仅首次空白进入显示首页；进入过画布后即使删空节点也保持画布视图。
+    const [hasEnteredCanvasView, setHasEnteredCanvasView] = useState(false);
     const [initWorkDialogShow, setInitWorkDialogShow] = useState(false);
     const [historyDialogShow, setHistoryDialogShow] = useState(false);
     const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -5604,16 +5610,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           setCardKeyLabel(isAutoEmptyRequest ? "智能" : outputTypeLabel);
           setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
           setReqPanelStatus("loading");
-          setReqPanelDetail(
-            isAutoEmptyRequest
-              ? "为你生成一些随机选题，点击可直接填入输入框。"
-              : `正在生成${outputTypeLabel}卡，请稍等...`
-          );
+          setReqPanelDetail("");
           const { postCanvasChoicesStream } = await import("@/api/works");
           let streamError: any = null;
           let hasChoiceList = false;
           let hasUpdatesContent = false;
           let hasWriteFileSuggestions = false;
+          const persistedReplySegments: ReplySegments = { start: "", middle: "", end: "" };
           const partialPanelOrderedIds = new Set<string>();
           const partialPanelContentById = new Map<string, string>();
 
@@ -5647,14 +5650,19 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               }
               if (streamData?.event !== "updates") return;
               const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
+              if (replySegments.start) persistedReplySegments.start = replySegments.start;
+              if (replySegments.middle) persistedReplySegments.middle = replySegments.middle;
+              if (replySegments.end) persistedReplySegments.end = replySegments.end;
               const hasReplySegmentContent = Boolean(
-                replySegments.start || replySegments.middle || replySegments.end
+                persistedReplySegments.start ||
+                persistedReplySegments.middle ||
+                persistedReplySegments.end
               );
               if (hasReplySegmentContent) {
                 syncReqPanelTextRefs(
-                  replySegments.start || reqPanelDetailRef.current,
-                  replySegments.middle || reqPanelBodyDetailRef.current,
-                  replySegments.end || reqPanelFooterDetailRef.current
+                  persistedReplySegments.start || reqPanelDetailRef.current,
+                  persistedReplySegments.middle || reqPanelBodyDetailRef.current,
+                  persistedReplySegments.end || reqPanelFooterDetailRef.current
                 );
                 hasUpdatesContent = true;
               }
@@ -5692,14 +5700,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   };
 
               setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
-              const mergedDetail = replySegments.start || head || updatesContent;
-              const mergedBody = replySegments.middle || middle.join("\n\n");
-              const mergedFooter = replySegments.end || tail;
+              const mergedDetail = persistedReplySegments.start || head || updatesContent;
+              const mergedBody = persistedReplySegments.middle || middle.join("\n\n");
+              const mergedFooter = persistedReplySegments.end || tail;
               syncReqPanelWithCreationIdea(
                 mergedDetail,
                 mergedBody,
                 mergedFooter,
-                replySegments.middle ? undefined : latestCreationIdea
+                persistedReplySegments.middle ? undefined : latestCreationIdea
               );
 
               if (hasWriteFileSuggestions) {
@@ -5729,7 +5737,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             }
           } else {
             setReqPanelStatus("error");
-            setReqPanelDetail("状态：失败\n原因：返回数据格式不正确，请重试");
+            setReqPanelDetail("");
             msg("warning", "返回数据格式不正确，请重试");
           }
           setIsLoading(false);
@@ -5739,7 +5747,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           setCardKeyLabel(outputTypeLabel);
           setReqPanelTitle(`${outputTypeLabel}卡`);
           setReqPanelStatus("loading");
-          setReqPanelDetail(`正在生成${outputTypeLabel}卡，请稍等...`);
+          setReqPanelDetail("");
           const { postCanvasChoicesStream } = await import("@/api/works");
           let streamError: any = null;
           let hasChoiceList = false;
@@ -5749,6 +5757,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           const partialWriteFilesByCallId = new Map<string, string>();
           const partialNodeIdsByCallId = new Map<string, string>();
           const partialFilePathByCallId = new Map<string, string>();
+          const persistedReplySegments: ReplySegments = { start: "", middle: "", end: "" };
           const streamedNodeIdsByFilePath = new Map<string, string>();
           const streamPendingNodeIds = new Set<string>();
           const finalizedWriteFilePaths = new Set<string>();
@@ -5964,6 +5973,25 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           const brainstormLoadingCardId =
             brainstormPlaceholderIds[brainstormPlaceholderIds.length - 1] ?? "";
           if (loadingCardId) {
+            if (shouldReuseSourceDraftNode) {
+              updateLoadingCard(loadingCardId, requestedCardKey, {
+                title: "",
+                filePath: getTextValue((sourceNode?.data as any)?.filePath),
+                content: "",
+                image: "",
+                fromApi: true,
+                isStreaming: true,
+                allowTitleEdit: true,
+                allowImageUpload: requestedCardKey !== "outline" && requestedCardKey !== "info",
+                autoEdit: true,
+                isBlankDraft: false,
+                isBlankBrainstormDraft: false,
+                brainstormAiMode: false,
+                pendingGenerate: true,
+                highlighted: false,
+                skipAutoStream: true,
+              });
+            }
             rememberLatestGeneratedNode(loadingCardId);
             connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [loadingCardId]);
             startLoadingProgressForNodes([loadingCardId]);
@@ -6621,6 +6649,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 writeFiles.forEach((item) => {
                   const normalizedPath = getTextValue(item.filePath);
                   if (!normalizedPath) return;
+                  if (shouldSkipWriteFileCardCreation(normalizedPath)) return;
                   const normalizedCallId = getTextValue(item.callId);
                   const resolvedKey = resolveWriteFileCardKey(normalizedPath);
                   const normalizedItem = {
@@ -6643,8 +6672,24 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   syncWriteFileCard(normalizedItem, true, normalizedItem.callId);
                 });
               }
+              const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
+              if (replySegments.start) persistedReplySegments.start = replySegments.start;
+              if (replySegments.middle) persistedReplySegments.middle = replySegments.middle;
+              if (replySegments.end) persistedReplySegments.end = replySegments.end;
+              const hasReplySegmentContent = Boolean(
+                persistedReplySegments.start ||
+                persistedReplySegments.middle ||
+                persistedReplySegments.end
+              );
+              if (hasReplySegmentContent) {
+                syncReqPanelTextRefs(
+                  persistedReplySegments.start || reqPanelDetailRef.current,
+                  persistedReplySegments.middle || reqPanelBodyDetailRef.current,
+                  persistedReplySegments.end || reqPanelFooterDetailRef.current
+                );
+              }
               const effectiveFiles = getLatestWriteFiles(collectedWriteFilesByPath).filter(
-                (item) => !/relationship\.json$/i.test(item.filePath)
+                (item) => !shouldSkipWriteFileCardCreation(getTextValue(item.filePath))
               );
               if (useBrainstormBatchLoading) {
                 if (!effectiveFiles.length) return;
@@ -6657,17 +6702,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 return;
               }
               if (!isFinalWrite) return;
-              const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
-              const hasReplySegmentContent = Boolean(
-                replySegments.start || replySegments.middle || replySegments.end
-              );
-              if (hasReplySegmentContent) {
-                syncReqPanelTextRefs(
-                  replySegments.start || reqPanelDetailRef.current,
-                  replySegments.middle || reqPanelBodyDetailRef.current,
-                  replySegments.end || reqPanelFooterDetailRef.current
-                );
-              }
               if (updatesContent || latestCreationIdea) {
                 const { head, middle, tail } = updatesContent
                   ? splitAutoUpdatesContent(updatesContent)
@@ -6677,14 +6711,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                       tail: reqPanelFooterDetailRef.current,
                     };
                 setReqPanelTitle(`${outputTypeLabel}卡`);
-                const mergedDetail = replySegments.start || head || updatesContent;
-                const mergedBody = replySegments.middle || middle.join("\n\n");
-                const mergedFooter = replySegments.end || tail;
+                const mergedDetail = persistedReplySegments.start || head || updatesContent;
+                const mergedBody = persistedReplySegments.middle || middle.join("\n\n");
+                const mergedFooter = persistedReplySegments.end || tail;
                 syncReqPanelWithCreationIdea(
                   mergedDetail,
                   mergedBody,
                   mergedFooter,
-                  replySegments.middle ? undefined : latestCreationIdea
+                  persistedReplySegments.middle ? undefined : latestCreationIdea
                 );
               }
               if (streamData?.event === "end") {
@@ -6705,7 +6739,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           }
 
           const effectiveFiles = getLatestWriteFiles(collectedWriteFilesByPath).filter(
-            (item) => !/relationship\.json$/i.test(item.filePath)
+            (item) => !shouldSkipWriteFileCardCreation(getTextValue(item.filePath))
           );
 
           if (effectiveFiles.length) {
@@ -6989,7 +7023,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             if (loadingCardId) removeLoadingCard(loadingCardId);
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             setReqPanelStatus("error");
-            setReqPanelDetail("状态：失败\n原因：返回数据格式不正确，请重试");
+            setReqPanelDetail("");
             msg("warning", "返回数据格式不正确，请重试");
           }
           setIsLoading(false);
@@ -6999,7 +7033,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       } catch (e: any) {
         stopLoadingProgress();
         setReqPanelStatus("error");
-        setReqPanelDetail(`状态：失败\n原因：${String(e?.message ?? "未知错误")}`);
+        setReqPanelDetail("");
         msg("error", e.message);
         if (trimmedIdea) {
           setIsLoading(false);
@@ -7343,6 +7377,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       setEdges([]);
       setInspirationDrawId("");
       setForceCanvasView(false);
+      setHasEnteredCanvasView(false);
       createNewCanvasSessionId(workId);
     }, [createNewCanvasSessionId, setNodes, setEdges, stopBrainstormProgress, workId]);
 
@@ -7519,7 +7554,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
   
     // 有已回显的画布数据时，优先展示 React Flow，而不是初始化引导态。
     const hasCanvasSnapshotData = nodes.length > 0 || edges.length > 0;
-    const showInit = !forceCanvasView && !hasCanvasSnapshotData;
+    useEffect(() => {
+      if (!hasEnteredCanvasView && (forceCanvasView || hasCanvasSnapshotData)) {
+        setHasEnteredCanvasView(true);
+      }
+    }, [forceCanvasView, hasCanvasSnapshotData, hasEnteredCanvasView]);
+    const showInit = !hasEnteredCanvasView && !forceCanvasView && !hasCanvasSnapshotData;
 
     const dockRef = useRef<HTMLDivElement | null>(null);
     const prevShowInitRef = useRef(showInit);
@@ -7598,45 +7638,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return "#EFAF00";
     }, [panelTitleText]);
 
-    const panelDetailText = useMemo(() => {
-      if (reqPanelDetail.trim()) {
-        return reqPanelDetail.trim();
-      }
-      if (reqPanelStatus === "loading") {
-        if (pendingContextActionLabel) {
-          return `正在${pendingContextActionLabel}，请稍等...`;
-        }
-        const trimmedIdeaContent = ideaContent.trim();
-        if (trimmedIdeaContent) {
-          return `你想要创建一个${trimmedIdeaContent}题材的内容，听起来很炫，让我想想...`;
-        } else if (pendingSuggestionIdea) {
-          return `你想要创建一个${pendingSuggestionIdea}题材的内容，提起来很炫，让我想想`;
-        }
-        return `呼~ 正在为您生成随机${['自动', '智能'].includes(cardKeyLabel) ? '脑洞' : cardKeyLabel}，请稍等。。。`;
-      }
+    const panelDetailText = useMemo(() => reqPanelDetail.trim(), [reqPanelDetail]);
 
-      if (reqPanelStatus === "success") {
-        if (smartSuggestions.length) {
-          return `已经为你设计了三个创意脑洞，如果满意我将生成脑洞卡片并继续推进创作`
-        } 
-        return `灵感大开！已经生成了${['自动', '智能'].includes(cardKeyLabel) ? '脑洞' : cardKeyLabel}，快在画布中查看吧`;
-      }
-
-      return "";
-    }, [
-      cardKeyLabel,
-      ideaContent,
-      reqPanelDetail,
-      reqPanelStatus,
-      smartSuggestions,
-      pendingSuggestionIdea,
-      pendingContextActionLabel,
-    ]);
-
-    const panelFooterText = reqPanelFooterDetail || "没找到合适的选项？你如果有其他想法，可以直接在下方输入框中输入。";
+    const panelFooterText = reqPanelFooterDetail.trim();
     const hasSmartSuggestions = smartSuggestions.length > 0;
+    // 面板至少需要以标题作为可见内容基线；即使 start/middle/end 都为空串，也不应触发“塌陷”样式分支。
     const hasReqPanelHeaderExtraContent = Boolean(
-      panelDetailText || latestGeneratedNodeId || reqPanelAction
+      panelTitleText || panelDetailText || latestGeneratedNodeId || reqPanelAction
     );
     const shouldAttachReqPanelToInput = reqPanelVisible;
     const shouldForceExpandReqPanel =
@@ -7996,9 +8004,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   </div>
                   {panelDetailText || latestGeneratedNodeId ? (
                     <div className="flex w-full items-start justify-between gap-2 text-[12px] text-[#6b7280]">
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 overflow-visible">
                         {panelDetailText ? (
-                          <span className="block min-w-0 w-full whitespace-normal break-words leading-5">
+                          <span className="block min-w-0 w-full overflow-visible whitespace-pre-wrap break-all text-clip leading-5">
                             {panelDetailText}
                           </span>
                         ) : null}
@@ -8119,7 +8127,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   setIdeaInputSource(payload.source === "img" || payload.source === "label" ? "carousel" : "default");
                   const cleanedText = String(payload.text || "")
                     .replace(/^\s*脑洞喵[，,、:：]?\s*/i, "")
-                    .replace(/^\s*(?:请\s*)?(?:给我|帮我)?\s*生成\s*/i, "")
                     .trim();
                   setIdeaContent(cleanedText || payload.text);
                   applyCanvasMode("brainstorm");
