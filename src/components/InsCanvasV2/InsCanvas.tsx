@@ -223,10 +223,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     skipAutoStream?: boolean;
   };
 
-  const MODE_CATEGORY_OPTIONS: Array<{ key: CanvasModeCategory; label: string }> = [
-    { key: "smart", label: "智能模式" },
-    { key: "image", label: "图片生成模式" },
-    { key: "video", label: "视频生成模式" },
+  const MODE_CATEGORY_OPTIONS: Array<{ key: CanvasModeCategory; label: string; disabled?: boolean }> = [
+    { key: "smart", label: "智能模式", disabled: false },
+    { key: "image", label: "图片生成模式", disabled: true },
+    { key: "video", label: "视频生成模式", disabled: true },
   ];
 
   const OUTPUT_TYPE_OPTIONS: Array<{ key: CanvasOutputType; label: string }> = [
@@ -503,7 +503,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       const messageName = getTextValue(record.name).trim().toLowerCase();
 
       const shouldIgnorePartialPanelMessage =
-        messageType === "ai" || messageType === "assistant";
+        messageType === "ai" ||
+        messageType === "assistant" ||
+        messageType === "human" ||
+        messageType === "user";
 
       if (
         messageId &&
@@ -1480,8 +1483,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const nextGroupWidth = Math.min(maxWidth, Math.max(minWidth, Math.ceil(maxRight + horizontalPadding)));
     const nextGroupHeight = Math.max(minHeight, Math.ceil(maxBottom + horizontalPadding));
 
+    const groupCurrentX = Number(groupNode.position?.x ?? 0);
+    const groupCurrentWidth = Number((groupNode.style as any)?.width ?? getCanvasNodeLayoutSize(groupNode).width);
+    const widthDelta = Math.max(0, nextGroupWidth - groupCurrentWidth);
+    const groupRightBeforeExpand = groupCurrentX + groupCurrentWidth;
+
     let changed = false;
-    const nextNodes = currentNodes.map((node) => {
+    let nextNodes = currentNodes.map((node) => {
       if (node.id === groupId) {
         const currentWidth = Number((node.style as any)?.width ?? 0);
         const currentHeight = Number((node.style as any)?.height ?? 0);
@@ -1520,6 +1528,23 @@ import { ArrowUp, MapPin, X } from "lucide-react";
 
       return node;
     });
+
+    // 当分组宽度扩展时，顶开右侧顶层节点，避免与扩展后的分组重叠。
+    if (widthDelta > 0) {
+      nextNodes = nextNodes.map((node) => {
+        if (node.id === groupId || node.parentId) return node;
+        const currentX = Number(node.position?.x ?? 0);
+        if (currentX < groupRightBeforeExpand) return node;
+        changed = true;
+        return {
+          ...node,
+          position: {
+            ...node.position,
+            x: currentX + widthDelta,
+          },
+        };
+      });
+    }
 
     return changed ? nextNodes : currentNodes;
   };
@@ -5508,7 +5533,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       sourceNodeId?: string,
       filesOverride?: Record<string, string>,
       contextActionLabelOverride?: string,
-      requestSourceOverride?: "default" | "carousel"
+      requestSourceOverride?: "default" | "carousel",
+      resetOutputTypeAfterFinish = false
     ) => {
       
       if (isLoading) return;
@@ -5533,9 +5559,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         !isAutoRequest &&
         !isContextGenerateAction &&
         Boolean(effectiveSourceNodeId) &&
-        Boolean(sourceNodeData?.isBlankBrainstormDraft) &&
-        cardOutputType !== "outline" &&
-        cardOutputType !== "role";
+        (
+          (cardOutputType === "brainstorm" && Boolean(sourceNodeData?.isBlankBrainstormDraft)) ||
+          ((cardOutputType === "summary" || cardOutputType === "info") && Boolean(sourceNodeData?.isBlankDraft))
+        );
       const sourceNodeFilePath = getTextValue((sourceNode?.data as any)?.filePath);
       const sourceNodeFileContent = getTextValue(sourceNode?.data?.content);
       const selectedDialogReferences = [...dialogCardPreviews];
@@ -5559,6 +5586,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       const effectiveRequestSource = requestSourceOverride ?? ideaInputSource;
       const shouldUseCarouselSmartTheme =
         effectiveRequestSource === "carousel" &&
+        !sourceNodeId &&
+        !filesOverride &&
+        !contextActionLabelOverride;
+      const shouldUseDefaultSmartTheme =
+        isAutoRequest &&
+        effectiveRequestSource !== "carousel" &&
         !sourceNodeId &&
         !filesOverride &&
         !contextActionLabelOverride;
@@ -5591,7 +5624,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       try {
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
-        setReqPanelUseSmartTheme(shouldUseSmartThemeForRequest || shouldUseCarouselSmartTheme);
+        setReqPanelUseSmartTheme(
+          shouldUseSmartThemeForRequest ||
+          shouldUseCarouselSmartTheme ||
+          shouldUseDefaultSmartTheme
+        );
         setSmartSuggestionsActive(false);
         setSmartSuggestions([]);
         resetReqPanelTextRefs();
@@ -5774,7 +5811,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           const useBrainstormBatchLoading =
             requestedCardKey === "brainstorm" && !shouldReuseSourceDraftNode;
           // manual 请求一开始就创建占位；角色/大纲优先创建分组占位。
-          // 但当“AI生成”是从空白脑洞草稿触发时，应直接复用当前草稿卡，而不是新建一张脑洞占位卡。
+          // 当“AI生成”来自可复用的空白草稿（脑洞/梗概/信息）时，应直接复用当前草稿卡。
           const shouldCreateLoadingCard = !useBrainstormBatchLoading;
           const createStandaloneGroupedCardByKey = (
             key: "role" | "outline",
@@ -7042,6 +7079,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         if (isAutoEmptyRequest) {
           setIsLoading(false);
         }
+        if (resetOutputTypeAfterFinish) {
+          handleOutputTypeChange("auto");
+        }
       }
     }, [
       canvasOutputType,
@@ -7606,7 +7646,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             ? `${panelThemeLabel}喵出错了`
             : reqPanelUseSmartTheme
               ? "智能喵"
-              : reqPanelTitle || (showInit ? "智能喵" : `${cardKeyLabel || "脑洞"}`);
+              : reqPanelTitle || (showInit ? `${panelThemeLabel}喵` : `${cardKeyLabel || "脑洞"}`);
     const panelTitleBackgroundImage = useMemo(() => {
       if (panelTitleText.includes("梗概")) {
         return "linear-gradient(90deg, #DBEAFE 0%, rgba(219,234,254,0) 100%)";
@@ -7638,7 +7678,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return "#EFAF00";
     }, [panelTitleText]);
 
-    const panelDetailText = useMemo(() => reqPanelDetail.trim(), [reqPanelDetail]);
+    const panelDetailText = useMemo(() => reqPanelDetail.trim() || '收到了~容喵想想', [reqPanelDetail]);
 
     const panelFooterText = reqPanelFooterDetail.trim();
     const hasSmartSuggestions = smartSuggestions.length > 0;
@@ -7740,7 +7780,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             onKeyDown={(e) => {
               if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
-              handleGenerateIns(inputTriggerRequestType, undefined, undefined, undefined, undefined, undefined, ideaInputSource);
+              handleGenerateIns(
+                inputTriggerRequestType,
+                undefined,
+                canvasOutputType === "auto" ? "auto" : undefined,
+                undefined,
+                undefined,
+                undefined,
+                "default",
+                true
+              );
             }}
             placeholder={currentIdeaPlaceholder}
             rows={2}
@@ -7820,13 +7869,22 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                           <button
                             key={item.key}
                             type="button"
+                            aria-disabled={item.disabled}
+                            title={item.disabled ? "暂未开放该功能，尽情期待" : undefined}
                             className={cn(
-                              "w-full rounded-[8px] cursor-pointer px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                              "w-full rounded-[8px] px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                              item.disabled
+                                ? "cursor-not-allowed text-[#9CA3AF]"
+                                : "cursor-pointer",
                               canvasModeCategory === item.key
                                 ? "bg-white font-medium text-[#EFAF00] shadow-[0px_0.5px_1px_0px_rgba(0,0,0,0.05)]"
                                 : "text-[#4B5563] hover:bg-white/70"
                             )}
                             onClick={() => {
+                              if (item.disabled) {
+                                msg("warning", "暂未开放该功能，尽情期待");
+                                return;
+                              }
                               handleModeCategoryChange(item.key);
                             }}
                           >
@@ -7903,7 +7961,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 ideaContent === '' && showInit ? 'h-[35px]' : 'h-[28px] w-[28px]',
               )}
               disabled={isLoading}
-              onClick={() => handleGenerateIns(inputTriggerRequestType, undefined, undefined, undefined, undefined, undefined, ideaInputSource)}
+              onClick={() => handleGenerateIns(
+                inputTriggerRequestType,
+                undefined,
+                canvasOutputType === "auto" ? "auto" : undefined,
+                undefined,
+                undefined,
+                undefined,
+                "default",
+                true
+              )}
             >
               {ideaContent === '' && showInit ? <span className="flex items-center gap-1.5">
                 <span>随机选题</span>
@@ -8126,9 +8193,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 onPickType={(payload) => {
                   setIdeaInputSource(payload.source === "img" || payload.source === "label" ? "carousel" : "default");
                   const cleanedText = String(payload.text || "")
-                    .replace(/^\s*脑洞喵[，,、:：]?\s*/i, "")
+                    .replace(/^\s*脑洞[，,、:：]?\s*/i, "")
                     .trim();
                   setIdeaContent(cleanedText || payload.text);
+                  setReqPanelUseSmartTheme(false);
+                  setCardKeyLabel("脑洞");
                   applyCanvasMode("brainstorm");
                 }}
               />
