@@ -68,6 +68,7 @@ interface InspirationCardProps {
   side3dClassName?: string;
   isActive: boolean;
   isBreathing?: boolean;
+  isAutoSliding?: boolean;
   onClick: (data: InspirationIdea, isActive: boolean) => void;
 }
 
@@ -111,6 +112,7 @@ const InspirationCard = ({
   side3dClassName,
   isActive,
   isBreathing = false,
+  isAutoSliding = false,
   onClick,
 }: InspirationCardProps) => {
   const hasData = Boolean(data.title);
@@ -119,6 +121,7 @@ const InspirationCard = ({
     <div
       className={cn(
         "inspiration-card absolute left-1/2 top-1/2 w-95 h-150 overflow-hidden p-3 rounded-xl bg-white shrink-0 snap-center transition-[transform,opacity,filter] duration-300",
+        isAutoSliding && "duration-1000 ease-linear",
         hasData && "cursor-pointer",
         isBreathing &&
           "inspiration-card--breathing animate-[inspiration-breath_1.6s_ease-in-out_infinite] shadow-[0_0_40.305px_16.122px_rgba(255,204,0,0.25)]",
@@ -182,6 +185,7 @@ const MInspirationPage = () => {
     useState<InspirationIdea[]>(createEmptyCards);
   const [carouselOffset, setCarouselOffset] = useState(1);
   const [dragPreviewOffset, setDragPreviewOffset] = useState(0);
+  const autoSlideTimerRef = useRef<number | null>(null);
 
   const headline = useMemo(() => {
     if (status === "loading") return "加载中...";
@@ -405,8 +409,35 @@ const MInspirationPage = () => {
     return () => {
       cancelGenerationTask();
       cancelDetailTask();
+      if (autoSlideTimerRef.current) {
+        window.clearInterval(autoSlideTimerRef.current);
+        autoSlideTimerRef.current = null;
+      }
     };
   }, [cancelDetailTask, cancelGenerationTask]);
+
+  const isAllCardsLoading = loading && status === "loading" && loadingBreathingScope === "all";
+
+  useEffect(() => {
+    if (!isAllCardsLoading) {
+      if (autoSlideTimerRef.current) {
+        window.clearInterval(autoSlideTimerRef.current);
+        autoSlideTimerRef.current = null;
+      }
+      return;
+    }
+
+    autoSlideTimerRef.current = window.setInterval(() => {
+      setCarouselOffset((prev) => normalizeCarouselOffset(prev + CAROUSEL_STEP));
+    }, 1200);
+
+    return () => {
+      if (autoSlideTimerRef.current) {
+        window.clearInterval(autoSlideTimerRef.current);
+        autoSlideTimerRef.current = null;
+      }
+    };
+  }, [isAllCardsLoading, normalizeCarouselOffset]);
 
   const cardTransforms = useMemo(() => {
     const total = InspirationCardData.length;
@@ -526,7 +557,6 @@ const MInspirationPage = () => {
     } catch (error) {
       if (isRequestCanceled(error)) return false;
       console.error("获取灵感卡片失败:", error);
-      mtoast.error("获取灵感失败，请稍后重试");
       setStatus("idle");
       setInspirationCardData(createEmptyCards());
       return false;
@@ -847,6 +877,7 @@ const MInspirationPage = () => {
                     (loadingBreathingScope === "active" &&
                       index === activeCardIndex))
                 }
+                isAutoSliding={isAllCardsLoading}
                 onClick={handleCardClick}
               />
             ))}
