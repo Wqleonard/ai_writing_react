@@ -1084,7 +1084,7 @@ export default function EditableFlowCard({
       label: "我想用它生成...",
       onClick: (e: React.MouseEvent) => {
         e.stopPropagation();
-        canvasHandlers.handlePrepareGenerateToDialog?.(id, "info", {
+        canvasHandlers.handlePrepareGenerateToDialog?.(id, "auto", {
           files: contextGenerateOptions.files,
           title: "信息",
           actionLabel: "我想用它生成...",
