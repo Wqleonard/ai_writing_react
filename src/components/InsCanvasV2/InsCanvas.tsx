@@ -305,6 +305,29 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return "";
   };
 
+  const isCanvasStreamDebugEnabled = () => {
+    try {
+      const globalScope = globalThis as typeof globalThis & {
+        __INS_CANVAS_STREAM_DEBUG__?: boolean;
+        localStorage?: Storage;
+      };
+      if (globalScope.__INS_CANVAS_STREAM_DEBUG__) return true;
+      const storageValue = globalScope.localStorage?.getItem("ins-canvas-stream-debug");
+      return storageValue === "1" || storageValue === "true";
+    } catch {
+      return false;
+    }
+  };
+
+  const logCanvasStreamDebug = (label: string, payload?: unknown) => {
+    if (!isCanvasStreamDebugEnabled()) return;
+    if (typeof payload === "undefined") {
+      console.log(`[InsCanvas stream] ${label}`);
+      return;
+    }
+    console.log(`[InsCanvas stream] ${label}`, payload);
+  };
+
   const getFirstTextValue = (...values: unknown[]) => {
     for (const value of values) {
       const text = getTextValue(value);
@@ -764,10 +787,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     callId?: string;
   };
 
-  type PartialCanvasWriteFileCall = CanvasWriteFileCall & {
-    callId: string;
-  };
-
   const extractWriteFileCalls = (value: unknown): CanvasWriteFileCall[] => {
     const result = new Map<string, CanvasWriteFileCall>();
 
@@ -820,42 +839,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return Array.from(result.values());
   };
 
-  const extractPartialWriteFileCalls = (value: unknown): PartialCanvasWriteFileCall[] => {
-    const result = new Map<string, PartialCanvasWriteFileCall>();
-
-    const visit = (current: unknown) => {
-      if (!current) return;
-      if (Array.isArray(current)) {
-        current.forEach(visit);
-        return;
-      }
-      if (typeof current !== "object") return;
-
-      const record = current as {
-        tool_calls?: Array<{ name?: string; args?: { id?: string; file_path?: string; content?: string } }>;
-      } & Record<string, unknown>;
-
-      if (Array.isArray(record.tool_calls)) {
-        record.tool_calls.forEach((toolCall) => {
-          if (toolCall?.name !== "write_file") return;
-          const callId = getTextValue(toolCall?.args?.id);
-          if (!callId) return;
-          const filePath = getTextValue(toolCall?.args?.file_path);
-          result.set(callId, {
-            callId,
-            filePath,
-            content: getTextValue(toolCall?.args?.content),
-          });
-        });
-      }
-
-      Object.values(record).forEach(visit);
-    };
-
-    visit(value);
-    return Array.from(result.values());
-  };
-
   const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] => {
     const result = new Map<string, CanvasWriteFileCall>();
 
@@ -897,10 +880,27 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         Object.entries(toolFiles).forEach(([filePath, fileContent]) => {
           const normalizedPath = getTextValue(filePath);
           if (!normalizedPath) return;
+          const normalizedCallId = callIdByPath.get(normalizedPath);
+          const previous = result.get(normalizedPath);
+          if (previous) {
+            logCanvasStreamDebug("extractUpdateToolFiles overwrite", {
+              filePath: normalizedPath,
+              previousCallId: previous.callId,
+              nextCallId: normalizedCallId,
+              previousContentLength: getTextValue(previous.content).length,
+              nextContentLength: getTextValue(fileContent).length,
+            });
+          } else {
+            logCanvasStreamDebug("extractUpdateToolFiles collect", {
+              filePath: normalizedPath,
+              callId: normalizedCallId,
+              contentLength: getTextValue(fileContent).length,
+            });
+          }
           result.set(normalizedPath, {
             filePath: normalizedPath,
             content: getTextValue(fileContent),
-            callId: callIdByPath.get(normalizedPath),
+            callId: normalizedCallId,
           });
         });
       }
@@ -1427,7 +1427,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return changed ? nextNodes : currentNodes;
   };
 
-  const fitGroupNodeToChildren = (currentNodes: CustomNode[], groupId: string) => {
+  const fitGroupNodeToChildren = (
+    currentNodes: CustomNode[],
+    groupId: string,
+    options?: {
+      shiftOtherTopLevelNodes?: boolean;
+    }
+  ) => {
     if (!groupId) return currentNodes;
 
     const groupNode = currentNodes.find((node) => node.id === groupId && node.type === "roleGroup");
@@ -1521,8 +1527,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return node;
     });
 
-    // 当分组宽度扩展时，顶开右侧顶层节点，避免与扩展后的分组重叠。
-    if (widthDelta > 0) {
+    // 当分组宽度扩展时，默认顶开右侧顶层节点；局部 relayout 模式下保持组外节点位置不变。
+    if (widthDelta > 0 && options?.shiftOtherTopLevelNodes !== false) {
       nextNodes = nextNodes.map((node) => {
         if (node.id === groupId || node.parentId) return node;
         const currentX = Number(node.position?.x ?? 0);
@@ -1732,7 +1738,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return changed ? nextNodes : currentNodes;
   };
 
-  const compactGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
+  const compactGroupNodes = (
+    currentNodes: CustomNode[],
+    groupId: string,
+    options?: {
+      shiftOtherTopLevelNodes?: boolean;
+    }
+  ) => {
     if (!groupId) return currentNodes;
 
     const groupNode = currentNodes.find((node) => node.id === groupId && node.type === "roleGroup");
@@ -1746,7 +1758,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           ? compactOutlineGroupNodes(currentNodes, groupId)
           : currentNodes;
 
-    return fitGroupNodeToChildren(compactedNodes, groupId);
+    return fitGroupNodeToChildren(compactedNodes, groupId, options);
   };
 
   const compactOutlineGroupNodes = (currentNodes: CustomNode[], groupId: string) => {
@@ -2186,7 +2198,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }, [launchOutlineCompletionConfetti]);
 
     useEffect(() => {
-      console.log({nodes, edges}, 'nodes & edges')
       nodesRef.current = nodes;
       edgesRef.current = edges;
     }, [nodes, edges]);
@@ -2244,7 +2255,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       };
     }, []);
 
-    const relayoutGroupsForNodeIds = useCallback((currentNodes: CustomNode[], nodeIds: string[]) => {
+  const relayoutGroupsForNodeIds = useCallback((
+    currentNodes: CustomNode[],
+    nodeIds: string[],
+    options?: {
+      shiftOtherTopLevelNodes?: boolean;
+    }
+  ) => {
       if (!nodeIds.length) return currentNodes;
 
       const groupIds = Array.from(
@@ -2265,14 +2282,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
           : 0;
 
-        nextNodes = compactGroupNodes(nextNodes, groupId);
+        nextNodes = compactGroupNodes(nextNodes, groupId, options);
 
         const afterGroupNode = nextNodes.find((node) => node.id === groupId);
         const afterHeight = afterGroupNode
           ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
           : beforeHeight;
         const heightDelta = Math.max(0, afterHeight - beforeHeight);
-        if (heightDelta > 0) {
+        if (heightDelta > 0 && options?.shiftOtherTopLevelNodes !== false) {
           nextNodes = shiftDownstreamTopLevelNodes(
             nextNodes,
             edgesRef.current as CustomEdge[],
@@ -2285,7 +2302,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return nextNodes;
     }, []);
 
-    const scheduleGroupMeasureRelayout = useCallback((groupId: string) => {
+    const scheduleGroupMeasureRelayout = useCallback((
+      groupId: string,
+      options?: {
+        shiftOtherTopLevelNodes?: boolean;
+      }
+    ) => {
       if (!groupId) return;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -2294,13 +2316,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             const beforeHeight = beforeGroupNode
               ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
               : 0;
-            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId);
+            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId, options);
             const afterGroupNode = nextNodes.find((node) => node.id === groupId);
             const afterHeight = afterGroupNode
               ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
               : beforeHeight;
             const heightDelta = Math.max(0, afterHeight - beforeHeight);
-            if (heightDelta > 0) {
+            if (heightDelta > 0 && options?.shiftOtherTopLevelNodes !== false) {
               nextNodes = shiftDownstreamTopLevelNodes(
                 nextNodes,
                 edgesRef.current as CustomEdge[],
@@ -3781,8 +3803,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               ? formatOutlineMarkdown(outlineJson.outline_dict)
               : outlineMarkdown;
           addOutlineCard(sourceNodeId, {
-            label: "故事大纲",
-            title: "故事大纲",
+            label: "大纲",
+            title: "大纲",
             content,
             allowTitleEdit: true,
             allowImageUpload: false,
@@ -4503,6 +4525,43 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       [getNextCanvasNodeId, getViewportCenteredCanvasPosition, hasIdea, setNodes]
     );
 
+    const openOutlineSettingsForRequest = useCallback(
+      (options?: {
+        sourceNodeId?: string;
+        files?: Record<string, string>;
+        title?: string;
+        insertPosition?: "center" | "right";
+      }) => {
+        const resolvedSourceNodeId = getTextValue(options?.sourceNodeId);
+        const result =
+          resolvedSourceNodeId && nodesRef.current.some((node) => node.id === resolvedSourceNodeId)
+            ? appendOutlineSettingsToGroup(resolvedSourceNodeId, {
+                files: options?.files,
+                title: options?.title,
+              })
+            : createStandaloneOutlineSettingsGroup({
+                files: options?.files,
+                title: options?.title,
+                insertPosition: options?.insertPosition,
+              });
+
+        const focusNodeId = result.settingsNodeId || result.groupId;
+        if (focusNodeId) {
+          rememberLatestGeneratedNode(focusNodeId);
+          focusCanvasNodeWhenReady(focusNodeId, { zoom: 0.95, duration: 500, preferGroup: false });
+        }
+
+        return result;
+      },
+      [
+        appendOutlineSettingsToGroup,
+        createStandaloneOutlineSettingsGroup,
+        focusCanvasNodeWhenReady,
+        getTextValue,
+        rememberLatestGeneratedNode,
+      ]
+    );
+
     const appendOutlineCardsToGroup = useCallback(
       (
         sourceNodeId: string,
@@ -4561,6 +4620,17 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               if (ay !== by) return ay - by;
               return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
             });
+          logCanvasStreamDebug("appendOutlineCardsToGroup", {
+            sourceNodeId,
+            groupId,
+            isSourceOutlineGroup,
+            existingOutlineNodesCount: existingOutlineNodes.length,
+            incomingOutlineCards: outlineCards.map((item) => ({
+              filePath: item.filePath ?? "",
+              contentLength: getTextValue(item.content).length,
+              isStreaming: item.isStreaming ?? false,
+            })),
+          });
           const startIndex = existingOutlineNodes.length;
           const outlineNodes = outlineCards.map((item, index) => {
             const idx = startIndex + index;
@@ -4576,7 +4646,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               },
               draggable: hasIdea,
               data: {
-                label: "故事大纲",
+                label: "大纲",
                 title: item.title ?? "",
                 filePath: item.filePath ?? "",
                 content: item.content ?? "",
@@ -5068,6 +5138,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               : key === "info"
                 ? "信息"
                 : "大纲";
+      const targetGroupId = getCanvasNodeGroupId(
+        nodesRef.current.find((node) => node.id === nodeId)
+      );
       setNodes((prev) => {
         const updatedNodes = prev.map((node) =>
           node.id !== nodeId
@@ -5100,11 +5173,18 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 } as any,
               }
         );
-        const relayoutNodes = relayoutGroupsForNodeIds(updatedNodes, [nodeId]);
+        const relayoutNodes = relayoutGroupsForNodeIds(updatedNodes, [nodeId], {
+          shiftOtherTopLevelNodes: false,
+        });
         nodesRef.current = relayoutNodes;
         return relayoutNodes;
       });
-    }, [inspirationDrawId, relayoutGroupsForNodeIds, setNodes]);
+      if (targetGroupId) {
+        scheduleGroupMeasureRelayout(targetGroupId, {
+          shiftOtherTopLevelNodes: false,
+        });
+      }
+    }, [inspirationDrawId, relayoutGroupsForNodeIds, scheduleGroupMeasureRelayout, setNodes]);
 
     const removeLoadingCard = useCallback((nodeId: string) => {
       const currentNode = nodes.find((node) => node.id === nodeId);
@@ -5290,7 +5370,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           !options ||
           (!Number.isFinite(Number(options.chapterNum)) && !String(options.requirement ?? "").trim());
         if (shouldOpenOutlineConfig) {
-          const result = appendOutlineSettingsToGroup(nodeId, {
+          const result = openOutlineSettingsForRequest({
+            sourceNodeId: nodeId,
             files: options?.files,
             title: options?.title,
           });
@@ -5321,7 +5402,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           options?.actionLabel
         );
       },
-      [appendOutlineSettingsToGroup, getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg]
+      [getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg, openOutlineSettingsForRequest]
     );
 
     const handleGenerateInfoFromContext = useCallback(
@@ -5597,9 +5678,39 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       );
       const hasReferenceFiles = Boolean(baseRequestFiles && Object.keys(baseRequestFiles).length > 0);
       const requestFiles = hasReferenceFiles ? mergeCreationIdeaIntoFiles(baseRequestFiles) : undefined;
+      const outlineConfigFiles = mergeFileRecords(
+        requestFiles,
+        trimmedIdea ? { "/大纲需求.md": trimmedIdea } : undefined
+      );
       preparedContextFilesRef.current = undefined;
       preparedGenerateSourceNodeIdRef.current = undefined;
       setDialogCardPreviews([]);
+      const shouldOpenOutlineConfigFromDock =
+        !isAutoRequest &&
+        cardOutputType === "outline" &&
+        !isContextGenerateAction &&
+        effectiveRequestSource === "default" &&
+        resetOutputTypeAfterFinish;
+      if (shouldOpenOutlineConfigFromDock) {
+        setPendingContextActionLabel("");
+        setReqPanelVisible(false);
+        setReqPanelUseSmartTheme(false);
+        setSmartSuggestionsActive(false);
+        setSmartSuggestions([]);
+        resetReqPanelTextRefs();
+        setReqPanelAction(null);
+        setForceCanvasView(true);
+        setCanvasReady(true);
+        const result = openOutlineSettingsForRequest({
+          sourceNodeId: effectiveSourceNodeId,
+          files: outlineConfigFiles,
+          title: trimmedIdea,
+        });
+        if (!result.groupId) {
+          msg("warning", "无法创建大纲组");
+        }
+        return;
+      }
       const hasExplicitCardTypeInIdea =
         !isAutoRequest &&
         (
@@ -5653,7 +5764,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             {
               prompt: isAutoEmptyRequest
                 ? "随机生成一个脑洞"
-                : `生成一个关于${trimmedIdea}${outputTypeLabel}卡`,
+                : `${trimmedIdea}`,
               mode: canvasModelType,
               type: requestType,
               files: requestFiles,
@@ -5783,13 +5894,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           const partialPanelOrderedIds = new Set<string>();
           const partialPanelContentById = new Map<string, string>();
           const collectedWriteFilesByPath = new Map<string, CanvasWriteFileCall>();
-          const partialWriteFilesByCallId = new Map<string, string>();
-          const partialNodeIdsByCallId = new Map<string, string>();
-          const partialFilePathByCallId = new Map<string, string>();
           const persistedReplySegments: ReplySegments = { start: "", middle: "", end: "" };
           const streamedNodeIdsByFilePath = new Map<string, string>();
           const streamPendingNodeIds = new Set<string>();
-          const finalizedWriteFilePaths = new Set<string>();
           const standaloneGroupIdsByKey = new Map<"role" | "outline", string>();
           const requestedCardKey =
             ({
@@ -5799,7 +5906,42 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               outline: "outline",
               info: "info",
             }[cardOutputType] as CanvasCardKey);
+          const resolveReusableRoleDraftNodeId = () => {
+            if (requestedCardKey !== "role" || !effectiveSourceNodeId) return "";
+            const latestNodes = nodesRef.current;
+            const source =
+              latestNodes.find((node) => node.id === effectiveSourceNodeId) ||
+              nodes.find((node) => node.id === effectiveSourceNodeId);
+            if (!source) return "";
+            const groupId =
+              source.type === "roleGroup"
+                ? source.id
+                : getTextValue(source.parentId) || getTextValue((source.data as any)?.roleGroupId);
+            if (!groupId) return "";
+            const sourceIsReusable =
+              source.type === "settingCard" &&
+              getTextValue(source.data?.label) === "角色" &&
+              Boolean((source.data as any)?.isBlankDraft) &&
+              !isRelationshipWriteFile(getTextValue((source.data as any)?.filePath));
+            if (sourceIsReusable) return source.id;
+            return latestNodes.find((node) => {
+              if (node.type !== "settingCard") return false;
+              const belongsToGroup =
+                getTextValue(node.parentId) === groupId ||
+                getTextValue((node.data as any)?.roleGroupId) === groupId;
+              if (!belongsToGroup) return false;
+              if (getTextValue(node.data?.label) !== "角色") return false;
+              if (!Boolean((node.data as any)?.isBlankDraft)) return false;
+              if (Boolean((node.data as any)?.pendingGenerate) || Boolean((node.data as any)?.isStreaming)) {
+                return false;
+              }
+              return !isRelationshipWriteFile(getTextValue((node.data as any)?.filePath));
+            })?.id ?? "";
+          };
           const useContextLinkedCreation = Boolean(effectiveSourceNodeId);
+          const reusableRoleDraftNodeId = resolveReusableRoleDraftNodeId();
+          const isReusingRoleDraftNode =
+            requestedCardKey === "role" && Boolean(reusableRoleDraftNodeId);
           const useBrainstormBatchLoading =
             requestedCardKey === "brainstorm" && !shouldReuseSourceDraftNode;
           if (useBrainstormBatchLoading) {
@@ -5823,7 +5965,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               skipAutoStream?: boolean;
             }
           ) => {
-            let createdNodeId = "";
             const cardWidth = 300;
             const cardHeight = key === "role" ? 450 : 260;
             const gapX = key === "role" ? ROLE_GROUP_CARD_GAP_X : OUTLINE_GROUP_CARD_GAP_X;
@@ -5833,16 +5974,17 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             const groupPadding = key === "role" ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING;
             const minGroupWidth = 340;
             const groupLabel = key === "role" ? "角色" : "大纲";
+            const groupId =
+              standaloneGroupIdsByKey.get(key) || getNextCanvasNodeId(`${key}-group-loading`);
+            const createdNodeId = getNextCanvasNodeId(`${key}-group-card-loading`);
+            standaloneGroupIdsByKey.set(key, groupId);
 
             setCanvasReady(true);
             setNodes((prev) => {
               const next = [...prev];
-              let groupId = standaloneGroupIdsByKey.get(key) || "";
-              let groupNode = groupId ? next.find((node) => node.id === groupId) : null;
+              let groupNode = next.find((node) => node.id === groupId) || null;
 
               if (!groupNode) {
-                groupId = getNextCanvasNodeId(`${key}-group-loading`);
-                standaloneGroupIdsByKey.set(key, groupId);
                 const { x, y } = getStandaloneNextRowPosition(prev);
                 groupNode = {
                   id: groupId,
@@ -5874,7 +6016,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               const idx = existingChildren.length;
               const col = idx % cols;
               const row = Math.floor(idx / cols);
-              createdNodeId = getNextCanvasNodeId(`${key}-group-card-loading`);
 
               next.push({
                 id: createdNodeId,
@@ -5886,7 +6027,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 },
                 draggable: hasIdea,
                 data: {
-                  label: key === "role" ? "角色" : "故事大纲",
+                  label: key === "role" ? "角色" : "大纲",
                   title: options?.title ?? "",
                   filePath: options?.filePath ?? "",
                   content: options?.content ?? "",
@@ -5956,6 +6097,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             };
 
             if (requestedCardKey === "role") {
+              if (isReusingRoleDraftNode) {
+                return reusableRoleDraftNodeId;
+              }
               if (useContextLinkedCreation && effectiveSourceNodeId) {
                 return appendRoleCardsToGroup(effectiveSourceNodeId, [commonOptions]).roleNodeIds[0] ?? "";
               }
@@ -6007,11 +6151,43 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             : [];
           const brainstormLoadingCardId =
             brainstormPlaceholderIds[brainstormPlaceholderIds.length - 1] ?? "";
+          const restoreReusedRoleDraftNode = (nodeId: string) => {
+            if (!nodeId || !isReusingRoleDraftNode || nodeId !== reusableRoleDraftNodeId) return;
+            finishLoadingProgressForNode(nodeId, 0);
+            updateLoadingCard(nodeId, "role", {
+              title: "",
+              filePath: "",
+              content: "",
+              image: "",
+              fromApi: false,
+              isStreaming: false,
+              allowTitleEdit: true,
+              allowImageUpload: true,
+              autoEdit: true,
+              isBlankDraft: true,
+              isBlankBrainstormDraft: false,
+              brainstormAiMode: false,
+              pendingGenerate: false,
+              highlighted: false,
+              skipAutoStream: false,
+            });
+          };
+          const cleanupLoadingCard = (nodeId: string) => {
+            if (!nodeId) return;
+            if (isReusingRoleDraftNode && nodeId === reusableRoleDraftNodeId) {
+              restoreReusedRoleDraftNode(nodeId);
+              return;
+            }
+            removeLoadingCard(nodeId);
+          };
           if (loadingCardId) {
-            if (shouldReuseSourceDraftNode) {
+            if (shouldReuseSourceDraftNode || (isReusingRoleDraftNode && loadingCardId === reusableRoleDraftNodeId)) {
               updateLoadingCard(loadingCardId, requestedCardKey, {
                 title: "",
-                filePath: getTextValue((sourceNode?.data as any)?.filePath),
+                filePath:
+                  shouldReuseSourceDraftNode
+                    ? getTextValue((sourceNode?.data as any)?.filePath)
+                    : "",
                 content: "",
                 image: "",
                 fromApi: true,
@@ -6277,7 +6453,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             return loadingCardId;
           };
           const ensureStreamNodeId = (filePath: string, key: CanvasCardKey) => {
-            const existingNodeId = streamedNodeIdsByFilePath.get(filePath);
+            const existingNodeId = streamedNodeIdsByFilePath.get(filePath) || "";
             if (existingNodeId) {
               streamPendingNodeIds.add(existingNodeId);
               return existingNodeId;
@@ -6416,32 +6592,26 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               streamPendingNodeIds.add(nextNodeId);
               rememberLatestGeneratedNode(nextNodeId);
               connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [nextNodeId]);
-            }
-            return nextNodeId;
-          };
-          const ensurePartialStreamNodeId = (callId: string, filePath: string, key: CanvasCardKey) => {
-            const existingNodeId = partialNodeIdsByCallId.get(callId);
-            if (existingNodeId) {
-              streamPendingNodeIds.add(existingNodeId);
-              const previousPath = partialFilePathByCallId.get(callId);
-              if (previousPath && previousPath !== filePath) {
-                streamedNodeIdsByFilePath.delete(previousPath);
+              if (key === "summary" || key === "outline") {
+                logCanvasStreamDebug("ensureStreamNodeId resolved", {
+                  requestedCardKey,
+                  filePath,
+                  key,
+                  nextNodeId,
+                  useContextLinkedCreation,
+                  effectiveSourceNodeId,
+                  loadingCardId,
+                });
               }
-              if (filePath) {
-                streamedNodeIdsByFilePath.set(filePath, existingNodeId);
-                partialFilePathByCallId.set(callId, filePath);
-              }
-              return existingNodeId;
-            }
-            if (!filePath) {
-              return "";
-            }
-            const nextNodeId = ensureStreamNodeId(filePath, key);
-            if (nextNodeId) {
-              streamPendingNodeIds.add(nextNodeId);
-              partialNodeIdsByCallId.set(callId, nextNodeId);
-              partialFilePathByCallId.set(callId, filePath);
-              streamedNodeIdsByFilePath.set(filePath, nextNodeId);
+            } else if (key === "summary" || key === "outline") {
+              logCanvasStreamDebug("ensureStreamNodeId unresolved", {
+                requestedCardKey,
+                filePath,
+                key,
+                useContextLinkedCreation,
+                effectiveSourceNodeId,
+                loadingCardId,
+              });
             }
             return nextNodeId;
           };
@@ -6505,25 +6675,33 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               const filePath = getTextValue(item.filePath);
               if (!filePath) return;
               const key = resolveWriteFileCardKey(filePath);
-              const nodeId = streamedNodeIdsByFilePath.get(filePath);
+              const nodeId = streamedNodeIdsByFilePath.get(filePath) || "";
               if (!nodeId) return;
               applyWriteFileResultToNode(nodeId, key, item);
             });
           };
           const syncWriteFileCard = (
             item: CanvasWriteFileCall,
-            isFinalWrite: boolean,
-            partialCallId?: string
+            isFinalWrite: boolean
           ) => {
             if (useBrainstormBatchLoading) return;
             const filePath = getTextValue(item.filePath);
-            if (!filePath && !partialCallId) return;
+            if (!filePath) return;
             if (shouldSkipWriteFileCardCreation(filePath)) return;
             const key = resolveWriteFileCardKey(filePath);
             const boundLoadingNodeId = bindWriteFileToLoadingCard(item, key, isFinalWrite);
-            const nodeId = boundLoadingNodeId || (partialCallId
-              ? ensurePartialStreamNodeId(partialCallId, filePath, key)
-              : ensureStreamNodeId(filePath, key));
+            const nodeId = boundLoadingNodeId || ensureStreamNodeId(filePath, key);
+            if (key === "summary" || key === "outline") {
+              logCanvasStreamDebug("syncWriteFileCard", {
+                requestedCardKey,
+                filePath,
+                key,
+                isFinalWrite,
+                loadingCardId,
+                boundLoadingNodeId,
+                nodeId,
+              });
+            }
             if (!nodeId) return;
             streamPendingNodeIds.add(nodeId);
             if (boundLoadingNodeId) return;
@@ -6635,23 +6813,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   );
                   syncReqPanelTextRefs(detail, body, footer);
                 }
-                const partialWriteFiles = extractPartialWriteFileCalls(streamData?.data);
-                partialWriteFiles.forEach((item) => {
-                  const callId = getTextValue(item.callId);
-                  if (!callId) return;
-                  const normalizedPath = getTextValue(item.filePath);
-                  if (normalizedPath && finalizedWriteFilePaths.has(normalizedPath)) return;
-                  const nextContent = getTextValue(item.content);
-                  partialWriteFilesByCallId.set(callId, nextContent);
-                  syncWriteFileCard(
-                    {
-                      filePath: normalizedPath,
-                      content: partialWriteFilesByCallId.get(callId) || "",
-                    },
-                    false,
-                    callId
-                  );
-                });
                 return;
               }
               const updatesContent = isFinalWrite
@@ -6685,26 +6846,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   const normalizedPath = getTextValue(item.filePath);
                   if (!normalizedPath) return;
                   if (shouldSkipWriteFileCardCreation(normalizedPath)) return;
-                  const normalizedCallId = getTextValue(item.callId);
-                  const resolvedKey = resolveWriteFileCardKey(normalizedPath);
                   const normalizedItem = {
                     filePath: normalizedPath,
                     content: getTextValue(item.content),
-                    callId: normalizedCallId,
+                    callId: getTextValue(item.callId),
                   };
-                  finalizedWriteFilePaths.add(normalizedPath);
-                  const matchedCallId =
-                    normalizedItem.callId ||
-                    Array.from(partialFilePathByCallId.entries()).find(
-                      ([, partialPath]) => partialPath === normalizedPath
-                    )?.[0];
-                  if (matchedCallId) {
-                    partialWriteFilesByCallId.delete(matchedCallId);
-                    partialFilePathByCallId.delete(matchedCallId);
-                    partialNodeIdsByCallId.delete(matchedCallId);
-                  }
                   collectedWriteFilesByPath.set(normalizedPath, normalizedItem);
-                  syncWriteFileCard(normalizedItem, true, normalizedItem.callId);
+                  syncWriteFileCard(normalizedItem, true);
                 });
               }
               const replySegments = extractReplySegmentsFromToolFiles(streamData?.data);
@@ -6768,7 +6916,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
 
           if (streamError) {
             stopLoadingProgress();
-            if (loadingCardId) removeLoadingCard(loadingCardId);
+            if (loadingCardId) cleanupLoadingCard(loadingCardId);
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             throw streamError;
           }
@@ -6793,7 +6941,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             if (streamedNodeIdsByFilePath.size > 0) {
               applyCollectedWriteFilesToStreamNodes();
               if (loadingCardId && !loadingCardConsumed) {
-                removeLoadingCard(loadingCardId);
+                cleanupLoadingCard(loadingCardId);
               }
               finalizePendingStreamNodes();
               setIsLoading(false);
@@ -6916,7 +7064,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   }
                 }
               } else if (loadingCardId && !relationFiles.length) {
-                removeLoadingCard(loadingCardId);
+                cleanupLoadingCard(loadingCardId);
               }
 
               relationFiles.forEach((item) => {
@@ -7056,7 +7204,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             setReqPanelStatus("success");
           } else {
-            if (loadingCardId) removeLoadingCard(loadingCardId);
+            if (loadingCardId) cleanupLoadingCard(loadingCardId);
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             setReqPanelStatus("error");
             setReqPanelDetail("");
@@ -7098,6 +7246,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       connectReferenceNodesToTargets,
       clearBrainstormPlaceholderBatch,
       focusCanvasNode,
+      openOutlineSettingsForRequest,
       getDialogReferenceFiles,
       mergeFileRecords,
       persistGeneratedWriteFiles,
@@ -7289,16 +7438,35 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           }
           return null;
         })();
-        const nextRequestType: "auto" | "manual" = detectedCardMeta
+        const persistentCreationIdeaFiles = mergeCreationIdeaIntoFiles({});
+        const normalizedSuggestionCount = smartSuggestions.length;
+        const shouldUseThreeOptionBrainstormFlow = normalizedSuggestionCount === 3;
+        const shouldUseTwoOptionFlow = normalizedSuggestionCount === 2;
+        const nextRequestType: "auto" | "manual" = shouldUseThreeOptionBrainstormFlow
           ? "manual"
-          : smartSuggestions.length === 2 && suggestionIndex === smartSuggestions.length - 1
-            ? "auto"
-            : "manual";
-        const nextOutputType: Exclude<CanvasOutputType, "auto"> = detectedCardMeta
-          ? detectedCardMeta.outputType
-          : "brainstorm";
-        const nextCardLabel = detectedCardMeta?.cardLabel ?? "脑洞";
-        const nextCardTitle = detectedCardMeta?.cardTitle ?? `${nextCardLabel}卡`;
+          : shouldUseTwoOptionFlow
+            ? suggestionIndex === 0
+              ? "manual"
+              : "auto"
+            : detectedCardMeta
+              ? "manual"
+              : "manual";
+        const nextOutputType: Exclude<CanvasOutputType, "auto"> = shouldUseThreeOptionBrainstormFlow
+          ? "brainstorm"
+          : detectedCardMeta?.outputType ?? "brainstorm";
+        const nextCardLabel = shouldUseThreeOptionBrainstormFlow
+          ? "脑洞"
+          : detectedCardMeta?.cardLabel ?? "脑洞";
+        const nextCardTitle = shouldUseThreeOptionBrainstormFlow
+          ? "脑洞卡"
+          : detectedCardMeta?.cardTitle ?? `${nextCardLabel}卡`;
+        const nextIdeaContent = shouldUseThreeOptionBrainstormFlow
+          ? `${suggestionTheme}生成脑洞卡`
+          : suggestionTheme;
+        const shouldUseTwoOptionOutlineConfigFlow =
+          shouldUseTwoOptionFlow &&
+          suggestionIndex === 0 &&
+          nextOutputType === "outline";
 
         stopBrainstormProgress();
         brainstormBatchIdsRef.current = [];
@@ -7312,9 +7480,18 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setReqPanelDetail(`正在根据所选${nextCardTitle}生成卡片，请稍等...`);
         setReqPanelFooterDetail("");
         setPendingSuggestionIdea(suggestion.theme);
-        void handleGenerateIns(nextRequestType, suggestion.theme, nextOutputType);
+        void handleGenerateIns(
+          nextRequestType,
+          nextIdeaContent,
+          nextOutputType,
+          undefined,
+          persistentCreationIdeaFiles,
+          undefined,
+          shouldUseTwoOptionOutlineConfigFlow ? "default" : undefined,
+          shouldUseTwoOptionOutlineConfigFlow
+        );
       },
-      [handleGenerateIns, smartSuggestions, stopBrainstormProgress]
+      [getTextValue, handleGenerateIns, mergeCreationIdeaIntoFiles, smartSuggestions, stopBrainstormProgress]
     );
 
     const handleAddCardToDialog = useCallback(
@@ -8135,7 +8312,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   autoScroll={reqPanelStatus === "loading"}
                   className="w-full rounded-[14px]"
                 >
-                  {reqPanelBodyDetail ? (
+                  {reqPanelBodyDetail && smartSuggestions.length === 2 ? (
                     <div className="px-3 py-2 text-[12px] leading-5 text-[#111]">
                       <MarkdownRenderer content={reqPanelBodyDetail} />
                     </div>
