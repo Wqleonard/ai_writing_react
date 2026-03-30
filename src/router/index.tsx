@@ -42,6 +42,8 @@ const ScriptEditorVueHostPage = lazy(
   () => import("@/pages/script-editor-vue-host"),
 );
 // const NotFoundPage = lazy(() => import('@/pages/not-found'))
+const ClawUserAgreement = lazy(() => import("@/pages/agreement/claw-user-agreement"));
+const ClawPrivacyPolicy = lazy(() => import("@/pages/agreement/claw-privacy-policy"));
 
 // Mobile layouts
 const MLayout = lazy(() => import("@/layout/MLayout/MLayout.tsx"));
@@ -169,6 +171,16 @@ const routes: RouteObject[] = [
         path: "/privacy-policy",
         element: <PrivacyPolicyPage />,
         handle: { title: "隐私政策" },
+      },
+      {
+        path: "/claw-user-agreement",
+        element: <ClawUserAgreement />,
+        handle: { title: "storyclaw-用户服务协议" },
+      },
+      {
+        path: "/claw-privacy-policy",
+        element: <ClawPrivacyPolicy />,
+        handle: { title: "storyclaw-隐私政策" },
       },
       {
         path: "/children-privacy-protection-policy",

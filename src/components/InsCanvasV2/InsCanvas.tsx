@@ -787,6 +787,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     callId?: string;
   };
 
+  type PartialCanvasWriteFileCall = CanvasWriteFileCall & {
+    callId: string;
+  };
+
   const extractWriteFileCalls = (value: unknown): CanvasWriteFileCall[] => {
     const result = new Map<string, CanvasWriteFileCall>();
 
@@ -829,6 +833,42 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             getTextValue(toolCall?.args?.file_path),
             getTextValue(toolCall?.args?.content)
           );
+        });
+      }
+
+      Object.values(record).forEach(visit);
+    };
+
+    visit(value);
+    return Array.from(result.values());
+  };
+
+  const extractPartialWriteFileCalls = (value: unknown): PartialCanvasWriteFileCall[] => {
+    const result = new Map<string, PartialCanvasWriteFileCall>();
+
+    const visit = (current: unknown) => {
+      if (!current) return;
+      if (Array.isArray(current)) {
+        current.forEach(visit);
+        return;
+      }
+      if (typeof current !== "object") return;
+
+      const record = current as {
+        tool_calls?: Array<{ name?: string; args?: { id?: string; file_path?: string; content?: string } }>;
+      } & Record<string, unknown>;
+
+      if (Array.isArray(record.tool_calls)) {
+        record.tool_calls.forEach((toolCall) => {
+          if (toolCall?.name !== "write_file") return;
+          const callId = getTextValue(toolCall?.args?.id);
+          if (!callId) return;
+          const filePath = getTextValue(toolCall?.args?.file_path);
+          result.set(callId, {
+            callId,
+            filePath,
+            content: getTextValue(toolCall?.args?.content),
+          });
         });
       }
 

@@ -91,9 +91,13 @@ export function useLangGraphStream(
   const currentWriteOrEditorFilePathRef = useRef<string>("");
   const currentEditInfoListRef = useRef<EditFileArgsType[]>([]);
   const messagesRef = useRef<AgentCustomMessage[]>([]);
+  const currentMessageChunkRef = useRef<Partial<AgentCustomMessage> | null>(null);
+  const pendingInterruptRef = useRef<{ todos: StreamTodo[]; status: "in_progress" } | null>(null);
   const streamCompletedRef = useRef(false);
   const suggestionsState = useSuggestionsController();
   const optionsRef = useRef(options);
+  const currentSessionIdRef = useRef<string>("");
+  const currentWorkIdRef = useRef<number | string | null>(null);
   optionsRef.current = options;
 
   const isMainAgentEvent = (event: string): boolean => {
@@ -193,9 +197,230 @@ export function useLangGraphStream(
     optionsRef.current.onMessagesUpdate?.(next, isSuggestions);
   };
 
+  const isMessageExists = (messageId: string): boolean => {
+    if (!messageId) return false;
+    const list = messagesRef.current;
+    if (list.length > 0 && list[list.length - 1]?.id === messageId) return true;
+    return list.some((msg) => msg.id === messageId);
+  };
+
   const emitTodos = (next: StreamTodo[]) => {
     setTodos(next);
     optionsRef.current.onUpdateTodos?.(next);
+  };
+
+  const attachPendingInterruptToTail = (
+    list: AgentCustomMessage[]
+  ): AgentCustomMessage[] => {
+    if (!pendingInterruptRef.current || list.length === 0) return list;
+    const next = [...list];
+    const lastIndex = next.length - 1;
+    const last = next[lastIndex];
+    next[lastIndex] = {
+      ...last,
+      hiltTodos: pendingInterruptRef.current.todos,
+      hiltStatus: pendingInterruptRef.current.status,
+    };
+    return next;
+  };
+
+  const updateWriteOrEditorFilePathFromToolCalls = (
+    toolCalls: Array<{ name?: string; args?: { file_path?: string } }>
+  ) => {
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return;
+    for (const toolCall of toolCalls) {
+      const filePath = toolCall?.args?.file_path;
+      if (
+        (toolCall?.name === "write_file" || toolCall?.name === "edit_file") &&
+        typeof filePath === "string" &&
+        filePath.endsWith(".md")
+      ) {
+        currentWriteOrEditorFilePathRef.current = filePath;
+      }
+    }
+  };
+
+  const handleMessagesPartial = (messageData: unknown) => {
+    if (!messageData || typeof messageData !== "object") return;
+    const message = messageData as {
+      type?: string;
+      id?: string;
+      content?: unknown;
+      additional_kwargs?: Record<string, unknown>;
+      response_metadata?: Record<string, unknown> & { status?: string };
+      name?: string;
+      example?: boolean;
+      tool_calls?: Array<{ name?: string; args?: { file_path?: string } }>;
+      invalid_tool_calls?: unknown[];
+      usage_metadata?: unknown;
+      chunk_position?: string;
+    };
+    const isAIMessage = message.type === "ai" || message.type === "AIMessageChunk";
+    if (!isAIMessage) return;
+
+    const content = extractContent(message.content);
+    const chunkId = String(message.id ?? "");
+    const currentChunk = currentMessageChunkRef.current;
+    const isLastChunk =
+      message.chunk_position === "last" ||
+      message.response_metadata?.status === "completed";
+
+    if (!currentChunk || currentChunk.id !== chunkId) {
+      if (!currentChunk && chunkId && isMessageExists(chunkId) && isLastChunk) {
+        return;
+      }
+      if (currentChunk && currentChunk.id !== chunkId) {
+        const prevChunkId = String(currentChunk.id ?? "").trim();
+        if (prevChunkId && !isMessageExists(prevChunkId)) {
+          const nextList = attachPendingInterruptToTail([
+            ...messagesRef.current,
+            currentChunk as AgentCustomMessage,
+          ]);
+          emitMessages(nextList, false);
+        }
+      }
+      const initialToolCalls = Array.isArray(message.tool_calls)
+        ? [...message.tool_calls]
+        : [];
+      currentMessageChunkRef.current = {
+        resultType: "input",
+        content,
+        additional_kwargs: message.additional_kwargs ?? {},
+        response_metadata: {
+          finish_reason: String(message.response_metadata?.finish_reason ?? ""),
+          model_name: String(message.response_metadata?.model_name ?? ""),
+          service_tier: String(message.response_metadata?.service_tier ?? ""),
+        },
+        type: "ai",
+        name: message.name ?? null,
+        id: chunkId,
+        example: message.example ?? false,
+        tool_calls: initialToolCalls as AgentCustomMessage["tool_calls"],
+        invalid_tool_calls: message.invalid_tool_calls ?? [],
+        usage_metadata: null,
+      };
+      updateWriteOrEditorFilePathFromToolCalls(initialToolCalls);
+    } else {
+      currentChunk.content = content;
+      if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+        currentChunk.tool_calls = [
+          ...message.tool_calls,
+        ] as AgentCustomMessage["tool_calls"];
+        updateWriteOrEditorFilePathFromToolCalls(message.tool_calls);
+      }
+      if (message.response_metadata && Object.keys(message.response_metadata).length > 0) {
+        currentChunk.response_metadata = {
+          finish_reason: String(message.response_metadata.finish_reason ?? ""),
+          model_name: String(message.response_metadata.model_name ?? ""),
+          service_tier: String(message.response_metadata.service_tier ?? ""),
+        };
+      }
+    }
+
+    const activeChunk = currentMessageChunkRef.current;
+    if (!activeChunk) return;
+
+    if (isLastChunk) {
+      if (!activeChunk.id && chunkId && isMessageExists(chunkId)) {
+        currentMessageChunkRef.current = null;
+        return;
+      }
+      const nextList = [...messagesRef.current];
+      const existingIndex = nextList.findIndex(
+        (item) => item.id && item.id === activeChunk.id
+      );
+      const completeMessage: AgentCustomMessage = {
+        ...(activeChunk as AgentCustomMessage),
+      };
+      if (existingIndex >= 0) {
+        nextList[existingIndex] = {
+          ...nextList[existingIndex],
+          ...completeMessage,
+        };
+      } else {
+        nextList.push(completeMessage);
+      }
+      emitMessages(attachPendingInterruptToTail(nextList), false);
+      currentMessageChunkRef.current = null;
+      return;
+    }
+
+    const previewList = attachPendingInterruptToTail([
+      ...messagesRef.current,
+      activeChunk as AgentCustomMessage,
+    ]);
+    setMessages(previewList);
+    optionsRef.current.onMessagesUpdate?.(previewList, false);
+  };
+
+  const handleMessagesComplete = (payload: unknown) => {
+    const candidates = Array.isArray(payload) ? payload : [payload];
+    for (const messageData of candidates) {
+      if (!messageData || typeof messageData !== "object") continue;
+      const message = messageData as {
+      type?: string;
+      id?: string;
+      content?: unknown;
+      additional_kwargs?: Record<string, unknown>;
+      response_metadata?: {
+        finish_reason?: string;
+        model_name?: string;
+        service_tier?: string;
+      };
+      name?: string;
+      example?: boolean;
+      tool_calls?: Array<{ name?: string; args?: { file_path?: string } }>;
+      invalid_tool_calls?: unknown[];
+      usage_metadata?: unknown;
+      status?: string;
+    };
+      const isAIMessage =
+        message.type === "ai" || message.type === "AIMessageChunk" || message.type === "tool";
+      if (!isAIMessage) continue;
+      const content = extractContent(message.content);
+      if (content.includes("Updated todo list to") || message.status === "error") continue;
+
+      const toolCalls = Array.isArray(message.tool_calls) ? [...message.tool_calls] : [];
+      updateWriteOrEditorFilePathFromToolCalls(toolCalls);
+      const msgId = String(message.id ?? "");
+
+      if (
+        currentMessageChunkRef.current &&
+        String(currentMessageChunkRef.current.id ?? "") === msgId
+      ) {
+        currentMessageChunkRef.current = null;
+      }
+
+      const completeMessage: AgentCustomMessage = {
+        id: msgId,
+        type: message.type === "tool" ? "tool" : "ai",
+        content,
+        name: message.name ?? null,
+        example: message.example ?? false,
+        tool_calls: toolCalls as AgentCustomMessage["tool_calls"],
+        invalid_tool_calls: message.invalid_tool_calls ?? [],
+        additional_kwargs: message.additional_kwargs ?? {},
+        response_metadata: {
+          finish_reason: message.response_metadata?.finish_reason ?? "",
+          model_name: message.response_metadata?.model_name ?? "",
+          service_tier: message.response_metadata?.service_tier ?? "",
+        },
+        usage_metadata: null,
+        resultType: "output",
+      };
+
+      const nextList = [...messagesRef.current];
+      const existingIndex = nextList.findIndex((item) => item.id && item.id === msgId);
+      if (existingIndex >= 0) {
+        nextList[existingIndex] = {
+          ...nextList[existingIndex],
+          ...completeMessage,
+        };
+      } else {
+        nextList.push(completeMessage);
+      }
+      emitMessages(attachPendingInterruptToTail(nextList), false);
+    }
   };
 
   // 获取联想提示词
@@ -255,18 +480,24 @@ export function useLangGraphStream(
     ) => {
       if (isStreamingRef.current) return;
       const shouldTrackStreaming = !commandOnly;
+      currentSessionIdRef.current = sessionId;
+      currentWorkIdRef.current = workId;
       setError(null);
+      // 与 Vue 一致：每次 submit 都重置本次流缓存，避免 commandOnly 沿用上轮消息导致重复堆叠
+      messagesRef.current = [];
+      currentMessageChunkRef.current = null;
+      pendingInterruptRef.current = null;
       if (shouldTrackStreaming) {
-        messagesRef.current = [];
         setMessages([]);
         setFiles({});
         setTodos([]);
         setIsStreaming(true);
-        isStreamingRef.current = true;
       } else {
         // commandOnly 场景（如 reject/approve）不应重置展示状态，也不应占用 streaming UI。
-        isStreamingRef.current = false;
+        setIsStreaming(false);
       }
+      // 与 Vue 链路保持一致：所有 submit（包括 commandOnly）都占用同一条流互斥锁，防止并发流导致重复消息。
+      isStreamingRef.current = true;
       streamCompletedRef.current = false;
       sensitiveWordHandledRef.current = false;
       currentWriteOrEditorFilePathRef.current = "";
@@ -358,80 +589,82 @@ export function useLangGraphStream(
               return;
             }
 
-            if ((eventType === "messages" || eventType?.startsWith("messages/")) && eventData != null) {
-              const isCompleteEvent =
-                eventType === "messages/complete" ||
-                eventType?.startsWith("messages/complete");
-              const rawList = Array.isArray(eventData) ? eventData : [eventData];
-              const next = [...messagesRef.current];
-              for (const item of rawList) {
-                if (!item || typeof item !== "object") continue;
-                const itemType = (item as { type?: string }).type;
-                const isAI = itemType === "ai" || itemType === "AIMessageChunk";
-                const isTool = itemType === "tool";
-                if (!isAI && !isTool) continue;
-                const content = extractContent((item as { content?: unknown }).content);
-                // 与 Vue 行为一致：过滤掉后端内部用于更新待办的提示语和 error 状态的消息，避免展示类似 “Updated todo list to ...”
-                if (content && typeof content === "string" && content.includes("Updated todo list to")) {
-                  continue;
-                }
-                if ((item as { status?: string }).status === "error") {
-                  continue;
-                }
-                const id = (item as { id?: string }).id ?? "";
-                const idx = next.findIndex((m) => m.id === id);
-                const meta = (item as { response_metadata?: { finish_reason?: string; model_name?: string; service_tier?: string } }).response_metadata;
-                const msg: AgentCustomMessage = {
-                  id,
-                  type: isTool ? "tool" : "ai",
-                  content,
-                  name: (item as { name?: string }).name ?? null,
-                  example: (item as { example?: boolean }).example ?? false,
-                  tool_calls: ((item as { tool_calls?: { name?: string; args?: Record<string, unknown>; id?: string; type?: string }[] }).tool_calls ?? []) as AgentCustomMessage["tool_calls"],
-                  invalid_tool_calls: (item as { invalid_tool_calls?: unknown[] }).invalid_tool_calls ?? [],
-                  additional_kwargs: (item as { additional_kwargs?: Record<string, unknown> }).additional_kwargs ?? {},
-                  response_metadata: {
-                    finish_reason: meta?.finish_reason ?? "",
-                    model_name: meta?.model_name ?? "",
-                    service_tier: meta?.service_tier ?? "",
-                  },
-                  usage_metadata: null,
-                  // 与 Vue 对齐：messages/complete 视为 output，messages/partial 视为 input
-                  // 这样 edit_file 等工具输出（如 "Successfully updated file ..."）会走 output 展示规则，不会作为普通内容直出。
-                  // 与 Vue 对齐：messages/partial 中 type=tool 的消息按 output 处理，
-                  // 避免将工具执行结果（如 Successfully updated file ...）当作普通消息渲染。
-                  resultType:
-                    isTool || isCompleteEvent
-                      ? "output"
-                      : (((item as { resultType?: "input" | "output" }).resultType as "input" | "output" | undefined) ?? "input"),
-                };
-                const toolCalls = (item as { tool_calls?: { name?: string; args?: { file_path?: string } }[] }).tool_calls;
-                if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-                  for (const tc of toolCalls) {
-                    const filePath = tc?.args?.file_path;
-                    if (
-                      (tc?.name === "write_file" || tc?.name === "edit_file") &&
-                      typeof filePath === "string" &&
-                      filePath.endsWith(".md")
-                    ) {
-                      currentWriteOrEditorFilePathRef.current = filePath;
-                    }
-                  }
-                }
-                if (idx >= 0) next[idx] = msg;
-                else next.push(msg);
+            if (eventData != null && eventType?.startsWith("messages/partial")) {
+              const partialData = Array.isArray(eventData) ? eventData[0] : eventData;
+              if (partialData && typeof partialData === "object" && (partialData as { type?: string }).type === "tool") {
+                handleMessagesComplete(eventData);
+              } else {
+                handleMessagesPartial(partialData);
               }
-              emitMessages(next, false);
+            } else if (
+              eventData != null &&
+              (eventType === "messages/complete" ||
+                eventType?.startsWith("messages/complete"))
+            ) {
+              handleMessagesComplete(eventData);
             }
             // 与 Vue 一致：处理 updates 事件中的 todos，用于 input 上方任务列表展示
             if ((eventType === "updates" || eventType?.startsWith("updates")) && eventData != null) {
               const isMainAgent = isMainAgentEvent(eventType);
               const d = (eventData as { data?: Record<string, { todos?: { content?: string; status?: string }[] }> })?.data ?? eventData;
               if (d && typeof d === "object") {
+                let interruptHandled = false;
                 for (const key of Object.keys(d)) {
                   if (key === "SummarizationMiddleware.before_model") continue;
                   const val = d[key];
                   if (!val || typeof val !== "object") continue;
+                  // 与 Vue 版一致：显式处理 __interrupt__ 结构
+                  if (key === "__interrupt__" && Array.isArray(val) && val.length > 0) {
+                    const first = val[0] as {
+                      id?: string;
+                      value?: { action_requests?: Array<{ name?: string; args?: { todos?: unknown } }> };
+                    };
+                    const interruptId = String(first?.id ?? "").trim() || `hilt_${Date.now()}`;
+                    const actionReq = first?.value?.action_requests?.[0];
+                    const todos = normalizeTodos(actionReq?.args?.todos);
+                    if (todos && todos.length > 0) {
+                      pendingInterruptRef.current = {
+                        todos,
+                        status: "in_progress",
+                      };
+                      emitTodos(todos);
+                      const prev = messagesRef.current;
+                      const nextMessages: AgentCustomMessage[] =
+                        prev.length > 0
+                          ? [
+                              ...prev.slice(0, -1),
+                              {
+                                ...prev[prev.length - 1],
+                                hiltTodos: todos,
+                                hiltStatus: "in_progress",
+                              },
+                            ]
+                          : [
+                              {
+                                id: interruptId,
+                                type: "tool",
+                                content: "",
+                                name: actionReq?.name ?? "tool_call",
+                                example: false,
+                                tool_calls: [],
+                                invalid_tool_calls: [],
+                                additional_kwargs: {},
+                                response_metadata: {
+                                  finish_reason: "",
+                                  model_name: "",
+                                  service_tier: "",
+                                },
+                                usage_metadata: null,
+                                resultType: "output",
+                                hiltTodos: todos,
+                                hiltStatus: "in_progress",
+                              },
+                            ];
+                      interruptHandled = true;
+                      emitMessages(nextMessages, true);
+                    }
+                    continue;
+                  }
                   // 与 Vue 对齐：内容安全中间件命中时回滚最后一条 AI 消息
                   if (key === "ContentSafetyMiddleware.after_model") {
                     const middlewareMessages = (val as { messages?: Array<{ type?: string }> }).messages;
@@ -523,8 +756,12 @@ export function useLangGraphStream(
                     emitTodos(todosData);
                   }
                 }
-                const interrupt = extractInterruptTodos(d);
+                const interrupt = interruptHandled ? null : extractInterruptTodos(d);
                 if (interrupt && interrupt.todos.length > 0) {
+                  pendingInterruptRef.current = {
+                    todos: interrupt.todos,
+                    status: "in_progress",
+                  };
                   emitTodos(interrupt.todos);
                   const prev = messagesRef.current;
                   let nextMessages: AgentCustomMessage[];
@@ -535,10 +772,8 @@ export function useLangGraphStream(
                       {
                         ...last,
                         hiltTodos: interrupt.todos,
-                        hiltStatus:
-                          last.hiltStatus === "approved" || last.hiltStatus === "rejected"
-                            ? last.hiltStatus
-                            : "in_progress",
+                        // 与 Vue 版对齐：中断到达后统一标记为待处理
+                        hiltStatus: "in_progress",
                       },
                     ];
                   } else {
@@ -560,7 +795,8 @@ export function useLangGraphStream(
                       },
                     ];
                   }
-                  emitMessages(nextMessages, false);
+                  // 与 Vue 版对齐：interrupt 更新后走第二参数=true，便于外层按“中断消息更新”处理展示/滚动时机
+                  emitMessages(nextMessages, true);
                 }
               }
             }
@@ -581,6 +817,21 @@ export function useLangGraphStream(
             isStreamingRef.current = false;
             abortControllerRef.current = null;
             optionsRef.current.onComplete?.();
+            const currentSessionId = currentSessionIdRef.current;
+            const currentWorkId = currentWorkIdRef.current;
+            const lastMessage =
+              messagesRef.current.length > 0
+                ? messagesRef.current[messagesRef.current.length - 1]
+                : null;
+            const hasPendingHilt =
+              !!lastMessage?.hiltTodos && lastMessage.hiltTodos.length > 0;
+            if (
+              currentSessionId &&
+              currentWorkId != null &&
+              !hasPendingHilt
+            ) {
+              void fetchSuggestions(currentSessionId, currentWorkId);
+            }
           },
           { signal: controller.signal }
         );
