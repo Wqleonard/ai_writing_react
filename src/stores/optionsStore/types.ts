@@ -26,6 +26,9 @@ export interface OptionsState {
   joinUsDesc: string
   bannerConfig: BannerConfig
   recommendConfig: Record<string, string[]>
+  clawGuideUrl: string
+  clawVxQrCode: string
+  clawFeishuQrCode: string
 }
 
 export interface OptionsActions {

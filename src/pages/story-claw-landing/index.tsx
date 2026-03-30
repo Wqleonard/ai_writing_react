@@ -9,12 +9,10 @@ import FEATURE_EDITOR from "@/assets/images/story_claw_landing/feature-editor.we
 import FEATURE_REMOTE_SECURITY from "@/assets/images/story_claw_landing/feature-remote-security.webp";
 import STORY_CLAW_LOGO from "@/assets/images/story_claw_landing/story-claw-logo.webp";
 import STORY_CLAW_ICON from "@/assets/images/story_claw_landing/story-claw-icon.webp";
-// import WECHAT_GROUP_QR from "@/assets/images/story_claw_landing/wechat-group-qr.webp";
-// import FEISHU_QR from "@/assets/images/story_claw_landing/feishu-qr.webp";
-import WECHAT_WORK_QR from "@/assets/images/story_claw_landing/wechat_work.png";
 
 import GONGAN from "@/assets/images/gongan.png";
 import { useLatestDownloads } from "./download";
+import { useOptionsStore } from "@/stores/optionsStore";
 import {
   Download,
   Book,
@@ -27,6 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const getOS = () => {
   const userAgent = window.navigator.userAgent.toLowerCase();
@@ -40,7 +39,18 @@ const getOS = () => {
 
 type DownloadState = ReturnType<typeof useLatestDownloads>;
 
-const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
+const getWindowsDownloadUrl = (downloadState: DownloadState) => {
+  if (downloadState.auto.platform === "win" && downloadState.auto.url) {
+    return downloadState.auto.url;
+  }
+  return downloadState.links.winX64 || downloadState.links.winArm64;
+};
+
+const HeroDownloadButton = ({
+  downloadState,
+}: {
+  downloadState: DownloadState;
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
 
@@ -52,7 +62,24 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
     setIsOpen(!isOpen);
   };
   const handleDownload = (platform: "mac" | "windows") => {
-    toast.info(platform === "mac" ? "Mac 版本敬请期待" : "Windows 版本敬请期待");
+    if (platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      setIsOpen(false);
+      return;
+    }
+
+    if (downloadState.loading) {
+      toast.info("正在加载 Windows 下载地址...");
+      return;
+    }
+
+    const downloadUrl = getWindowsDownloadUrl(downloadState);
+    if (!downloadUrl) {
+      toast.error("Windows 下载地址暂不可用，请稍后重试");
+      return;
+    }
+
+    window.open(downloadUrl, "_blank", "noopener,noreferrer");
     setIsOpen(false);
   };
 
@@ -151,7 +178,11 @@ const HeroDownloadButton = ({ downloadState }: { downloadState: DownloadState })
   );
 };
 
-const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) => {
+const CtaDownloadButton = ({
+  downloadState,
+}: {
+  downloadState: DownloadState;
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [os, setOs] = useState("other");
 
@@ -163,7 +194,24 @@ const CtaDownloadButton = ({ downloadState }: { downloadState: DownloadState }) 
     setIsOpen(!isOpen);
   };
   const handleDownload = (platform: "mac" | "windows") => {
-    toast.info(platform === "mac" ? "Mac 版本敬请期待" : "Windows 版本敬请期待");
+    if (platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      setIsOpen(false);
+      return;
+    }
+
+    if (downloadState.loading) {
+      toast.info("正在加载 Windows 下载地址...");
+      return;
+    }
+
+    const downloadUrl = getWindowsDownloadUrl(downloadState);
+    if (!downloadUrl) {
+      toast.error("Windows 下载地址暂不可用，请稍后重试");
+      return;
+    }
+
+    window.open(downloadUrl, "_blank", "noopener,noreferrer");
     setIsOpen(false);
   };
 
@@ -274,6 +322,10 @@ export default function Home() {
   const [showQrCode, setShowQrCode] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const clawGuideUrl = useOptionsStore((state) => state.clawGuideUrl);
+  const clawVxQrCode = useOptionsStore((state) => state.clawVxQrCode);
+  const clawFeishuQrCode = useOptionsStore((state) => state.clawFeishuQrCode);
+
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -288,7 +340,23 @@ export default function Home() {
   }, []);
 
   const handleInstantExperience = () => {
-    toast.info("Windows / Mac 版本敬请期待");
+    if (downloadState.auto.platform === "mac") {
+      toast.info("Mac 版本敬请期待");
+      return;
+    }
+
+    if (downloadState.loading) {
+      toast.info("正在加载 Windows 下载地址...");
+      return;
+    }
+
+    const downloadUrl = getWindowsDownloadUrl(downloadState);
+    if (!downloadUrl) {
+      toast.error("Windows 下载地址暂不可用，请稍后重试");
+      return;
+    }
+
+    window.open(downloadUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -311,12 +379,12 @@ export default function Home() {
           </h1>
         </div>
         <div className="flex items-center space-x-4">
-          {}
+          { }
           <button className="flex items-center text-gray-600 hover:text-gray-900 transition-colors">
             <></>
             <></>
           </button>
-          {}
+          { }
           <div className="relative group">
             <button
               className="text-gray-600 hover:text-gray-900 transition-colors"
@@ -348,7 +416,7 @@ export default function Home() {
               >
                 <div className="w-48 h-48 bg-white p-2 rounded-lg shadow-lg">
                   <img
-                    src={WECHAT_WORK_QR}
+                    src={clawVxQrCode}
                     alt="养虾社群二维码"
                     className="w-full h-full object-contain"
                     loading="lazy"
@@ -360,15 +428,11 @@ export default function Home() {
               </motion.div>
             )}
           </div>
-          {}
+          { }
           <motion.button
             className="px-4 py-2 cursor-pointer bg-white text-[#d40000] border border-[#d40000] rounded-lg hover:bg-[#fff0f0] transition-colors"
             onClick={() =>
-              window.open(
-                "https://icnirh1t37sj.feishu.cn/wiki/Oujqwmwz4iIvHKkoXDPcrKmxnNc",
-                "_blank",
-                "noopener,noreferrer",
-              )
+              window.open(clawGuideUrl, "_blank", "noopener,noreferrer")
             }
             whileHover={{
               scale: 1.02,
@@ -443,11 +507,7 @@ export default function Home() {
                     scale: 0.98,
                   }}
                   onClick={() =>
-                    window.open(
-                      "https://icnirh1t37sj.feishu.cn/wiki/Oujqwmwz4iIvHKkoXDPcrKmxnNc",
-                      "_blank",
-                      "noopener,noreferrer",
-                    )
+                    window.open(clawGuideUrl, "_blank", "noopener,noreferrer")
                   }
                 >
                   <Book className="w-5 h-5 mr-2" />
@@ -1070,7 +1130,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
-      {}
+      { }
       {previewImage && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
@@ -1112,13 +1172,14 @@ export default function Home() {
               opacity: 0,
               scale: 0.9,
             }}
-            className="bg-white rounded-2xl p-6 max-w-80 w-full mx-4 shadow-2xl"
+            className="bg-white rounded-2xl p-6 max-w-100 w-full mx-4 shadow-2xl"
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">联系我们</h3>
-              <button
+              <Button
                 onClick={() => setShowContactModal(false)}
-                className="text-gray-500 hover:text-gray-700"
+                variant='ghost'
+                size='icon-sm'
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1134,33 +1195,36 @@ export default function Home() {
                     d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
-              </button>
+              </Button>
             </div>
-            <div className="grid grid-cols-1 gap-6">
-              {/* <div className="flex flex-col items-center">
-                <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
-                  {}
-                  <img
-                    src={FEISHU_QR}
-                    alt="飞书二维码"
-                    className="w-full h-full object-contain"
-                    loading="lazy"
-                  />
+            <div className="flex gap-6 justify-center">
+              {clawVxQrCode && (
+                <div className="flex flex-col items-center">
+                  <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
+                    <img
+                      src={clawVxQrCode}
+                      alt="企业微信二维码"
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600">企业微信</p>
                 </div>
-                <p className="text-sm text-gray-600">飞书</p>
-              </div> */}
-              <div className="flex flex-col items-center">
-                <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
-                  {}
-                  <img
-                    src={WECHAT_WORK_QR}
-                    alt="企业微信二维码"
-                    className="w-full h-full object-contain"
-                    loading="lazy"
-                  />
+              )}
+
+              {clawFeishuQrCode && (
+                <div className="flex flex-col items-center">
+                  <div className="w-40 h-40 bg-white p-2 rounded-lg shadow-lg mb-2">
+                    <img
+                      src={clawFeishuQrCode}
+                      alt="飞书二维码"
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600">飞书</p>
                 </div>
-                <p className="text-sm text-gray-600">企业微信</p>
-              </div>
+              )}
             </div>
           </motion.div>
         </div>
