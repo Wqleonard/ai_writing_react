@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type Platform = 'mac' | 'win' | 'other';
 type Arch = 'arm64' | 'x64' | 'unknown';
@@ -125,29 +125,36 @@ export function useLatestDownloads(base = DEFAULT_BASE): UseLatestDownloadsResul
   const [versionMac, setVersionMac] = useState<string>();
   const [links, setLinks] = useState<DownloadLinks>({});
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const [winYml, macYml] = await Promise.all([
-        fetchYml(`${base}/latest.yml`),
-        fetchYml(`${base}/latest-mac.yml`),
-      ]);
+      const winYml = await fetchYml(`${base}/latest.yml`);
 
       const winX64 = pickFile(winYml.files, /-win-x64\.exe$/i);
       const winArm64 = pickFile(winYml.files, /-win-arm64\.exe$/i);
-      const macX64 = pickFile(macYml.files, /-mac-x64\.(dmg|zip)$/i, /\.dmg$/i);
-      const macArm64 = pickFile(macYml.files, /-mac-arm64\.(dmg|zip)$/i, /\.dmg$/i);
 
       setVersionWin(winYml.version || undefined);
-      setVersionMac(macYml.version || undefined);
       setLinks({
         winX64: winX64 ? toAbs(base, winX64) : undefined,
         winArm64: winArm64 ? toAbs(base, winArm64) : undefined,
-        macX64: macX64 ? toAbs(base, macX64) : undefined,
-        macArm64: macArm64 ? toAbs(base, macArm64) : undefined,
       });
+
+      try {
+        const macYml = await fetchYml(`${base}/latest-mac.yml`);
+        const macX64 = pickFile(macYml.files, /-mac-x64\.(dmg|zip)$/i, /\.dmg$/i);
+        const macArm64 = pickFile(macYml.files, /-mac-arm64\.(dmg|zip)$/i, /\.dmg$/i);
+
+        setVersionMac(macYml.version || undefined);
+        setLinks((prev) => ({
+          ...prev,
+          macX64: macX64 ? toAbs(base, macX64) : undefined,
+          macArm64: macArm64 ? toAbs(base, macArm64) : undefined,
+        }));
+      } catch {
+        setVersionMac(undefined);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load latest downloads');
       setLinks({});
@@ -156,11 +163,11 @@ export function useLatestDownloads(base = DEFAULT_BASE): UseLatestDownloadsResul
     } finally {
       setLoading(false);
     }
-  };
+  }, [base]);
 
   useEffect(() => {
     void refresh();
-  }, [base]);
+  }, [refresh]);
 
   const auto = useMemo(() => pickAuto(links), [links]);
 
