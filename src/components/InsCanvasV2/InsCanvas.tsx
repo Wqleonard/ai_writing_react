@@ -2066,8 +2066,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const nodesRef = useRef<CustomNode[]>(initialNodes);
     const edgesRef = useRef<CustomEdge[]>(initialEdges);
     const canvasAutoSaveTimerRef = useRef<number | null>(null);
-    const hasCanvasAutoSaveInitializedRef = useRef(false);
     const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
+    const canvasAutoSaveSuppressedRef = useRef(false);
     const hasInitialSnapshotFittedRef = useRef(false);
     const hasIdeaRef = useRef(false);
     const layoutRequestIdRef = useRef(0);
@@ -2224,27 +2224,25 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return ensureDrawIdPromiseRef.current;
     }, [inspirationDrawId, workId]);
 
-    // 画布节点/连线变化后自动保存灵感画布（含布局信息）。
-    useEffect(() => {
-      if (!workId) return;
-      if (!hasCanvasAutoSaveInitializedRef.current) {
-        hasCanvasAutoSaveInitializedRef.current = true;
-        return;
-      }
+    const saveCanvasSilently = useCallback(async () => {
+      const drawId = await ensureInspirationDrawId();
+      if (!drawId) return;
+      await saveInspirationCanvasReq(drawId, {
+        nodes: nodesRef.current as unknown[],
+        edges: edgesRef.current as unknown[],
+      });
+    }, [ensureInspirationDrawId]);
+
+    const scheduleCanvasAutoSave = useCallback((delayMs = 500) => {
+      if (!workId || canvasAutoSaveSuppressedRef.current) return;
       if (canvasAutoSaveTimerRef.current) {
         window.clearTimeout(canvasAutoSaveTimerRef.current);
       }
       canvasAutoSaveTimerRef.current = window.setTimeout(() => {
-        void (async () => {
-          const drawId = await ensureInspirationDrawId();
-          if (!drawId) return;
-          await saveInspirationCanvasReq(drawId, {
-            nodes: nodesRef.current as unknown[],
-            edges: edgesRef.current as unknown[],
-          });
-        })().catch(() => {});
-      }, 1000);
-    }, [ensureInspirationDrawId, nodes, edges, workId]);
+        canvasAutoSaveTimerRef.current = null;
+        void saveCanvasSilently().catch(() => {});
+      }, delayMs);
+    }, [saveCanvasSilently, workId]);
 
     useEffect(() => {
       return () => {
@@ -2389,6 +2387,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         return relayoutNodes;
       });
     }, [relayoutGroupsForNodeIds, setNodes]);
+
+    const handleNodeDragStop = useCallback(() => {
+      scheduleCanvasAutoSave(300);
+    }, [scheduleCanvasAutoSave]);
 
     useEffect(() => {
       return () => {
@@ -3487,8 +3489,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         if (!options?.skipLayout) {
           setTimeout(autoLayout, 50);
         }
+        scheduleCanvasAutoSave();
       },
-      [collectChildren, setNodes, setEdges, autoLayout]
+      [collectChildren, setNodes, setEdges, autoLayout, scheduleCanvasAutoSave]
     );
 
     const getParentId = useCallback(
@@ -3555,8 +3558,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           nextEdges,
           layoutRootId
         );
+        scheduleCanvasAutoSave();
       },
-      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId]
+      [nodes, edges, hasIdea, inspirationDrawId, applyGraphAndSubtreeLayout, getTopAncestorId, scheduleCanvasAutoSave]
     );
   
     const addSummaryCard = useCallback(
@@ -3597,9 +3601,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setNodes((prev) => [...prev, newNode]);
         setEdges((prev) => [...prev, newEdge]);
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
         return newNodeId;
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, setNodes]
+      [nodes, edges, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, setEdges, setNodes]
     );
   
     const handleMainCardCreate = useCallback(
@@ -3656,6 +3661,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
 
         applyGraphAndSubtreeLayout(nextNodes, nextEdges, nodeId);
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
 
         // 后台生成 drawId，成功后回写到状态与各节点 data 中
         void (async () => {
@@ -3679,7 +3685,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           }
         })();
       },
-      [workId, nodes, edges, hasIdea, inspirationDrawId, setNodes, applyGraphAndSubtreeLayout]
+      [workId, nodes, edges, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, setNodes, applyGraphAndSubtreeLayout]
     );
   
     const addSettingCard = useCallback(
@@ -3730,9 +3736,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setNodes((prev) => [...prev, newNode]);
         setEdges((prev) => [...prev, newEdge]);
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
         return nid;
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, setNodes]
+      [nodes, edges, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, setEdges, setNodes]
     );
   
     async function generateOutlineNodes(sourceNodeId: string) {
@@ -3855,9 +3862,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setNodes((prev) => [...prev, newNode]);
         setEdges((prev) => [...prev, newEdge]);
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
         return nid;
       },
-      [nodes, edges, hasIdea, inspirationDrawId, setEdges, setNodes]
+      [nodes, edges, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, setEdges, setNodes]
     );
 
     const getIncomingContextNodes = useCallback(
@@ -4198,10 +4206,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         });
         setCanvasReady(true);
         scheduleGroupMeasureRelayout(groupId);
+        scheduleCanvasAutoSave();
 
         return { groupId, roleNodeIds };
       },
-      [getNextCanvasNodeId, getNode, hasIdea, inspirationDrawId, scheduleGroupMeasureRelayout, setNodes, setEdges]
+      [getNextCanvasNodeId, getNode, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, scheduleGroupMeasureRelayout, setNodes, setEdges]
     );
 
     const appendOutlineSettingsToGroup = useCallback(
@@ -4335,9 +4344,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           return next;
         });
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
         return { groupId, settingsNodeId };
       },
-      [hasIdea, setEdges, setNodes]
+      [hasIdea, scheduleCanvasAutoSave, setEdges, setNodes]
     );
 
     const getDraftCardSize = useCallback(
@@ -4444,6 +4454,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           return next;
         });
         scheduleGroupMeasureRelayout(groupId);
+        scheduleCanvasAutoSave();
 
         return { groupId, roleNodeId };
       },
@@ -4453,6 +4464,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         getViewportCenteredCanvasPosition,
         hasIdea,
         inspirationDrawId,
+        scheduleCanvasAutoSave,
         scheduleGroupMeasureRelayout,
         setNodes,
       ]
@@ -4520,9 +4532,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           return next;
         });
 
+        scheduleCanvasAutoSave();
         return { groupId, settingsNodeId };
       },
-      [getNextCanvasNodeId, getViewportCenteredCanvasPosition, hasIdea, setNodes]
+      [getNextCanvasNodeId, getViewportCenteredCanvasPosition, hasIdea, scheduleCanvasAutoSave, setNodes]
     );
 
     const openOutlineSettingsForRequest = useCallback(
@@ -4732,9 +4745,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           return next;
         });
         setCanvasReady(true);
+        scheduleCanvasAutoSave();
         return { groupId, outlineNodeIds };
       },
-      [getNextCanvasNodeId, hasIdea, inspirationDrawId, setEdges, setNodes]
+      [getNextCanvasNodeId, hasIdea, inspirationDrawId, scheduleCanvasAutoSave, setEdges, setNodes]
     );
 
     const createCardByKey = useCallback(
@@ -4821,9 +4835,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           };
           return [...prev, newNode];
         });
+        scheduleCanvasAutoSave();
         return idToCreate;
       },
-      [getDraftCardSize, getNextCanvasNodeId, getViewportCenteredCanvasPosition, inspirationDrawId, setNodes]
+      [getDraftCardSize, getNextCanvasNodeId, getViewportCenteredCanvasPosition, inspirationDrawId, scheduleCanvasAutoSave, setNodes]
     );
 
     const addInfoCardFromExternalFile = useCallback(
@@ -5724,6 +5739,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         );
       const outputTypeLabel =
         OUTPUT_TYPE_OPTIONS.find((item) => item.key === cardOutputType)?.label ?? cardOutputType;
+      let shouldAutoSaveAfterStream = false;
       try {
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
@@ -5883,6 +5899,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           setIsLoading(false);
           return;
         } else {
+          canvasAutoSaveSuppressedRef.current = true;
           setIsLoading(true);
           setCardKeyLabel(outputTypeLabel);
           setReqPanelTitle(`${outputTypeLabel}卡`);
@@ -6926,6 +6943,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           );
 
           if (effectiveFiles.length) {
+            shouldAutoSaveAfterStream = true;
             setReqPanelStatus("success");
 
             if (useBrainstormBatchLoading) {
@@ -7226,6 +7244,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         if (isAutoEmptyRequest) {
           setIsLoading(false);
         }
+        const shouldScheduleAutoSave = shouldAutoSaveAfterStream;
+        canvasAutoSaveSuppressedRef.current = false;
+        if (shouldScheduleAutoSave) {
+          scheduleCanvasAutoSave(0);
+        }
         if (resetOutputTypeAfterFinish) {
           handleOutputTypeChange("auto");
         }
@@ -7264,6 +7287,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       stopBrainstormProgress,
       triggerOutlineCompletionCelebration,
       mergeCreationIdeaIntoFiles,
+      scheduleCanvasAutoSave,
       syncCreationIdeaContent,
       syncReqPanelWithCreationIdea,
       isBlankDraftNode,
@@ -7606,15 +7630,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         return;
       }
       try {
-        await saveInspirationCanvasReq(targetId, {
-          nodes: nodes as unknown[],
-          edges: edges as unknown[],
-        });
+        await saveCanvasSilently();
         msg("success", "保存成功");
       } catch {
         msg("error", "保存失败，请稍后重试");
       }
-    }, [ensureInspirationDrawId, nodes, edges, msg, getOrCreateCanvasSessionId]);
+    }, [ensureInspirationDrawId, msg, saveCanvasSilently]);
 
     const getCanvasSessionId = useCallback(() => {
       if (!workId) return "";
@@ -8402,6 +8423,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
+                onNodeDragStop={handleNodeDragStop}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
                 proOptions={{ hideAttribution: true }}
