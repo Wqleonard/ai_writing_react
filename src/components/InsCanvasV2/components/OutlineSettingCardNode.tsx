@@ -205,11 +205,19 @@ export default function OutlineSettingCardNode(props: any) {
     const latestOutlinePerspective = String(latestData?.outlinePerspective ?? outlinePerspective);
     const latestOutlineArticleType = String(latestData?.outlineArticleType ?? outlineArticleType);
     const latestOutlineStructure = String(latestData?.outlineStructure ?? outlineStructure);
+    const latestOutlineFiles = latestData?.files as Record<string, string> | undefined;
+    const latestOutlineTitle = String(latestData?.title ?? "");
+    const latestOutlineIdea = String(latestOutlineFiles?.["/大纲需求.md"] ?? "").trim();
+    const normalizedOutlineIdea = latestOutlineIdea
+      .replace(/^生成/, "")
+      .replace(/大纲卡$/, "")
+      .trim();
     const parsedChapterNum = Number(String(latestOutlineChapterTag).replace(/[^\d]/g, ""));
     const requirement = [
       latestOutlinePerspective ? `写作视角：${latestOutlinePerspective}` : "",
       latestOutlineArticleType ? `文章类型：${latestOutlineArticleType}` : "",
       latestOutlineStructure ? `文章结构：${latestOutlineStructure}` : "",
+      normalizedOutlineIdea ? `用户输入：生成${normalizedOutlineIdea}大纲卡` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -238,6 +246,9 @@ export default function OutlineSettingCardNode(props: any) {
       {
         chapterNum: parsedChapterNum,
         requirement,
+        files: latestOutlineFiles,
+        title: latestOutlineTitle,
+        actionLabel: "__outline_settings_confirm__",
       }
     );
     if (!hasExistingOutlineNodes) {
