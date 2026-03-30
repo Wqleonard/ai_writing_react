@@ -33,7 +33,10 @@ import type {
   ChatMessage,
   FileItem as FileItemType,
 } from "@/stores/chatStore";
-import type { ChatMessage as DualTabChatMessage } from "@/types/chat";
+import type {
+  AgentCustomMessage as DualTabAgentCustomMessage,
+  ChatMessage as DualTabChatMessage,
+} from "@/types/chat";
 import type { ChatTabType } from "@/types/chat";
 import { useChatInputStore } from "@/stores/chatInputStore";
 import type { ChatInputStore } from "@/stores/chatInputStore";
@@ -364,6 +367,7 @@ const MarkdownEditorPage = () => {
     chatCurrentSession,
     faqCurrentSession,
     chatMessages,
+    faqMessages,
     setWorkId,
     createNewSession,
     loadSession,
@@ -372,7 +376,6 @@ const MarkdownEditorPage = () => {
     addMessage: addMessageToDualTab,
     updateLastChatMessage,
   } = useDualTabChat();
-
   const currentSessionId =
     activeTab === "chat"
       ? chatCurrentSession?.id ?? ""
@@ -383,10 +386,9 @@ const MarkdownEditorPage = () => {
   const { modelLLM, selectedWritingStyle, setModelLLM, setSelectedWritingStyle } = useLLM();
   const streamingMessageRef = useRef<ChatMessage | null>(null);
   const streamingMessageIdRef = useRef<string>("");
-  const guideRequestRef = useRef<{ sessionId: string; workId: number | string } | null>(null);
-  const skipGuideForCurrentStreamRef = useRef(false);
   const stoppedByUserRef = useRef(false);
   const latestChatSessionIdRef = useRef("");
+  const hiltApproveInFlightRef = useRef(false);
   const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const [isHiltApproveStreaming, setIsHiltApproveStreaming] = useState(false);
   const [todosExpanded, setTodosExpanded] = useState(false);
@@ -398,41 +400,6 @@ const MarkdownEditorPage = () => {
     replaceContentAndRemoveMarkers,
     removeHtmlTags,
   } = useMarkdownEditor();
-  const appendGuideSuggestionsToLastMessage = useCallback((guides: string[]) => {
-    if (guides.length === 0) return;
-    updateLastChatMessage((prev) => {
-      const existing = prev.customMessage ?? [];
-      const guideItem: import("@/types/chat").AgentCustomMessage = {
-        id: `guide_${Date.now()}`,
-        type: "ai",
-        content: "",
-        name: null,
-        example: false,
-        tool_calls: [],
-        invalid_tool_calls: [],
-        usage_metadata: null,
-        additional_kwargs: {},
-        response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
-        suggestions: guides,
-      };
-      return { ...prev, customMessage: [...existing, guideItem] };
-    });
-  }, [updateLastChatMessage]);
-  const requestGuideAndAppend = useCallback(
-    async (sessionId: string, wid: string | number) => {
-      try {
-        const res = await generateGuideReq(sessionId, Number(wid)) as {
-          guides?: string[] | string
-        } | undefined;
-        const guides = parseGuidesPayload(res?.guides);
-        appendGuideSuggestionsToLastMessage(guides);
-      } catch (_) {
-        // 联想提示词失败不打断交互，静默忽略
-      }
-    },
-    [appendGuideSuggestionsToLastMessage]
-  );
-
   const relabelPendingChanges = useCallback(
     (rawContent: string, pendingItems: EditorFileChangeItem[]) => {
       let contentWithMarkers = removeAllHighlightMarkers(rawContent ?? "");
@@ -473,15 +440,25 @@ const MarkdownEditorPage = () => {
   );
 
   const langGraphStream = useLangGraphStream({
-    onMessagesUpdate: (messages) => {
+    onMessagesUpdate: (messages, isSuggestions) => {
+      const hasStreamingMessage = !!(streamingMessageRef.current || streamingMessageIdRef.current);
+      if (isSuggestions && !hasStreamingMessage) {
+        updateLastChatMessage((prev) => ({
+          ...prev,
+          customMessage: messages,
+        }));
+        return;
+      }
       setStreamingMessage((prev) => {
-        const id = (prev?.id ?? streamingMessageIdRef.current) || `assistant_${Date.now()}`;
-        if (!streamingMessageIdRef.current) streamingMessageIdRef.current = id;
+        const base = prev ?? streamingMessageRef.current;
+        if (!base) return prev;
+        const id = base.id || streamingMessageIdRef.current;
+        if (!id) return prev;
         const msg: ChatMessage = {
           id,
           role: "assistant",
           content: "",
-          createdAt: prev?.createdAt ?? new Date(),
+          createdAt: base.createdAt ?? new Date(),
           messageType: "normal",
           mode: "chat",
           customMessage: messages,
@@ -609,6 +586,7 @@ const MarkdownEditorPage = () => {
     },
     onComplete: async () => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       const finalized = streamingMessageRef.current;
       if (finalized) {
         const suffix = "(内容由AI生成，仅供参考)";
@@ -631,38 +609,11 @@ const MarkdownEditorPage = () => {
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
-
-      // 流式结束后调用 guide 接口，将联想提示词展示在最后一条消息下方（与 Vue 一致）
-      // 若最后一条消息存在 write_todos 且人在回路未确认（需先展示外层卡片），则不请求 guide，等用户点击拒绝后再请求
-      if (skipGuideForCurrentStreamRef.current) {
-        skipGuideForCurrentStreamRef.current = false;
-        guideRequestRef.current = null;
-        return;
-      }
-      const pending = guideRequestRef.current;
-      guideRequestRef.current = null;
-      const customMsg = finalized?.customMessage;
-      const lastCustom = Array.isArray(customMsg) ? customMsg[customMsg.length - 1] : undefined;
-      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
-      const hasHiltPending =
-        lastCustom &&
-        hiltStatus !== "rejected" &&
-        hiltStatus !== "approved" &&
-        ((lastCustom as { hiltTodos?: unknown[] }).hiltTodos?.length
-          ? hiltStatus === "in_progress"
-          : ((lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] }).tool_calls ?? []).some(
-            (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-          ));
-      if (pending?.sessionId && pending?.workId && !hasHiltPending && !langGraphStream.error) {
-        const { sessionId, workId: wid } = pending;
-        await requestGuideAndAppend(sessionId, wid);
-      }
     },
     onSensitiveWord: () => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       // 与 Vue 对齐：命中敏感词时只保留用户最后一条消息，并追加一条本地模拟回复
-      skipGuideForCurrentStreamRef.current = true;
-      guideRequestRef.current = null;
       setStreamingMessage(null);
       streamingMessageRef.current = null;
       streamingMessageIdRef.current = "";
@@ -685,12 +636,11 @@ const MarkdownEditorPage = () => {
     },
     onError: (err, needSendErrorMsg) => {
       setIsHiltApproveStreaming(false);
+      hiltApproveInFlightRef.current = false;
       if (stoppedByUserRef.current) {
         stoppedByUserRef.current = false;
         return;
       }
-      skipGuideForCurrentStreamRef.current = true;
-      guideRequestRef.current = null;
       if (needSendErrorMsg) toast.error(err.message);
       const simulatedAssistant: DualTabChatMessage = {
         id: `assistant_sensitive_${Date.now()}`,
@@ -733,10 +683,9 @@ const MarkdownEditorPage = () => {
   );
 
   const handleStopStreaming = useCallback((needAIMessage = true, needGuideRequest = true) => {
-    const pending = guideRequestRef.current;
-    guideRequestRef.current = null;
     stoppedByUserRef.current = true;
     setIsHiltApproveStreaming(false);
+    hiltApproveInFlightRef.current = false;
     if (needAIMessage) {
       finalizeStreamingMessageWithSuffix("\n\n智能体已暂停");
     } else {
@@ -745,10 +694,57 @@ const MarkdownEditorPage = () => {
       streamingMessageIdRef.current = "";
     }
     langGraphStream.stop();
-    if (needGuideRequest && pending?.sessionId && pending?.workId) {
-      void requestGuideAndAppend(pending.sessionId, pending.workId);
+    if (needGuideRequest && workId) {
+      const sessionId = latestChatSessionIdRef.current || chatCurrentSession?.id || "";
+      if (sessionId) {
+        // 与 Vue stop 链路对齐：停止后单独拉 guide，并直接绑定到最后一条消息，
+        // 避免依赖 hook 内部 messagesRef 在 stop 场景下为空导致“接口调用成功但不展示”。
+        void (async () => {
+          try {
+            const res = await generateGuideReq(sessionId, Number(workId)) as {
+              guides?: string[] | string
+            } | undefined;
+            const guides = parseGuidesPayload(res?.guides);
+            if (guides.length === 0) return;
+            updateLastChatMessage((prev) => {
+              const custom = Array.isArray(prev.customMessage) ? [...prev.customMessage] : [];
+              if (custom.length > 0) {
+                const lastIdx = custom.length - 1;
+                custom[lastIdx] = {
+                  ...custom[lastIdx],
+                  suggestions: guides,
+                };
+                return {
+                  ...prev,
+                  customMessage: custom,
+                };
+              }
+              const suggestionCarrier: DualTabAgentCustomMessage = {
+                id: `stop_guide_${Date.now()}`,
+                type: "ai",
+                content: prev.content || "智能体已暂停",
+                resultType: "input",
+                additional_kwargs: {},
+                response_metadata: { finish_reason: "", model_name: "", service_tier: "" },
+                name: null,
+                example: false,
+                tool_calls: [],
+                invalid_tool_calls: [],
+                usage_metadata: null,
+                suggestions: guides,
+              };
+              return {
+                ...prev,
+                customMessage: [suggestionCarrier],
+              };
+            });
+          } catch (_) {
+            // guide 获取失败不打断 stop 主流程
+          }
+        })();
+      }
     }
-  }, [finalizeStreamingMessageWithSuffix, langGraphStream, requestGuideAndAppend]);
+  }, [chatCurrentSession?.id, finalizeStreamingMessageWithSuffix, langGraphStream, updateLastChatMessage, workId]);
 
   const chatInputStatus = useMemo((): "ready" | "error" | "submitted" | "streaming" => {
     if (langGraphStream.error) return "error";
@@ -831,8 +827,8 @@ const MarkdownEditorPage = () => {
     ) => {
       const message = text.trim();
       if (!message && !options?.command) return;
-      let sessionId = chatCurrentSession?.id ?? "";
-      if (!chatCurrentSession) {
+      let sessionId = chatCurrentSession?.id || latestChatSessionIdRef.current || "";
+      if (!sessionId) {
         const session = createNewSession("chat");
         sessionId = session.id;
       }
@@ -862,8 +858,6 @@ const MarkdownEditorPage = () => {
       if (workId && sessionId) {
         const shouldRenderStreamingAssistant = options?.commandOnly !== true;
         if (shouldRenderStreamingAssistant) {
-          skipGuideForCurrentStreamRef.current = false;
-          guideRequestRef.current = { sessionId, workId };
           const placeholderId = `assistant_${Date.now()}`;
           streamingMessageIdRef.current = placeholderId;
           const placeholder: ChatMessage = {
@@ -1047,17 +1041,26 @@ const MarkdownEditorPage = () => {
     if (activeTab === "canvas") return;
     const hasCurrentSession =
       activeTab === "chat" ? !!chatCurrentSession : !!faqCurrentSession;
-    if (hasCurrentSession) return;
+    const hasCurrentMessages =
+      activeTab === "chat" ? chatMessages.length > 0 : faqMessages.length > 0;
+    if (hasCurrentSession && hasCurrentMessages) return;
+    if (hasCurrentMessages) return;
     const loadKey = `${workId}_${activeTab}`;
     if (lastAutoLoadSessionKeyRef.current === loadKey) return;
     lastAutoLoadSessionKeyRef.current = loadKey;
-    void loadLatestSession(activeTab);
+    void loadLatestSession(activeTab).then((session) => {
+      if (!session && lastAutoLoadSessionKeyRef.current === loadKey) {
+        lastAutoLoadSessionKeyRef.current = "";
+      }
+    });
   }, [
     workId,
     currentWorkId,
     activeTab,
     chatCurrentSession,
     faqCurrentSession,
+    chatMessages.length,
+    faqMessages.length,
     loadLatestSession,
   ]);
 
@@ -1200,27 +1203,23 @@ const MarkdownEditorPage = () => {
     }
   }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
+  const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
+    if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
+      return false;
+    }
+    const lastCustom = message.customMessage[message.customMessage.length - 1];
+    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
+    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
+    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
+    return hiltStatus === "in_progress" && Array.isArray(hiltTodos) && hiltTodos.length > 0;
+  }, []);
+
   const handleBackClick = useCallback(async () => {
     const hasPendingFileChanges = Object.values(fileChangesMap).some((list) =>
       Array.isArray(list) && list.some((item) => item.status === "pending")
     );
     const lastChat = chatMessages[chatMessages.length - 1];
-    const hasPendingHilt = (() => {
-      if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
-        return false;
-      }
-      const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
-      const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
-      if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
-      const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
-      if (Array.isArray(hiltTodos) && hiltTodos.length > 0) return hiltStatus === "in_progress";
-      const toolCalls =
-        (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
-          ?.tool_calls ?? [];
-      return toolCalls.some(
-        (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-      );
-    })();
+    const hasPendingHilt = hasExplicitPendingHilt(lastChat);
 
     if (langGraphStream.isStreaming) {
       const ok = await confirm({
@@ -1265,6 +1264,7 @@ const MarkdownEditorPage = () => {
   }, [
     fileChangesMap,
     chatMessages,
+    hasExplicitPendingHilt,
     langGraphStream,
     confirm,
     clearAssociationTags,
@@ -1541,23 +1541,8 @@ const MarkdownEditorPage = () => {
 
   const hasPendingHiltInChat = useMemo(() => {
     const lastChat = chatMessages[chatMessages.length - 1];
-    if (!lastChat || !Array.isArray(lastChat.customMessage) || lastChat.customMessage.length === 0) {
-      return false;
-    }
-    const lastCustom = lastChat.customMessage[lastChat.customMessage.length - 1];
-    const hiltStatus = (lastCustom as { hiltStatus?: string } | undefined)?.hiltStatus;
-    if (hiltStatus === "approved" || hiltStatus === "rejected") return false;
-    const hiltTodos = (lastCustom as { hiltTodos?: unknown[] } | undefined)?.hiltTodos;
-    if (Array.isArray(hiltTodos) && hiltTodos.length > 0) {
-      return hiltStatus === "in_progress";
-    }
-    const toolCalls =
-      (lastCustom as { tool_calls?: { name?: string; args?: { todos?: unknown[] } }[] } | undefined)
-        ?.tool_calls ?? [];
-    return toolCalls.some(
-      (tc) => tc.name === "write_todos" && Array.isArray(tc.args?.todos) && tc.args.todos.length > 0
-    );
-  }, [chatMessages]);
+    return hasExplicitPendingHilt(lastChat);
+  }, [chatMessages, hasExplicitPendingHilt]);
 
   type StreamingTaskStatus = "idle" | "streaming" | "pending" | "edit_pending" | "hilt_pending";
   const streamingTaskStatus = useMemo<StreamingTaskStatus>(() => {
@@ -2379,8 +2364,8 @@ const MarkdownEditorPage = () => {
   );
   const handleHiltReject = useCallback(
     async (rejectedMsg: AgentCustomMessageItem) => {
-      const sessionId = latestChatSessionIdRef.current || guideRequestRef.current?.sessionId || chatSessionId;
-      const targetWorkId = workId ?? guideRequestRef.current?.workId;
+      const sessionId = latestChatSessionIdRef.current || chatSessionId;
+      const targetWorkId = workId;
       // 若用户在流式过程中触发“拒绝”，需要立即中断当前流式请求，避免继续输出/占用状态
       handleStopStreaming(false, false);
       if (!sessionId || !targetWorkId) return;
@@ -2430,6 +2415,10 @@ const MarkdownEditorPage = () => {
   );
   const handleHiltApprove = useCallback(
     (approvedMsg: AgentCustomMessageItem) => {
+      if (hiltApproveInFlightRef.current || isHiltApproveStreaming || langGraphStream.isStreaming) {
+        return;
+      }
+      hiltApproveInFlightRef.current = true;
       updateLastChatMessage((prev) => {
         const custom = prev.customMessage ?? [];
         return {
@@ -2440,9 +2429,9 @@ const MarkdownEditorPage = () => {
         };
       });
       setIsHiltApproveStreaming(true);
-      sendChatText("", { command: "approve", addUserMessage: false, commandOnly: true });
+      sendChatText("", { command: "approve", addUserMessage: false });
     },
-    [updateLastChatMessage, sendChatText]
+    [isHiltApproveStreaming, langGraphStream.isStreaming, updateLastChatMessage, sendChatText]
   );
   const handleRendererSendMessage = useCallback(
     (text: string, reload = false) =>
