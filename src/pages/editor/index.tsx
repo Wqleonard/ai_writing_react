@@ -26,7 +26,8 @@ import { AgentCustomMessageRenderer } from "@/components/AgentCustomMessageRende
 import { TodosFixedPanel } from "@/components/TodosFixedPanel/TodosFixedPanel";
 import { AssociationSelectorDialog } from "@/components/AssociationSelectorDialog";
 import { ChatHeader, type ChatHeaderRef } from "@/components/ChatHeader";
-import InsCanvas, { type InsCanvasApi } from "@/components/InsCanvasV2/InsCanvas";
+import InsCanvas from "@/components/InsCanvasV2/InsCanvas";
+import type { InsCanvasApi } from "@/components/InsCanvasV2/types";
 import { Button } from "@/components/ui/Button";
 import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
@@ -325,7 +326,7 @@ function CanvasToolbar({
   const saveCanvasTitle = canSaveCanvas ? "保存画布" : "请先创建画布";
   return (
     <div className="flex h-10 items-center gap-1 px-1.5">
-      <Button
+      {/* <Button
         type="button"
         variant="ghost"
         size="icon"
@@ -356,7 +357,7 @@ function CanvasToolbar({
         aria-label="保存画布"
       >
         <span className="iconfont">&#xe936;</span>
-      </Button>
+      </Button> */}
       <div className="flex items-center gap-1">
         <Switch
           checked={autoSyncDirectory}

@@ -7,13 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { Iconfont } from "@/components/Iconfont";
-
-interface ConfirmDeleteDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-  targetLabel?: string;
-}
+import type { ConfirmDeleteDialogProps } from "@/components/InsCanvasV2/types";
 
 export default function ConfirmDeleteDialog({
   open,

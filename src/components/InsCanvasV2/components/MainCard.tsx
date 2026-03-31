@@ -2,19 +2,7 @@ import { useState, useEffect } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { useInsCanvasHandlers } from "../InsCanvasContext";
 import { Button } from "../../ui/Button";
-
-interface MainCardProps {
-  data: {
-    label: string
-    content: string
-    image: string
-    isMain?: boolean
-    hasIdea?: boolean
-    children?: any[]
-  };
-  isCreated: boolean;
-  id: string;
-}
+import type { MainCardProps } from "@/components/InsCanvasV2/types";
 
 export default function MainCard({ data, id, isCreated = false }: MainCardProps) {
   const handlers = useInsCanvasHandlers();

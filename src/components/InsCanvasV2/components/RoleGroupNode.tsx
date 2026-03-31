@@ -6,12 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext";
 import { Iconfont } from "@/components/Iconfont";
 import ConfirmDeleteDialog from "@/components/InsCanvasV2/components/ConfirmDeleteDialog";
-
-type FloatingAction = {
-  key: string;
-  label: string;
-  onClick: (event: React.MouseEvent) => void;
-};
+import type { CanvasFloatingAction as FloatingAction } from "@/components/InsCanvasV2/types";
 
 const sanitizeGroupFileName = (value: string, fallback: string) => {
   const normalized = value.trim().replace(/[\\/:*?"<>|]+/g, "_");

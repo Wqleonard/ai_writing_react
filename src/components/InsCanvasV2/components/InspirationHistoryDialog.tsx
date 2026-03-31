@@ -1,14 +1,8 @@
 import React, { useEffect, useState } from "react";
-import type { InspirationVersion } from "@/components/InsCanvasV2/types";
-
-interface InspirationHistoryDialogProps {
-  open: boolean;
-  onClose: () => void;
-  workId: string;
-  inspirationDrawId?: string | number;
-  onRestore: (version: InspirationVersion) => void;
-  loadVersions?: (workId: string) => Promise<InspirationVersion[]>;
-}
+import type {
+  InspirationHistoryDialogProps,
+  InspirationVersion,
+} from "@/components/InsCanvasV2/types";
 
 /** 将后端返回的 UTC 时间字符串解析为 Date（无时区时按 UTC 处理） */
 function parseUtcDate(utcTime: string): Date {
