@@ -953,11 +953,14 @@ const MarkdownEditorPage = () => {
   const [isCanvasFileDragOver, setIsCanvasFileDragOver] = useState(false);
   const [canvasReadyKey, setCanvasReadyKey] = useState(0);
   const [canvasFocusRequestSeq, setCanvasFocusRequestSeq] = useState(0);
+  const [isCanvasSnapshotPending, setIsCanvasSnapshotPending] = useState(false);
   const [canvasInitialNodes, setCanvasInitialNodes] = useState<unknown[]>([]);
   const [canvasInitialEdges, setCanvasInitialEdges] = useState<unknown[]>([]);
   const [canvasInitialInspirationDrawId, setCanvasInitialInspirationDrawId] = useState("");
   const [canvasInitialSnapshotKey, setCanvasInitialSnapshotKey] = useState(0);
   const canvasSnapshotLoadingRef = useRef(false);
+  const canvasSnapshotRequestSeqRef = useRef(0);
+  const canvasLeaveFlushPromiseRef = useRef<Promise<void> | null>(null);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
 
   // editor 相关 - 使用 useShallow 优化订阅，避免不必要的重渲染
@@ -1021,6 +1024,7 @@ const MarkdownEditorPage = () => {
   const treeDataRef = useRef<TreeNodeLike[]>(treeData as TreeNodeLike[]);
   const workInfoStageRef = useRef(workInfo.stage);
   const lastCanvasSyncedKeysRef = useRef<string[]>([]);
+  const canvasSnapshotHydratingRef = useRef(false);
   const canvasTaggedFilePathSetRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     treeDataRef.current = treeData as TreeNodeLike[];
@@ -1091,21 +1095,50 @@ const MarkdownEditorPage = () => {
   const handleCanvasAutoSyncDirectory = useCallback(
     (canvasFiles: Record<string, string>) => {
       const currentServerData = useEditorStore.getState().serverData;
-      const keysToRemove = new Set(lastCanvasSyncedKeysRef.current);
-      const withoutCanvasSync = Object.fromEntries(
-        Object.entries(currentServerData).filter(([key]) => !keysToRemove.has(key))
-      );
-      const mergedFiles = {
-        ...withoutCanvasSync,
-        ...canvasFiles,
-      };
-      lastCanvasSyncedKeysRef.current = Object.keys(canvasFiles);
+      const incomingCanvasKeys = Object.keys(canvasFiles);
+      const beforeCanvasKeys = lastCanvasSyncedKeysRef.current;
+      const isHydratingFromSnapshot = canvasSnapshotHydratingRef.current;
+      const isStrictSubsetRollback =
+        incomingCanvasKeys.length > 0 &&
+        incomingCanvasKeys.length < beforeCanvasKeys.length &&
+        incomingCanvasKeys.every((key) => beforeCanvasKeys.includes(key));
+      const isEmptyRollback = incomingCanvasKeys.length === 0 && beforeCanvasKeys.length > 0;
+      const shouldProtectRollback =
+        isHydratingFromSnapshot && (isStrictSubsetRollback || isEmptyRollback);
+
+      let mergedFiles: Record<string, string>;
+      let nextCanvasTrackedKeys: string[];
+
+      if (shouldProtectRollback) {
+        mergedFiles = {
+          ...currentServerData,
+          ...canvasFiles,
+        };
+        nextCanvasTrackedKeys = Array.from(
+          new Set([...beforeCanvasKeys, ...incomingCanvasKeys])
+        );
+      } else {
+        const keysToRemove = new Set(beforeCanvasKeys);
+        const withoutCanvasSync = Object.fromEntries(
+          Object.entries(currentServerData).filter(([key]) => !keysToRemove.has(key))
+        );
+        mergedFiles = {
+          ...withoutCanvasSync,
+          ...canvasFiles,
+        };
+        nextCanvasTrackedKeys = incomingCanvasKeys;
+      }
+
+      lastCanvasSyncedKeysRef.current = nextCanvasTrackedKeys;
       canvasTaggedFilePathSetRef.current = new Set(
-        Object.keys(canvasFiles)
+        nextCanvasTrackedKeys
           .map((key) => normalizeCanvasFilePath(key))
           .filter((key) => key.toLowerCase().endsWith(".md"))
       );
       setServerData(mergedFiles);
+      if (isHydratingFromSnapshot) {
+        canvasSnapshotHydratingRef.current = false;
+      }
     },
     [normalizeCanvasFilePath, setServerData]
   );
@@ -1136,7 +1169,10 @@ const MarkdownEditorPage = () => {
   }, [workId, setWorkId]);
 
   useEffect(() => {
+    canvasSnapshotRequestSeqRef.current += 1;
     canvasSnapshotLoadingRef.current = false;
+    canvasSnapshotHydratingRef.current = false;
+    setIsCanvasSnapshotPending(false);
     setCanvasInitialNodes([]);
     setCanvasInitialEdges([]);
     setCanvasInitialInspirationDrawId("");
@@ -1148,7 +1184,10 @@ const MarkdownEditorPage = () => {
   const loadLatestCanvasSnapshot = useCallback(async () => {
     if (!workId) return;
     if (canvasSnapshotLoadingRef.current) return;
+    const requestSeq = canvasSnapshotRequestSeqRef.current + 1;
+    canvasSnapshotRequestSeqRef.current = requestSeq;
     canvasSnapshotLoadingRef.current = true;
+    setIsCanvasSnapshotPending(true);
     try {
       const req = (await getWorksByIdReq(workId)) as
         | {
@@ -1190,6 +1229,10 @@ const MarkdownEditorPage = () => {
       const parsedContent = parseCanvasContent(drawWithCanvas?.content);
       const nextNodes = Array.isArray(parsedContent?.nodes) ? parsedContent.nodes : [];
       const nextEdges = Array.isArray(parsedContent?.edges) ? parsedContent.edges : [];
+      if (canvasSnapshotRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      canvasSnapshotHydratingRef.current = true;
       setCanvasInitialNodes(nextNodes);
       setCanvasInitialEdges(nextEdges);
       setCanvasInitialInspirationDrawId(String(drawWithCanvas?.id ?? ""));
@@ -1198,6 +1241,9 @@ const MarkdownEditorPage = () => {
       // ignore canvas snapshot loading errors; fallback to empty canvas
     } finally {
       canvasSnapshotLoadingRef.current = false;
+      if (canvasSnapshotRequestSeqRef.current === requestSeq) {
+        setIsCanvasSnapshotPending(false);
+      }
     }
   }, [workId]);
 
@@ -1265,7 +1311,7 @@ const MarkdownEditorPage = () => {
     }
     if (workInfo?.stage === "blank") return;
     void saveEditorData("1", false);
-  }, [treeData, workInfo?.stage, saveEditorData]);
+  }, [activeTab, saveEditorData, treeData, workId, workInfo?.stage]);
 
   // 与 Vue 对齐：生产环境每 5 分钟自动保存一次
   useEffect(() => {
@@ -1702,7 +1748,6 @@ const MarkdownEditorPage = () => {
   const requestCanvasFocusByFilePath = useCallback((rawFilePath: string) => {
     const normalizedPath = sanitizeIncomingFilePath(rawFilePath);
     if (!normalizedPath) return;
-
     pendingCanvasFocusFilePathRef.current = normalizedPath;
     if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
       preCanvasRightWidthRemRef.current = rightPanelWidthRem;
@@ -1710,9 +1755,12 @@ const MarkdownEditorPage = () => {
     setIsCanvasFilePreviewMode(true);
     setIsCanvasPreviewEditorClosed(false);
     setCanvasPreviewSplitLayout();
+    if (activeTab !== "canvas") {
+      setIsCanvasSnapshotPending(true);
+    }
     setActiveTab("canvas");
     setCanvasFocusRequestSeq((seq) => seq + 1);
-  }, [activeTab, rightPanelWidthRem, setCanvasPreviewSplitLayout]);
+  }, [activeTab, rightPanelWidthRem, setCanvasPreviewSplitLayout, workId]);
 
   const handleTreeFileSelect = useCallback((node: FileTreeNode) => {
     const pathFromTree = Array.isArray(node.path) ? node.path.join("/") : "";
@@ -1722,25 +1770,48 @@ const MarkdownEditorPage = () => {
     const isCanvasTaggedFile =
       canvasTaggedFilePathSetRef.current.has(normalizedPath) ||
       isLikelyCanvasGeneratedPath(normalizedPath);
-
     if (!isCanvasTaggedFile) return;
     requestCanvasFocusByFilePath(normalizedPath);
-  }, [isLikelyCanvasGeneratedPath, normalizeCanvasFilePath, requestCanvasFocusByFilePath]);
+  }, [
+    isLikelyCanvasGeneratedPath,
+    normalizeCanvasFilePath,
+    requestCanvasFocusByFilePath,
+  ]);
 
   const handleCloseCanvasPreviewEditor = useCallback(() => {
     setIsCanvasPreviewEditorClosed(true);
     maximizeRightPanel();
   }, [maximizeRightPanel]);
 
+  const flushCanvasBeforeLeave = useCallback(async () => {
+    if (activeTab !== "canvas") return;
+    if (canvasLeaveFlushPromiseRef.current) {
+      await canvasLeaveFlushPromiseRef.current;
+      return;
+    }
+    const flushPromise = (insCanvasRef.current?.flushPersistence?.() ?? Promise.resolve()).catch(() => undefined);
+    const trackedFlushPromise = flushPromise.finally(() => {
+      if (canvasLeaveFlushPromiseRef.current === trackedFlushPromise) {
+        canvasLeaveFlushPromiseRef.current = null;
+      }
+    });
+    canvasLeaveFlushPromiseRef.current = trackedFlushPromise;
+    await canvasLeaveFlushPromiseRef.current;
+  }, [activeTab]);
+
   const handleChatHeaderTabChange = useCallback(
-    (tab: ChatTabType) => {
+    async (tab: ChatTabType) => {
       if (tab === "canvas") {
         setIsCanvasPreviewEditorClosed(false);
         if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
           preCanvasRightWidthRemRef.current = rightPanelWidthRem;
         }
+        if (activeTab !== "canvas") {
+          setIsCanvasSnapshotPending(true);
+        }
         maximizeRightPanel();
-      } else if (tab === "chat" && activeTab === "canvas") {
+      } else if (activeTab === "canvas") {
+        await flushCanvasBeforeLeave();
         setIsCanvasFilePreviewMode(false);
         setIsCanvasPreviewEditorClosed(false);
         if (preCanvasRightWidthRemRef.current != null) {
@@ -1750,7 +1821,7 @@ const MarkdownEditorPage = () => {
       }
       setActiveTab(tab);
     },
-    [activeTab, maximizeRightPanel, rightPanelWidthRem]
+    [activeTab, flushCanvasBeforeLeave, maximizeRightPanel, rightPanelWidthRem]
   );
 
   useEffect(() => {
@@ -1761,13 +1832,12 @@ const MarkdownEditorPage = () => {
     let secondFrame = 0;
     firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        const focused =
-          insCanvasRef.current?.focusFileByPath(pendingFilePath, {
-            zoom: 0.95,
-            duration: 500,
-            maxAttempts: 24,
-          }) ?? false;
-        if (focused && pendingCanvasFocusFilePathRef.current === pendingFilePath) {
+        insCanvasRef.current?.focusFileByPath(pendingFilePath, {
+          zoom: 0.95,
+          duration: 500,
+          maxAttempts: 24,
+        });
+        if (pendingCanvasFocusFilePathRef.current === pendingFilePath) {
           pendingCanvasFocusFilePathRef.current = "";
         }
       });
@@ -1776,7 +1846,7 @@ const MarkdownEditorPage = () => {
       if (firstFrame) cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [activeTab, canvasReadyKey, rightPanelWidthRem, canvasFocusRequestSeq]);
+  }, [activeTab, canvasFocusRequestSeq, canvasReadyKey, rightPanelWidthRem, workId]);
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
   // ================== EDIT_FILE START ==================
@@ -2458,7 +2528,7 @@ const MarkdownEditorPage = () => {
         // 后端保存失败时不打断本地继续创作
       }
 
-      handleChatHeaderTabChange("chat");
+      await handleChatHeaderTabChange("chat");
       const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
       setPendingInitialMessage(prompt);
       setShouldAutoSubmitInitialMessage(false);
@@ -3291,24 +3361,30 @@ const MarkdownEditorPage = () => {
                   onDragLeaveCapture={handleCanvasFileDragLeave}
                   onDropCapture={handleCanvasFileDrop}
                 >
-                  <InsCanvas
-                    key={`ins-canvas-${workId}-${canvasInitialSnapshotKey}`}
-                    ref={insCanvasRef}
-                    workId={workId}
-                    nodes={canvasInitialNodes as any}
-                    edges={canvasInitialEdges as any}
-                    inspirationDrawId={canvasInitialInspirationDrawId}
-                    onCreateHere={handleCanvasCreateHere}
-                    onCreateNew={handleCanvasCreateNew}
-                    autoSyncDirectory={autoSyncCanvasDirectory}
-                    onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
-                    onMessage={(type, msg) => {
-                      if (type === "success") toast.success(msg);
-                      else if (type === "error") toast.error(msg);
-                      else toast(msg);
-                    }}
-                    onCanvasReady={onCanvasReady}
-                  />
+                  {isCanvasSnapshotPending ? (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      正在加载画布...
+                    </div>
+                  ) : (
+                    <InsCanvas
+                      key={`ins-canvas-${workId}-${canvasInitialSnapshotKey}`}
+                      ref={insCanvasRef}
+                      workId={workId}
+                      nodes={canvasInitialNodes as any}
+                      edges={canvasInitialEdges as any}
+                      inspirationDrawId={canvasInitialInspirationDrawId}
+                      onCreateHere={handleCanvasCreateHere}
+                      onCreateNew={handleCanvasCreateNew}
+                      autoSyncDirectory={autoSyncCanvasDirectory}
+                      onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
+                      onMessage={(type, msg) => {
+                        if (type === "success") toast.success(msg);
+                        else if (type === "error") toast.error(msg);
+                        else toast(msg);
+                      }}
+                      onCanvasReady={onCanvasReady}
+                    />
+                  )}
                   {isCanvasFileDragOver ? (
                     <div className="pointer-events-none absolute inset-0 z-20 rounded-[20px] border-2 border-dashed border-[#8E77F0] bg-[#8E77F0]/8">
                       <div className="flex h-full items-center justify-center">
