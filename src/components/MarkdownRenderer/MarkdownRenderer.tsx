@@ -196,7 +196,7 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHandledLinkRef = useRef<{ key: string; ts: number } | null>(null);
   const html = useMemo(() => md.render(content ?? ""), [content]);
-console.log(content, 'content')
+
   const tryHandleMdLink = useCallback(
     (target: HTMLElement | null): { handled: boolean; key?: string } => {
       const root = containerRef.current;
