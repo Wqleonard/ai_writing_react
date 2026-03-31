@@ -1,11 +1,5 @@
 import { Button } from "@/components/ui/Button";
-
-interface InitWorkDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onCreateHere: () => void;
-  onCreateNew: () => void;
-}
+import type { InitWorkDialogProps } from "@/components/InsCanvasV2/types";
 
 export default function InitWorkDialog({
   open,
