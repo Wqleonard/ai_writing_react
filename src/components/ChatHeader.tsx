@@ -151,12 +151,20 @@ export const ChatHeader = React.forwardRef<ChatHeaderRef, ChatHeaderProps>(
       weekSessions.length > 0 ||
       monthSessions.length > 0;
 
-    const handleNewChat = useCallback(() => {
-      if (activeTab !== "canvas") {
-        markNeedRefreshSessions();
-        onNewChat();
+    const handleNewChat = useCallback(async () => {
+      if (activeTab === "canvas") return;
+      if (checkStreamingStatusAndConfirm) {
+        const canProceed = await checkStreamingStatusAndConfirm();
+        if (!canProceed) return;
       }
-    }, [activeTab, markNeedRefreshSessions, onNewChat]);
+      markNeedRefreshSessions();
+      onNewChat();
+    }, [
+      activeTab,
+      checkStreamingStatusAndConfirm,
+      markNeedRefreshSessions,
+      onNewChat,
+    ]);
 
     const showHistory = useCallback(async () => {
       if (activeTab !== "canvas") {

@@ -12,40 +12,14 @@ import { useInsCanvasHandlers } from "@/components/InsCanvasV2/InsCanvasContext"
 import { addNote } from "@/api/notes";
 import { Iconfont } from "@/components/Iconfont";
 import ConfirmDeleteDialog from "@/components/InsCanvasV2/components/ConfirmDeleteDialog";
+import canvasErrorImg from "@/assets/images/canvas/canvas_error_img.jpeg";
+import type {
+  CanvasFloatingAction as FloatingAction,
+  EditableFlowCardProps,
+} from "@/components/InsCanvasV2/types";
 // React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
 // 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
 const startedStreamNodeIds = new Set<string>();
-
-interface EditableFlowCardProps {
-  id: string;
-  data: CustomNodeData;
-  cardLabel: string;
-  generateLabel: string;
-  type: string;
-  dragging?: boolean;
-  selected?: boolean;
-  onGenerate: (id: string) => void;
-  onAdd: (id: string) => void;
-  onDelete: (id: string, options?: { skipLayout?: boolean }) => void;
-  onUpdate: (
-    id: string,
-    content: string,
-    options?: {
-      title?: string;
-      filePath?: string;
-      image?: string;
-      images?: string[];
-    }
-  ) => void;
-  onExpand?: (id: string) => void;
-  msg: (type: "success" | "error" | "warning", msg: string) => void;
-}
-
-type FloatingAction = {
-  key: string;
-  label: string;
-  onClick?: (e: React.MouseEvent) => void;
-};
 
 const sanitizeContextFileName = (value: string, fallback: string) => {
   const normalized = value.trim().replace(/[\\/:*?"<>|]+/g, "_");
@@ -276,6 +250,12 @@ export default function EditableFlowCard({
     if (data.image) return [normalizeImageSrc(String(data.image))].filter(Boolean);
     return [];
   }, [data]);
+  const primaryImageSrc = images[0] ?? "";
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const displayImageSrc = imageLoadFailed ? canvasErrorImg : primaryImageSrc;
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [primaryImageSrc]);
 
   // 骨架：只在“接口创建且处于流式/加载、且尚无内容”时展示
   // 手动创建卡片：isStreaming=false，不展示骨架
@@ -2018,7 +1998,16 @@ export default function EditableFlowCard({
               ) : images.length ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={decodeURIComponent(images[0])} alt="" className="h-full w-full object-cover" />
+                  <img
+                    src={displayImageSrc}
+                    alt={`${cardLabel}概念图`}
+                    className="h-full w-full object-cover"
+                    onError={() => {
+                      if (!imageLoadFailed) {
+                        setImageLoadFailed(true);
+                      }
+                    }}
+                  />
                   {images.length > 1 && (
                     <div className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-1 text-[12px] text-white">
                       +{images.length - 1}
