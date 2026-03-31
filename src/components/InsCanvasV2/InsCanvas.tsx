@@ -938,6 +938,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
     const canvasAutoSaveSuppressedRef = useRef(false);
     const hasInitialSnapshotFittedRef = useRef(false);
+    const isUnmountingRef = useRef(false);
     const hasIdeaRef = useRef(false);
     const layoutRequestIdRef = useRef(0);
     const canvasNodeIdSeqRef = useRef(0);
@@ -1083,7 +1084,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           });
           const nextId = String(res?.id || "").trim();
           if (!nextId) return "";
-          setInspirationDrawId(nextId);
+          if (!isUnmountingRef.current) {
+            setInspirationDrawId(nextId);
+          }
           return nextId;
         })().finally(() => {
           ensureDrawIdPromiseRef.current = null;
@@ -1101,6 +1104,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         edges: edgesRef.current as unknown[],
       });
     }, [ensureInspirationDrawId]);
+    const saveCanvasSilentlyRef = useRef(saveCanvasSilently);
+    saveCanvasSilentlyRef.current = saveCanvasSilently;
+
+    const flushCanvasPersistence = useCallback(async () => {
+      if (canvasAutoSaveTimerRef.current) {
+        window.clearTimeout(canvasAutoSaveTimerRef.current);
+        canvasAutoSaveTimerRef.current = null;
+      }
+      await saveCanvasSilently();
+    }, [saveCanvasSilently]);
 
     const scheduleCanvasAutoSave = useCallback((delayMs = 500) => {
       if (!workId || canvasAutoSaveSuppressedRef.current) return;
@@ -1114,13 +1127,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }, [saveCanvasSilently, workId]);
 
     useEffect(() => {
+      isUnmountingRef.current = false;
       return () => {
+        isUnmountingRef.current = true;
         if (canvasAutoSaveTimerRef.current) {
           window.clearTimeout(canvasAutoSaveTimerRef.current);
           canvasAutoSaveTimerRef.current = null;
+          void saveCanvasSilentlyRef.current?.().catch(() => {});
         }
       };
-    }, []);
+    }, [workId]);
 
   const relayoutGroupsForNodeIds = useCallback((
     currentNodes: CustomNode[],
@@ -2056,6 +2072,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const [panMode, setPanMode] = useState(true);
     const onAutoSyncDirectoryRef = useRef(onAutoSyncDirectory);
     onAutoSyncDirectoryRef.current = onAutoSyncDirectory;
+    const lastAutoSyncSignatureRef = useRef("");
     const getOrCreateCanvasSessionId = useCanvasStore((s) => s.getOrCreateCanvasSessionId);
     const createNewCanvasSessionId = useCanvasStore((s) => s.createNewCanvasSessionId);
     const clearCanvasSessionId = useCanvasStore((s) => s.clearCanvasSessionId);
@@ -6204,11 +6221,12 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         addInfoCardFromExternalFile,
         focusFileByPath,
         openHistory,
+        flushPersistence: flushCanvasPersistence,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, openHistory, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
@@ -6219,7 +6237,15 @@ import { ArrowUp, MapPin, X } from "lucide-react";
 
     useEffect(() => {
       if (!autoSyncDirectory) return;
-      onAutoSyncDirectoryRef.current?.(buildCanvasSyncFiles(nodes));
+      const nextFiles = buildCanvasSyncFiles(nodes);
+      const nextSignature = JSON.stringify(
+        Object.keys(nextFiles)
+          .sort()
+          .map((key) => [key, nextFiles[key] ?? ""])
+      );
+      if (lastAutoSyncSignatureRef.current === nextSignature) return;
+      lastAutoSyncSignatureRef.current = nextSignature;
+      onAutoSyncDirectoryRef.current?.(nextFiles);
     }, [autoSyncDirectory, nodes]);
 
     const handleRestoreVersion = useCallback(

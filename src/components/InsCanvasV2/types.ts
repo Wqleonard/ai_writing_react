@@ -178,6 +178,7 @@ export interface InsCanvasApi {
   focusFileByPath: (filePath: string, options?: FocusFileByPathOptions) => boolean;
   openHistory: () => void;
   saveCanvas: (sessionId?: string) => void;
+  flushPersistence: () => Promise<void>;
   inspirationDrawId: string;
   isLoading: boolean;
 }
