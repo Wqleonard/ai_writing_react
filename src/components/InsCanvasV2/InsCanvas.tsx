@@ -40,13 +40,39 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
   import { InsCanvasContext } from "@/components/InsCanvasV2/InsCanvasContext";
   import { useDagreLayout } from "@/hooks/useDagreLayout";
   import type {
+  CanvasAddCardOptions,
+  CanvasCardKey,
+  CanvasModeCategory,
+  CanvasModelType,
+  CanvasOutputType,
+  CanvasWriteFileCall,
     CustomNode,
     CustomEdge,
-    TreeNode,
+  DialogReferenceCard,
     InspirationItem,
+  InsCanvasApi,
+  InsCanvasInnerProps,
+  InsCanvasProps,
     ParentNode,
+  PartialCanvasWriteFileCall,
+  ReplySegments,
+  ReqPanelAction,
+  SettingsSection,
+  SmartSuggestionItem,
     InspirationVersion,
+  TreeNode,
   } from "./types";
+import {
+  AUTO_CARD_FIELD_LABELS,
+  CANVAS_LAYOUT,
+  CANVAS_UI,
+  IDEA_PLACEHOLDER_OPTIONS,
+  MODE_CATEGORY_OPTIONS,
+  MODEL_TYPE_OPTIONS,
+  OUTLINE_GROUP_LAYOUT,
+  OUTPUT_TYPE_OPTIONS,
+  ROLE_GROUP_LAYOUT,
+} from "./constant";
 import { Iconfont } from "../Iconfont";
 import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/works";
 import { useCanvasStore } from "@/stores/canvasStore";
@@ -61,42 +87,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     roleGroup: RoleGroupNode,
   };
 
-  export interface InsCanvasApi {
-    addNewCanvas: () => void;
-    addInfoCardFromExternalFile: (options: {
-      title: string;
-      content: string;
-      filePath: string;
-      clientX?: number;
-      clientY?: number;
-    }) => string;
-    focusFileByPath: (
-      filePath: string,
-      options?: { zoom?: number; duration?: number; maxAttempts?: number }
-    ) => boolean;
-    openHistory: () => void;
-    saveCanvas: (sessionId?: string) => void;
-    inspirationDrawId: string;
-    isLoading: boolean;
-  }
-
-  interface InsCanvasProps {
-    workId: string;
-    nodes?: CustomNode[];
-    edges?: CustomEdge[];
-    inspirationDrawId?: string;
-    onCreateHere?: (files: Record<string, string>, chain: ParentNode | null) => void;
-    onCreateNew?: (files: Record<string, string>, chain: ParentNode | null) => void;
-    onMessage?: (type: "success" | "error" | "warning", msg: string) => void;
-    onCanvasReady?: () => void;
-    autoSyncDirectory?: boolean;
-    onAutoSyncDirectory?: (files: Record<string, string>) => void;
-  }
-
-  interface InsCanvasInnerProps extends InsCanvasProps {
-    canvasRef?: React.RefObject<InsCanvasApi | null>;
-  }
-  
   function convertToTreeStructure(
     nodes: CustomNode[],
     edges: CustomEdge[]
@@ -142,163 +132,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return trees.length > 0 ? trees : null;
   }
   
-  function findMainCardWithChildren(node: TreeNode): boolean {
-    if (
-      node.type === "mainCard" &&
-      Array.isArray(node.children) &&
-      node.children.length > 0
-    )
-      return true;
-    if (node.children?.length) {
-      return node.children.some(findMainCardWithChildren);
-    }
-    return false;
-  }
-  
-  function createCardsFromInspiration(
-    inspirationData: InspirationItem[],
-    inspirationWord?: string,
-    inspirationDrawId?: string,
-    viewportWidth: number = 1920
-  ): CustomNode[] {
-    const cardWidth = 250;
-    const cardSpacing = 25;
-    const startY = 100;
-    const centerX = viewportWidth / 2;
-    const secondCardX = centerX - cardWidth / 2;
-    const firstCardX = secondCardX - (cardWidth + cardSpacing);
-    const thirdCardX = secondCardX + (cardWidth + cardSpacing);
-    const positions = [firstCardX, secondCardX, thirdCardX];
-  
-    // 新版：不再创建 mainCard，统一使用 EditableFlowCard（summaryCard 形态）作为“脑洞卡”
-    return inspirationData.slice(0, 3).map((item, i) => ({
-      id: `brainstorm-${Date.now()}-${i + 1}`,
-      type: "summaryCard",
-      position: { x: positions[i], y: startY },
-      draggable: true,
-      data: {
-        label: "脑洞",
-        title: item.inspirationTheme,
-        content: item.referenceStyle,
-        image: "",
-        fromApi: true,
-        inspirationTheme: item.inspirationTheme,
-        inspirationWord: inspirationWord,
-        inspirationDrawId,
-        allowTitleEdit: true,
-        allowImageUpload: true,
-        isStreaming: false,
-      } as any,
-    }));
-  }
-
-  type SmartSuggestionItem = {
-    id: string;
-    theme: string;
-    content: string;
-    image: string;
-    inspirationWord: string;
-  };
-
-  type SettingsSection = "mode" | "output" | "model";
-  type CanvasModeCategory = "smart" | "image" | "video";
-  type CanvasOutputType = "auto" | "brainstorm" | "role" | "summary" | "outline" | "info";
-  type CanvasModelType = "fast" | "max";
-  type CanvasCardKey = "brainstorm" | "summary" | "role" | "outline" | "info";
-  type CanvasAddCardOptions = {
-    label?: string;
-    generateLabel?: string;
-    allowTitleEdit?: boolean;
-    allowImageUpload?: boolean;
-    title?: string;
-    filePath?: string;
-    content?: string;
-    image?: string;
-    isStreaming?: boolean;
-    fromApi?: boolean;
-    inspirationWord?: string;
-    inspirationTheme?: string;
-    shortSummary?: string;
-    storySetting?: string;
-    skipAutoStream?: boolean;
-  };
-
-  const MODE_CATEGORY_OPTIONS: Array<{ key: CanvasModeCategory; label: string; disabled?: boolean }> = [
-    { key: "smart", label: "智能模式", disabled: false },
-    { key: "image", label: "图片生成模式", disabled: true },
-    { key: "video", label: "视频生成模式", disabled: true },
-  ];
-
-  const OUTPUT_TYPE_OPTIONS: Array<{ key: CanvasOutputType; label: string }> = [
-    { key: "auto", label: "自动" },
-    { key: "brainstorm", label: "脑洞" },
-    { key: "role", label: "角色" },
-    { key: "summary", label: "梗概" },
-    { key: "outline", label: "大纲" },
-    { key: "info", label: "信息" },
-  ];
-
-  const MODEL_TYPE_OPTIONS: Array<{ key: CanvasModelType; label: string }> = [
-    { key: "fast", label: "Fast" },
-    { key: "max", label: "Max" },
-  ];
-
-  const IDEA_PLACEHOLDER_OPTIONS = [
-    "输入一个想法，或点随机选题试试...",
-    "拖动目录任意文件到画布，变为信息卡继续发散创意吧！",
-    "将卡片添加到对话，可以根据卡片内容继续创作哦~",
-    "头脑风暴开始咯！",
-  ] as const;
-
-  type AutoResolvedResult =
-    | {
-        kind: "brainstorm";
-        inspirations: InspirationItem[];
-        inspirationWord?: string;
-      }
-    | {
-        kind: "card";
-        cardKey: Exclude<CanvasCardKey, "brainstorm">;
-        title?: string;
-        content?: string;
-      };
-
-  type ReqPanelAction = {
-    label: string;
-    onClick?: () => void;
-    generate?: {
-      nodeId: string;
-      outputType: Exclude<CanvasOutputType, "auto">;
-    };
-  };
-
-  type DialogReferenceCard = {
-    nodeId: string;
-    title: string;
-    content: string;
-    filePath: string;
-    label: string;
-  };
-
-  const AUTO_CARD_FIELD_LABELS: Record<string, string> = {
-    synopsis: "梗概",
-    summary: "梗概",
-    short_summary: "梗概",
-    shortSummary: "梗概",
-    background: "背景",
-    storySetting: "故事设定",
-    story_setting: "故事设定",
-    highlight: "亮点",
-    informationGap: "信息差",
-    intro: "简介",
-    description: "描述",
-    definition: "设定",
-    content: "内容",
-    age: "年龄",
-    personality: "性格",
-    biography: "经历",
-  };
-
   const getTextValue = (value: unknown) => {
     if (typeof value === "string") return value.trim();
     if (typeof value === "number") return String(value);
@@ -336,68 +169,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return "";
   };
 
-  const RANDOM_IDEA_OPTIONS_MARKER = "**三个脑洞选项：**";
-  const CANVAS_DOCK_REST_OFFSET_REM = -0.75;
-
-  const splitRandomIdeaPanelContent = (content: unknown) => {
-    const text = getTextValue(content).replace(/\r/g, "");
-    if (!text) {
-      return { head: "", tail: "" };
-    }
-
-    const markerIndex = text.indexOf(RANDOM_IDEA_OPTIONS_MARKER);
-    const normalized = markerIndex >= 0
-      ? `${text.slice(0, markerIndex).trim()}\n${text.slice(markerIndex + RANDOM_IDEA_OPTIONS_MARKER.length).trim()}`
-      : text;
-    const lines = normalized.split("\n");
-    const optionIndexes = lines
-      .map((line, index) => (/^\s*\d+\.\s+/.test(line) ? index : -1))
-      .filter((index) => index >= 0);
-
-    if (!optionIndexes.length) {
-      return { head: normalized.trim(), tail: "" };
-    }
-
-    const firstOptionIndex = optionIndexes[0];
-    const lastOptionIndex = optionIndexes[optionIndexes.length - 1];
-    const head = lines.slice(0, firstOptionIndex).join("\n").trim();
-    const tail = lines.slice(lastOptionIndex + 1).join("\n").trim();
-    return { head, tail };
-  };
-
-  const extractUpdatesMessageContent = (value: unknown): string => {
-    if (!value) return "";
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const text = extractUpdatesMessageContent(item);
-        if (text) return text;
-      }
-      return "";
-    }
-    if (typeof value !== "object") return "";
-
-    const record = value as {
-      model?: { messages?: Array<{ content?: unknown }> };
-      messages?: Array<{ content?: unknown }>;
-    } & Record<string, unknown>;
-
-    const messages = Array.isArray(record.model?.messages)
-      ? record.model.messages
-      : Array.isArray(record.messages)
-        ? record.messages
-        : [];
-
-    for (const message of messages) {
-      const text = getTextValue(message?.content).trim();
-      if (text) return text;
-    }
-
-    for (const nested of Object.values(record)) {
-      const text = extractUpdatesMessageContent(nested);
-      if (text) return text;
-    }
-    return "";
-  };
+  const {
+    randomIdeaOptionsMarker: RANDOM_IDEA_OPTIONS_MARKER,
+    dockRestOffsetRem: CANVAS_DOCK_REST_OFFSET_REM,
+  } = CANVAS_UI;
 
   const extractUpdatesMessageContentWithoutReadFile = (value: unknown): string => {
     if (!value) return "";
@@ -457,12 +232,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       middle: sections.slice(1, -1),
       tail: sections.length > 1 ? (sections[sections.length - 1] ?? "") : "",
     };
-  };
-
-  type ReplySegments = {
-    start: string;
-    middle: string;
-    end: string;
   };
 
   const normalizeReplyFilePath = (filePath: string): "start" | "middle" | "end" | "" => {
@@ -570,48 +339,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       body: contents[1] ?? "",
       footer: contents[2] ?? "",
     };
-  };
-
-  const buildAutoSuggestionItems = (sections: string[]): SmartSuggestionItem[] =>
-    sections
-      .map((item, idx) => {
-        const parsed = parseChoicesSuggestionItems(item)[0];
-        if (!parsed?.theme) return null;
-        return {
-          id: parsed.id || `auto-updates-${idx}-${parsed.theme}`,
-          theme: parsed.theme,
-          content: parsed.content || "",
-          image: "",
-          inspirationWord: "",
-        } satisfies SmartSuggestionItem;
-      })
-      .filter((item: SmartSuggestionItem | null): item is SmartSuggestionItem => Boolean(item));
-
-  const extractStreamTextContent = (value: unknown): string => {
-    if (!value) return "";
-    if (typeof value === "string") return value;
-    if (typeof value === "number") return String(value);
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const text = extractStreamTextContent(item);
-        if (text) return text;
-      }
-      return "";
-    }
-    if (typeof value === "object") {
-      const record = value as Record<string, unknown>;
-      if (typeof record.text === "string") return record.text;
-      if (typeof record.content === "string") return record.content;
-      if (record.content != null) {
-        const contentText = extractStreamTextContent(record.content);
-        if (contentText) return contentText;
-      }
-      for (const nested of Object.values(record)) {
-        const text = extractStreamTextContent(nested);
-        if (text) return text;
-      }
-    }
-    return "";
   };
 
   const extractChoicesWriteFileContent = (value: unknown): string => {
@@ -781,64 +508,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }
   };
 
-  type CanvasWriteFileCall = {
-    filePath: string;
-    content: string;
-    callId?: string;
-  };
-
-  const extractWriteFileCalls = (value: unknown): CanvasWriteFileCall[] => {
-    const result = new Map<string, CanvasWriteFileCall>();
-
-    const pushFile = (filePath: string, content: string) => {
-      const normalizedPath = getTextValue(filePath);
-      if (!normalizedPath) return;
-      const normalizedContent = getTextValue(content);
-      result.set(normalizedPath, {
-        filePath: normalizedPath,
-        content: normalizedContent,
-      });
-    };
-
-    const visit = (current: unknown) => {
-      if (!current) return;
-      if (Array.isArray(current)) {
-        current.forEach(visit);
-        return;
-      }
-      if (typeof current !== "object") return;
-
-      const record = current as {
-        tool_calls?: Array<{ name?: string; args?: { file_path?: string; content?: string } }>;
-        tools?: {
-          files?: Record<string, unknown>;
-        };
-      } & Record<string, unknown>;
-
-      const toolFiles = record.tools?.files;
-      if (toolFiles && typeof toolFiles === "object") {
-        Object.entries(toolFiles).forEach(([filePath, fileContent]) => {
-          pushFile(filePath, getTextValue(fileContent));
-        });
-      }
-
-      if (Array.isArray(record.tool_calls)) {
-        record.tool_calls.forEach((toolCall) => {
-          if (toolCall?.name !== "write_file") return;
-          pushFile(
-            getTextValue(toolCall?.args?.file_path),
-            getTextValue(toolCall?.args?.content)
-          );
-        });
-      }
-
-      Object.values(record).forEach(visit);
-    };
-
-    visit(value);
-    return Array.from(result.values());
-  };
-
   const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] => {
     const result = new Map<string, CanvasWriteFileCall>();
 
@@ -956,23 +625,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return Array.from(filesByPath.values());
   };
 
-  const formatWriteFilesPanelContent = (files: CanvasWriteFileCall[]) =>
-    files
-      .map((item, index) => {
-        const filePath = getTextValue(item.filePath);
-        const fileTitle =
-          filePath.split("/").pop()?.replace(/\.md$/i, "") || `文件${index + 1}`;
-        const content = getTextValue(item.content).trim();
-        return `## ${fileTitle}${content ? `\n\n${content}` : ""}`;
-      })
-      .filter(Boolean)
-      .join("\n\n");
-
-  const extractMarkdownTitle = (markdown: string, fallback: string) => {
-    const headingMatch = markdown.match(/^#{1,6}\s+(.+)$/m);
-    return getFirstTextValue(headingMatch?.[1], fallback);
-  };
-
   const extractWriteFileTitle = (filePath: string, fallback: string) => {
     const fileName = getTextValue(filePath)
       .split("/")
@@ -1015,15 +667,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       .filter(Boolean)
       .join("\n\n");
 
-  const formatRoleCardsMarkdown = (roleCards: Array<Record<string, unknown>>) =>
-    roleCards
-      .map((item, index) => {
-        const title = getFirstTextValue(item.name, item.title, `角色${index + 1}`);
-        const body = formatRecordMarkdown(item, ["name", "title"]);
-        return `## ${title}${body ? `\n\n${body}` : ""}`;
-      })
-      .join("\n\n");
-
   const formatOutlineMarkdown = (outlineItems: Array<Record<string, unknown>>) =>
     outlineItems
       .map((item, index) => {
@@ -1039,97 +682,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         return `## ${episode}${title ? ` ${title}` : ""}${note ? `\n\n${note}` : ""}`;
       })
       .join("\n\n");
-
-  const resolveAutoResultFromResponse = (
-    response: any,
-    fallbackTitle: string
-  ): AutoResolvedResult | null => {
-    const candidates = [response, response?.data, response?.result, response?.data?.result].filter(
-      (item): item is Record<string, unknown> => Boolean(item) && typeof item === "object"
-    );
-
-    for (const candidate of candidates) {
-      const inspirations = Array.isArray(candidate.inspirations)
-        ? (candidate.inspirations as InspirationItem[]).filter(
-            (item) => getTextValue(item?.inspirationTheme) || getTextValue(item?.referenceStyle)
-          )
-        : [];
-      if (inspirations.length > 0) {
-        return {
-          kind: "brainstorm",
-          inspirations,
-          inspirationWord: getFirstTextValue(candidate.inspirationWord),
-        };
-      }
-
-      const roleCards = Array.isArray(candidate.roleCards)
-        ? (candidate.roleCards as Array<Record<string, unknown>>)
-        : Array.isArray(candidate.characters)
-          ? (candidate.characters as Array<Record<string, unknown>>)
-          : Array.isArray(candidate.roles)
-            ? (candidate.roles as Array<Record<string, unknown>>)
-            : [];
-      if (roleCards.length > 0) {
-        return {
-          kind: "card",
-          cardKey: "role",
-          title: getFirstTextValue(roleCards[0]?.name, roleCards[0]?.title, fallbackTitle),
-          content: formatRoleCardsMarkdown(roleCards),
-        };
-      }
-
-      const outlineItems = Array.isArray(candidate.outline_dict)
-        ? (candidate.outline_dict as Array<Record<string, unknown>>)
-        : Array.isArray((candidate.outline as Record<string, unknown> | undefined)?.outline_dict)
-          ? (((candidate.outline as Record<string, unknown>).outline_dict as Array<Record<string, unknown>>))
-          : [];
-      if (outlineItems.length > 0) {
-        return {
-          kind: "card",
-          cardKey: "outline",
-          title: getFirstTextValue(candidate.title, fallbackTitle),
-          content: formatOutlineMarkdown(outlineItems),
-        };
-      }
-
-      const summaryContent = getFirstTextValue(
-        candidate.short_summary,
-        candidate.shortSummary,
-        candidate.synopsis,
-        candidate.summary,
-        candidate.intro
-      );
-      if (summaryContent) {
-        return {
-          kind: "card",
-          cardKey: "summary",
-          title: getFirstTextValue(candidate.title, fallbackTitle),
-          content: summaryContent,
-        };
-      }
-
-      const infoContent = formatRecordMarkdown(candidate, [
-        "inspirations",
-        "inspirationWord",
-        "roleCards",
-        "characters",
-        "roles",
-        "outline",
-        "outline_dict",
-        "title",
-      ]);
-      if (infoContent) {
-        return {
-          kind: "card",
-          cardKey: "info",
-          title: getFirstTextValue(candidate.title, candidate.name, fallbackTitle),
-          content: infoContent,
-        };
-      }
-    }
-
-    return null;
-  };
 
   const sortCanvasNodes = (a: CustomNode, b: CustomNode) =>
     (a.position?.y ?? 0) - (b.position?.y ?? 0) || (a.position?.x ?? 0) - (b.position?.x ?? 0);
@@ -1308,29 +860,35 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     return result;
   };
 
-  const CARD_LAYOUT_GAP_X = 28;
-  const CARD_LAYOUT_GAP_Y = 36;
-  const INFO_COLUMN_GAP_X = 72;
-  const OUTLINE_GROUP_SETTINGS_CARD_WIDTH = 600;
-  const OUTLINE_GROUP_SETTINGS_CARD_HEIGHT = 420;
-  const OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT = 56;
-  const OUTLINE_GROUP_HORIZONTAL_PADDING = 20;
-  const OUTLINE_GROUP_SETTINGS_TOP = 56;
-  const OUTLINE_GROUP_SETTINGS_BOTTOM_GAP = 24;
-  const OUTLINE_GROUP_SETTINGS_NODE_TYPE = "outlineSettingCard";
-  const OUTLINE_GROUP_DEFAULT_TOP = 56;
-  const ROLE_GROUP_MIN_HEIGHT = 580;
-  const ROLE_GROUP_MAX_COLS = 3;
-  const ROLE_GROUP_CARD_WIDTH = 300;
-  const ROLE_GROUP_CARD_GAP_X = 24;
-  const ROLE_GROUP_CARD_GAP_Y = 28;
-  const ROLE_GROUP_PADDING_TOP = 64;
-  const ROLE_GROUP_PADDING = 24;
-  const OUTLINE_GROUP_MAX_COLS = 3;
-  const OUTLINE_GROUP_CARD_WIDTH = 300;
-  const OUTLINE_GROUP_CARD_HEIGHT = 260;
-  const OUTLINE_GROUP_CARD_GAP_X = 24;
-  const OUTLINE_GROUP_CARD_GAP_Y = 28;
+  const {
+    cardGapX: CARD_LAYOUT_GAP_X,
+    cardGapY: CARD_LAYOUT_GAP_Y,
+    infoColumnGapX: INFO_COLUMN_GAP_X,
+  } = CANVAS_LAYOUT;
+  const {
+    settingsCardWidth: OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
+    settingsCardHeight: OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
+    settingsCollapsedHeight: OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT,
+    horizontalPadding: OUTLINE_GROUP_HORIZONTAL_PADDING,
+    settingsTop: OUTLINE_GROUP_SETTINGS_TOP,
+    settingsBottomGap: OUTLINE_GROUP_SETTINGS_BOTTOM_GAP,
+    settingsNodeType: OUTLINE_GROUP_SETTINGS_NODE_TYPE,
+    defaultTop: OUTLINE_GROUP_DEFAULT_TOP,
+    maxCols: OUTLINE_GROUP_MAX_COLS,
+    cardWidth: OUTLINE_GROUP_CARD_WIDTH,
+    cardHeight: OUTLINE_GROUP_CARD_HEIGHT,
+    cardGapX: OUTLINE_GROUP_CARD_GAP_X,
+    cardGapY: OUTLINE_GROUP_CARD_GAP_Y,
+  } = OUTLINE_GROUP_LAYOUT;
+  const {
+    minHeight: ROLE_GROUP_MIN_HEIGHT,
+    maxCols: ROLE_GROUP_MAX_COLS,
+    cardWidth: ROLE_GROUP_CARD_WIDTH,
+    cardGapX: ROLE_GROUP_CARD_GAP_X,
+    cardGapY: ROLE_GROUP_CARD_GAP_Y,
+    paddingTop: ROLE_GROUP_PADDING_TOP,
+    padding: ROLE_GROUP_PADDING,
+  } = ROLE_GROUP_LAYOUT;
   const getCanvasNodeLayoutSize = (node: CustomNode) => {
     const measuredWidth = Number((node as any)?.measured?.width ?? (node as any)?.dimensions?.width ?? 0);
     const measuredHeight = Number((node as any)?.measured?.height ?? (node as any)?.dimensions?.height ?? 0);
@@ -4018,22 +3576,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       [focusCanvasNode]
     );
 
-    const getLatestRoleGroupId = useCallback(() => {
-      const roleGroups = nodesRef.current.filter(
-        (node) => node.type === "roleGroup" && getTextValue(node.data?.label) === "角色"
-      );
-      if (!roleGroups.length) return "";
-      return roleGroups[roleGroups.length - 1]?.id ?? "";
-    }, []);
-
-    const getLatestOutlineGroupId = useCallback(() => {
-      const outlineGroups = nodesRef.current.filter(
-        (node) => node.type === "roleGroup" && getTextValue(node.data?.label) === "大纲"
-      );
-      if (!outlineGroups.length) return "";
-      return outlineGroups[outlineGroups.length - 1]?.id ?? "";
-    }, []);
-
     const appendRoleCardsToGroup = useCallback(
       (
         sourceNodeId: string,
@@ -4929,52 +4471,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       [focusCanvasNodeWhenReady, handleOutputTypeChange, msg, setNodes]
     );
 
-    const createLoadingCardByKey = useCallback((key: CanvasCardKey) => {
-      const typeToCreate: CustomNode["type"] =
-        key === "role" || key === "info"
-          ? "settingCard"
-          : key === "outline"
-            ? "outlineCard"
-            : "summaryCard";
-      const labelToCreate =
-        key === "brainstorm"
-          ? "脑洞"
-          : key === "summary"
-            ? "故事梗概"
-            : key === "role"
-              ? "角色"
-              : key === "info"
-                ? "信息"
-                : "大纲";
-      const idToCreate = `${typeToCreate}-loading-${Date.now()}`;
-
-      setCanvasReady(true);
-      setNodes((prev) => {
-        const { x, y } = getStandaloneNextRowPosition(prev);
-        const newNode: CustomNode = {
-          id: idToCreate,
-          type: typeToCreate,
-          position: { x, y },
-          draggable: true,
-          data: {
-            label: labelToCreate,
-            title: "",
-            content: "",
-            image: "",
-            fromApi: true,
-            isStreaming: false,
-            progress: 0,
-            inspirationDrawId: inspirationDrawId || undefined,
-            allowTitleEdit: true,
-            allowImageUpload: true,
-            autoEdit: false,
-          } as any,
-        };
-        return [...prev, newNode];
-      });
-      return idToCreate;
-    }, [inspirationDrawId, setNodes]);
-
     const startBrainstormPlaceholderBatch = useCallback((
       files: CanvasWriteFileCall[],
       mode: "replace" | "append" = "replace"
@@ -5220,155 +4716,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       }
     }, [finishLoadingProgressForNode, nodes, setEdges, setNodes]);
 
-    const createCardFromOutputType = useCallback(
-      (
-        outputType: CanvasOutputType,
-        rawIdea: string,
-        options?: {
-          title?: string;
-          content?: string;
-          image?: string;
-        }
-      ) => {
-        const trimmedIdea = rawIdea?.trim?.() ? rawIdea.trim() : "";
-        const outputTypeToCardKeyMap: Record<Exclude<CanvasOutputType, "auto">, CanvasCardKey> = {
-          brainstorm: "brainstorm",
-          role: "role",
-          summary: "summary",
-          outline: "outline",
-          info: "info",
-        };
-        const targetCardKey = outputTypeToCardKeyMap[outputType === "auto" ? "brainstorm" : outputType];
-
-        stopBrainstormProgress();
-        brainstormBatchIdsRef.current = [];
-        setForceCanvasView(true);
-        setCanvasReady(true);
-        setReqPanelVisible(false);
-        setReqPanelExpanded(false);
-        setSmartSuggestionsActive(false);
-        setSmartSuggestions([]);
-        createCardByKey(targetCardKey, {
-          title: options?.title ?? trimmedIdea,
-          content: options?.content,
-          image: options?.image,
-        });
-      },
-      [createCardByKey, setCanvasReady, setForceCanvasView, stopBrainstormProgress]
-    );
-
-    const handleRoleExpandRandom = useCallback(
-      async (nodeId: string) => {
-        const request = buildRoleRequestPayload(nodeId);
-        setReqPanelVisible(true);
-        setReqPanelUseSmartTheme(false);
-        setCardKeyLabel("角色");
-        setPendingContextActionLabel("");
-        setReqPanelStatus("loading");
-        setReqPanelDetail("正在随机生成更多人物，请稍等...");
-        setReqPanelAction(null);
-
-        const { groupId, roleNodeIds } = appendRoleCardsToGroup(
-          nodeId,
-          new Array(3).fill(null).map(() => ({ fromApi: true }))
-        );
-        try {
-          const { getScriptCharacterSettings } = await import("@/api/generate-quick");
-          const res: any = await getScriptCharacterSettings("", request.description, request.brainStorm);
-          const roleCards = Array.isArray(res?.roleCards) ? res.roleCards.slice(0, 3) : [];
-          if (!roleCards.length) {
-            setNodes((prev) => prev.filter((node) => !roleNodeIds.includes(node.id)));
-            setReqPanelStatus("error");
-            setReqPanelDetail("状态：失败\n原因：未生成到新的角色，请重试");
-            return;
-          }
-
-          setNodes((prev) =>
-            prev
-              .filter((node) => roleCards.length >= roleNodeIds.length || !roleNodeIds.slice(roleCards.length).includes(node.id))
-              .map((node) => {
-                const idx = roleNodeIds.indexOf(node.id);
-                if (idx < 0 || !roleCards[idx]) return node;
-                const item = roleCards[idx] as Record<string, unknown>;
-                return {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    title: getFirstTextValue(item.name, item.title, `角色${idx + 1}`),
-                    content: formatRecordMarkdown(item, ["name", "title"]),
-                    fromApi: true,
-                    isStreaming: false,
-                  },
-                };
-              })
-          );
-          setReqPanelStatus("success");
-          setReqPanelDetail("角色喵搞定了！已经为你扩充了新的随机角色。");
-          if (groupId) {
-          const hasSummaryContext = Boolean(getNearestSummaryNode(nodeId));
-          const nextOutputType: Exclude<CanvasOutputType, "auto"> = hasSummaryContext ? "outline" : "summary";
-            setReqPanelAction({
-            label: nextOutputType === "outline" ? "以此生成大纲" : "以此生成故事梗概",
-              onClick: () => focusRoleGroup(groupId),
-            generate: {
-              nodeId,
-              outputType: nextOutputType,
-            },
-            });
-          }
-        } catch (error: any) {
-          setNodes((prev) => prev.filter((node) => !roleNodeIds.includes(node.id)));
-          setReqPanelStatus("error");
-          setReqPanelDetail(`状态：失败\n原因：${String(error?.message ?? "未知错误")}`);
-          msg("error", String(error?.message ?? "角色生成失败"));
-        }
-      },
-      [appendRoleCardsToGroup, buildRoleRequestPayload, focusRoleGroup, getNearestSummaryNode, msg, setNodes]
-    );
-
-    const handleGenerateSummaryFromContext = useCallback(
-      async (nodeId: string) => {
-        const request = buildRoleRequestPayload(nodeId);
-        const currentNode = nodes.find((node) => node.id === nodeId);
-        setReqPanelVisible(true);
-        setReqPanelUseSmartTheme(false);
-        setCardKeyLabel("梗概");
-        setPendingContextActionLabel("");
-        setReqPanelStatus("loading");
-        setReqPanelDetail("正在根据当前角色与链路信息生成故事梗概，请稍等...");
-        setReqPanelAction(null);
-        try {
-          addSummaryCard(nodeId, {
-            label: "故事梗概",
-            title: getFirstTextValue(
-              request.brainStorm?.title,
-              (currentNode?.data as any)?.title,
-              "故事梗概"
-            ),
-            content: "",
-            allowTitleEdit: true,
-            allowImageUpload: true,
-            isStreaming: true,
-            fromApi: true,
-            inspirationWord: getFirstTextValue(currentNode?.data?.inspirationWord),
-            inspirationTheme: getFirstTextValue(
-              (currentNode?.data as any)?.title,
-              currentNode?.data?.inspirationTheme
-            ),
-            shortSummary: undefined,
-            storySetting: request.description,
-          });
-          setReqPanelStatus("success");
-          setReqPanelDetail("梗概喵已经开始流式生成故事梗概，请在画布中查看。");
-        } catch (error: any) {
-          setReqPanelStatus("error");
-          setReqPanelDetail(`状态：失败\n原因：${String(error?.message ?? "未知错误")}`);
-          msg("error", String(error?.message ?? "故事梗概生成失败"));
-        }
-      },
-      [addSummaryCard, buildRoleRequestPayload, msg, nodes]
-    );
-
     const handleGenerateOutlineFromContext = useCallback(
       async (
         nodeId: string,
@@ -5420,119 +4767,6 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       [getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg, openOutlineSettingsForRequest]
     );
 
-    const handleGenerateInfoFromContext = useCallback(
-      async (
-        nodeId: string,
-        options?: {
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
-      ) => {
-        handleOutputTypeChange("info");
-        if (options?.files && Object.keys(options.files).length > 0) {
-          void handleGenerateInsRef.current?.(
-            "manual",
-            getTextValue(options.title) || "角色组",
-            "info",
-            nodeId,
-            options.files,
-            options.actionLabel
-          );
-          return;
-        }
-        const request = buildRoleRequestPayload(nodeId);
-        setReqPanelVisible(true);
-        setReqPanelUseSmartTheme(false);
-        setCardKeyLabel("信息");
-        setPendingContextActionLabel("");
-        setReqPanelStatus("loading");
-        setReqPanelDetail("正在根据当前角色与链路信息整理信息卡，请稍等...");
-        setReqPanelAction(null);
-        try {
-          const { getScriptStorySynopsisReq } = await import("@/api/generate-quick");
-          const res: any = await getScriptStorySynopsisReq("", request.description);
-          addSettingCard(nodeId, {
-            label: "信息",
-            title: getFirstTextValue(res?.title, "信息"),
-            content: formatInfoCardMarkdown(res ?? {}),
-            allowTitleEdit: true,
-            allowImageUpload: true,
-            isStreaming: false,
-            fromApi: true,
-          });
-          setReqPanelStatus("success");
-          setReqPanelDetail("信息喵搞定了！已经根据当前链路整理信息卡。");
-        } catch (error: any) {
-          setReqPanelStatus("error");
-          setReqPanelDetail(`状态：失败\n原因：${String(error?.message ?? "未知错误")}`);
-          msg("error", String(error?.message ?? "信息卡生成失败"));
-        }
-      },
-      [addSettingCard, buildRoleRequestPayload, handleOutputTypeChange, msg]
-    );
-
-    const handleAutoGenerateByResponse = useCallback(
-      async (rawIdea: string) => {
-        const trimmedIdea = rawIdea?.trim?.() ? rawIdea.trim() : "";
-        const { generateInspirationReqNew, generateInspirationImageReq } = await import("@/api/works");
-        const req: any = await generateInspirationReqNew(trimmedIdea || undefined);
-        const resolved = resolveAutoResultFromResponse(req, trimmedIdea);
-
-        if (!resolved) {
-          setReqPanelStatus("error");
-          setReqPanelDetail("状态：失败\n原因：暂时无法识别接口返回的卡片类型，请重试");
-          msg("warning", "暂时无法识别接口返回的卡片类型，请重试");
-          return;
-        }
-
-        if (resolved.kind === "brainstorm") {
-          const w = containerRef.current?.clientWidth || window.innerWidth || 1920;
-          const cards = createCardsFromInspiration(
-            resolved.inspirations.slice(0, 3),
-            resolved.inspirationWord,
-            inspirationDrawId || undefined,
-            w
-          );
-          setForceCanvasView(true);
-          setCanvasReady(true);
-          setEdges([]);
-          setNodes(cards);
-
-          const imageReq: any[] = await generateInspirationImageReq({
-            inspirationWord: resolved.inspirationWord ?? "",
-            inspirations: resolved.inspirations,
-          }).catch(() => []);
-
-          if (Array.isArray(imageReq)) {
-            setNodes((nds) =>
-              nds.map((n) => {
-                const theme = String((n.data as any)?.inspirationTheme ?? "");
-                if (n.type !== "summaryCard" || !theme) return n;
-                const match = imageReq.find((item: any) => item?.inspirationTheme === theme);
-                if (!match?.imageUrl) return n;
-                return { ...n, data: { ...n.data, image: match.imageUrl } };
-              })
-            );
-          }
-
-          setReqPanelStatus("success");
-          setReqPanelDetail("已根据接口返回自动匹配为脑洞卡。");
-          msg("success", "已自动生成脑洞卡");
-          return;
-        }
-
-        createCardFromOutputType("auto", trimmedIdea, {
-          title: resolved.title,
-          content: resolved.content,
-        });
-        setReqPanelStatus("success");
-        setReqPanelDetail(`已根据接口返回自动匹配为${resolved.cardKey === "role" ? "角色" : resolved.cardKey === "summary" ? "梗概" : resolved.cardKey === "outline" ? "大纲" : "信息"}卡。`);
-        msg("success", "已根据接口返回创建对应卡片");
-      },
-      [createCardFromOutputType, inspirationDrawId, msg, setEdges, setNodes]
-    );
-  
     const buildParentChain = useCallback(
       (targetId: string): ParentNode | null => {
         const edge = (edges as CustomEdge[]).find((e) => e.target === targetId);
@@ -5740,6 +4974,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       const outputTypeLabel =
         OUTPUT_TYPE_OPTIONS.find((item) => item.key === cardOutputType)?.label ?? cardOutputType;
       let shouldAutoSaveAfterStream = false;
+      let shouldResetOutputTypeToAuto = false;
       try {
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
@@ -5762,6 +4997,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         rememberLatestGeneratedNode("");
 
         if (isAutoRequest) {
+          shouldResetOutputTypeToAuto = true;
           setIsLoading(true);
           setCardKeyLabel(isAutoEmptyRequest ? "智能" : outputTypeLabel);
           setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
@@ -5797,7 +5033,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                     partialPanelOrderedIds,
                     partialPanelContentById
                   );
-                  syncReqPanelTextRefs(detail, body, footer);
+                  // syncReqPanelTextRefs(detail, body, footer);
                 }
                 return;
               }
@@ -5899,6 +5135,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           setIsLoading(false);
           return;
         } else {
+          shouldResetOutputTypeToAuto = true;
           canvasAutoSaveSuppressedRef.current = true;
           setIsLoading(true);
           setCardKeyLabel(outputTypeLabel);
@@ -7249,14 +6486,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         if (shouldScheduleAutoSave) {
           scheduleCanvasAutoSave(0);
         }
-        if (resetOutputTypeAfterFinish) {
+        if (shouldResetOutputTypeToAuto || resetOutputTypeAfterFinish) {
           handleOutputTypeChange("auto");
         }
       }
     }, [
       canvasOutputType,
       createCardByKey,
-      createLoadingCardByKey,
       ideaContent,
       ideaInputSource,
       isLoading,
@@ -7708,10 +6944,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         handlePrepareBrainstormCard,
         handleGroupDelete: deleteNode,
         handleGenerateIns: handleGenerateInsFromContext,
-        handleRoleExpandRandom,
-        handleGenerateSummaryFromContext,
         handleGenerateOutlineFromContext,
-        handleGenerateInfoFromContext,
         handleSummaryGenerate: generateStorySettings,
         handleSummaryAdd: addSummaryCard,
         handleSummaryDelete: deleteNode,
@@ -7774,10 +7007,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         handlePrepareBrainstormCard,
         deleteNode,
         handleGenerateInsFromContext,
-        handleRoleExpandRandom,
-        handleGenerateSummaryFromContext,
         handleGenerateOutlineFromContext,
-        handleGenerateInfoFromContext,
         generateStorySettings,
         addSummaryCard,
         updateNodeContent,
@@ -7877,10 +7107,21 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return "#EFAF00";
     }, [panelTitleText]);
 
-    const panelDetailText = useMemo(() => reqPanelDetail.trim() || '收到了~容喵想想', [reqPanelDetail]);
-
+    const rawPanelDetailText = reqPanelDetail.trim();
+    const panelDetailText = useMemo(
+      () => rawPanelDetailText || "收到了~容喵想想",
+      [rawPanelDetailText]
+    );
+    const panelBodyText = reqPanelBodyDetail.trim();
     const panelFooterText = reqPanelFooterDetail.trim();
     const hasSmartSuggestions = smartSuggestions.length > 0;
+    const hasLongPanelDetail =
+      rawPanelDetailText.length > 120 || rawPanelDetailText.includes("\n");
+    const canToggleReqPanelExpanded =
+      hasSmartSuggestions ||
+      Boolean(panelBodyText) ||
+      Boolean(panelFooterText) ||
+      hasLongPanelDetail;
     // 面板至少需要以标题作为可见内容基线；即使 start/middle/end 都为空串，也不应触发“塌陷”样式分支。
     const hasReqPanelHeaderExtraContent = Boolean(
       panelTitleText || panelDetailText || latestGeneratedNodeId || reqPanelAction
@@ -7888,7 +7129,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const shouldAttachReqPanelToInput = reqPanelVisible;
     const shouldForceExpandReqPanel =
       smartSuggestionsActive && reqPanelStatus === "success" && hasSmartSuggestions;
-    const shouldLockReqPanelCollapsed = !hasSmartSuggestions;
+    const shouldLockReqPanelCollapsed = !canToggleReqPanelExpanded;
     useEffect(() => {
       if (shouldForceExpandReqPanel) {
         setReqPanelExpanded(true);
@@ -8272,7 +7513,18 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                     <div className="flex w-full items-start justify-between gap-2 text-[12px] text-[#6b7280]">
                       <div className="min-w-0 flex-1 overflow-visible">
                         {panelDetailText ? (
-                          <span className="block min-w-0 w-full overflow-visible whitespace-pre-wrap break-all text-clip leading-5">
+                          <span
+                            className="block min-w-0 w-full overflow-hidden whitespace-pre-wrap break-all text-clip leading-5"
+                            style={
+                              !isReqPanelExpanded && canToggleReqPanelExpanded
+                                ? ({
+                                    display: "-webkit-box",
+                                    WebkitBoxOrient: "vertical",
+                                    WebkitLineClamp: 2,
+                                  } as any)
+                                : undefined
+                            }
+                          >
                             {panelDetailText}
                           </span>
                         ) : null}
@@ -8312,7 +7564,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                     </Button>
                   ) : null}
                 </div>
-                {hasSmartSuggestions ? <Iconfont
+                {canToggleReqPanelExpanded ? <Iconfont
                   unicode={isReqPanelExpanded ? "&#xeaa1;" : "&#xeaa6;"}
                   className={cn(
                     "shrink-0 text-[#6b7280] transition-transform cursor-pointer duration-300",
@@ -8333,9 +7585,14 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                   autoScroll={reqPanelStatus === "loading"}
                   className="w-full rounded-[14px]"
                 >
-                  {reqPanelBodyDetail && smartSuggestions.length === 2 ? (
+                  {isReqPanelExpanded && hasLongPanelDetail ? (
+                    <div className="px-3 py-2 text-[12px] leading-5 text-[#111] whitespace-pre-wrap break-all">
+                      {panelDetailText}
+                    </div>
+                  ) : null}
+                  {panelBodyText && (smartSuggestions.length === 2 || !hasSmartSuggestions) ? (
                     <div className="px-3 py-2 text-[12px] leading-5 text-[#111]">
-                      <MarkdownRenderer content={reqPanelBodyDetail} />
+                      <MarkdownRenderer content={panelBodyText} />
                     </div>
                   ) : null}
                   {smartSuggestionsActive && reqPanelStatus === "success" && smartSuggestions.length > 0 ? (
