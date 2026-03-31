@@ -8,6 +8,28 @@
   transition: transform 0.3s ease;
 }
 
+.inspiration-card--breathing {
+  will-change: box-shadow, filter, opacity;
+}
+
+@keyframes inspiration-breath {
+  0% {
+    box-shadow: 0 0 26px 10px rgba(255, 204, 0, 0.2);
+    filter: saturate(1);
+    opacity: 0.92;
+  }
+  50% {
+    box-shadow: 0 0 44px 18px rgba(255, 204, 0, 0.34);
+    filter: saturate(1.12);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 26px 10px rgba(255, 204, 0, 0.2);
+    filter: saturate(1);
+    opacity: 0.92;
+  }
+}
+
 .inspiration-card--first3d {
   transform-origin: left center;
 }

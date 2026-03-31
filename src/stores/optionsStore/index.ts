@@ -62,6 +62,9 @@ export const useOptionsStore = create<OptionsStore>((set, get) => ({
   joinUsDesc: '',
   bannerConfig: DEFAULT_BANNER,
   recommendConfig: {},
+  clawGuideUrl: '',
+  clawVxQrCode: '',
+  clawFeishuQrCode: '',
 
   updateCategories: async () => {
     try {
@@ -84,7 +87,7 @@ export const useOptionsStore = create<OptionsStore>((set, get) => ({
 
   updateConfig: async () => {
     try {
-      const req: any = await getRecommendConfig()
+      const req = await getRecommendConfig()
       const updates: Partial<OptionsStore> = {}
       if (req?.vxQrCodeUrl) {
         updates.joinUsQrCode = req.vxQrCodeUrl
@@ -97,6 +100,15 @@ export const useOptionsStore = create<OptionsStore>((set, get) => ({
           ...get().bannerConfig,
           ...req.bannerConfig,
         }
+      }
+      if (req?.clawGuideUrl) {
+        updates.clawGuideUrl = req.clawGuideUrl
+      }
+      if (req?.clawVxQrCodeUrl) {
+        updates.clawVxQrCode = req.clawVxQrCodeUrl
+      }
+      if (req?.clawFeishuQrCodeUrl) {
+        updates.clawFeishuQrCode = req.clawFeishuQrCodeUrl
       }
       if (Object.keys(updates).length > 0) {
         set(updates)

@@ -95,7 +95,7 @@ export default function MLandingPage() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* 顶部导航 */}
-      <div className="h-20 w-full flex justify-between items-center px-9 fixed top-0 left-0 z-99 bg-[#f7f7f4]">
+      <div className="h-20 w-full flex justify-between items-center px-9 fixed top-0 left-0 z-9 bg-[#f7f7f4]">
         <div className="h-full flex items-center gap-4">
           <img src={LOGO} alt="logo" className="w-14 h-14 object-cover" loading="eager"/>
           <div className="font-bold text-4xl">爆文猫</div>

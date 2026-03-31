@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from '@/lib/utils'
 import { Button } from "@/components/ui/Button.tsx";
 
+const IFRAME_URL_VX = 'https://www.baowenmao.com/login/login?wxLogin=1'
 const IFRAME_URL = 'https://www.baowenmao.com/login/login'
 const ALLOWED_ORIGIN = 'https://www.baowenmao.com'
 const LOAD_TIMEOUT_MS = 5000
@@ -24,6 +25,8 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
   const [iframeLoadFailed, setIframeLoadFailed] = useState(false)
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+
+  const iframeUrl = isMobile ? IFRAME_URL : IFRAME_URL_VX
 
   const onSuccessRef = useRef(onLoginSuccess)
   const onFailedRef = useRef(onLoginFailed)
@@ -111,8 +114,10 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
       <DialogContent
         showCloseButton
         className={cn(
-          'p-0 gap-0 overflow-hidden',
-          isMobile ? 'w-[650px] h-200 p-4' : 'w-[calc(400px+32px*2)] max-w-[calc(100%-2rem)]',
+          'gap-0 overflow-hidden boom_claw_login_dialog  p-0',
+          isMobile ? 
+          'w-[650px] max-w-[calc(100vw-2rem)] h-240 max-h-[calc(100dvh-1rem)]' 
+          : 'w-[calc(1220px+32px*2)] max-w-[calc(100%-2rem)] ',
         )}
         onInteractOutside={preventClose}
         onEscapeKeyDown={preventClose}
@@ -122,18 +127,19 @@ export const LoginDialog = ({ open, onOpenChange, onLoginSuccess, onLoginFailed 
         </VisuallyHidden>
         <div
           className={cn(
-            'relative overflow-hidden w-full h-[560px]',
-            isMobile && 'h-200'
+            'relative overflow-hidden w-full',
+            isMobile && 'h-240 max-h-[calc(100dvh-1rem)]',
+            !isMobile && 'h-200 max-h-[calc(100dvh-2rem)]'
           )}
         >
           {!iframeLoadFailed ? (
             <iframe
               ref={iframeRef}
-              src={IFRAME_URL}
+              src={iframeUrl}
               title="登录"
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
               allow="camera; microphone"
-              className="h-full w-full border-0"
+              className="h-full w-full border-0 boom_claw_login_iframe"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
             />

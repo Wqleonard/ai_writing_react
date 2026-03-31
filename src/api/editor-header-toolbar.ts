@@ -14,6 +14,22 @@ interface IntroductionPostStreamData {
   relatedFiles: string[];
 }
 
+interface RecommendConfigResponse {
+  vxQrCodeUrl?: string;
+  vxQrCodeDescription?: string;
+  bannerConfig?: {
+    title?: string;
+    icon?: string;
+    btnText?: string;
+    content?: string;
+    canOpen?: boolean;
+  };
+  recommend?: string;
+  clawGuideUrl?: string;
+  clawVxQrCodeUrl?: string;
+  clawFeishuQrCodeUrl?: string;
+}
+
 const introductionPostStream = (
   data: IntroductionPostStreamData | PublicPostStreamData,
   onData: (data: PostStreamData) => void,
@@ -132,7 +148,7 @@ const chapterPostStream = (
 };
 
 const getRecommendConfig = () => {
-  return apiClient.get("/api/rank/config");
+  return apiClient.get<RecommendConfigResponse>("/api/rank/config");
 };
 
 export {
