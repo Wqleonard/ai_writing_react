@@ -1021,10 +1021,19 @@ const MarkdownEditorPage = () => {
   const treeDataRef = useRef<TreeNodeLike[]>(treeData as TreeNodeLike[]);
   const workInfoStageRef = useRef(workInfo.stage);
   const lastCanvasSyncedKeysRef = useRef<string[]>([]);
+  const canvasTaggedFilePathSetRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     treeDataRef.current = treeData as TreeNodeLike[];
     workInfoStageRef.current = workInfo.stage;
   }, [treeData, workInfo.stage]);
+
+  const normalizeCanvasFilePath = useCallback((value: string) => {
+    return sanitizeIncomingFilePath(value).replace(/^\/+/, "").trim();
+  }, []);
+
+  const isLikelyCanvasGeneratedPath = useCallback((normalizedPath: string) => {
+    return /^\[[^/\]]+卡\]\/.+\.md$/i.test(normalizedPath);
+  }, []);
 
   const resolveDraggedTreeFileForCanvas = useCallback((dataTransfer?: DataTransfer | null) => {
     const draggedId =
@@ -1091,9 +1100,14 @@ const MarkdownEditorPage = () => {
         ...canvasFiles,
       };
       lastCanvasSyncedKeysRef.current = Object.keys(canvasFiles);
+      canvasTaggedFilePathSetRef.current = new Set(
+        Object.keys(canvasFiles)
+          .map((key) => normalizeCanvasFilePath(key))
+          .filter((key) => key.toLowerCase().endsWith(".md"))
+      );
       setServerData(mergedFiles);
     },
-    [setServerData]
+    [normalizeCanvasFilePath, setServerData]
   );
 
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(() => {
@@ -1127,6 +1141,8 @@ const MarkdownEditorPage = () => {
     setCanvasInitialEdges([]);
     setCanvasInitialInspirationDrawId("");
     setCanvasInitialSnapshotKey((prev) => prev + 1);
+    lastCanvasSyncedKeysRef.current = [];
+    canvasTaggedFilePathSetRef.current = new Set();
   }, [workId]);
 
   const loadLatestCanvasSnapshot = useCallback(async () => {
@@ -1700,8 +1716,16 @@ const MarkdownEditorPage = () => {
 
   const handleTreeFileSelect = useCallback((node: FileTreeNode) => {
     const pathFromTree = Array.isArray(node.path) ? node.path.join("/") : "";
-    requestCanvasFocusByFilePath(pathFromTree || node.id);
-  }, [requestCanvasFocusByFilePath]);
+    const normalizedPath = normalizeCanvasFilePath(pathFromTree || node.id);
+    if (!normalizedPath) return;
+
+    const isCanvasTaggedFile =
+      canvasTaggedFilePathSetRef.current.has(normalizedPath) ||
+      isLikelyCanvasGeneratedPath(normalizedPath);
+
+    if (!isCanvasTaggedFile) return;
+    requestCanvasFocusByFilePath(normalizedPath);
+  }, [isLikelyCanvasGeneratedPath, normalizeCanvasFilePath, requestCanvasFocusByFilePath]);
 
   const handleCloseCanvasPreviewEditor = useCallback(() => {
     setIsCanvasPreviewEditorClosed(true);
