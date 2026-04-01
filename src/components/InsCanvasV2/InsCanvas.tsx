@@ -42,6 +42,8 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
   import type {
   CanvasAddCardOptions,
   CanvasCardKey,
+  CanvasGenerateOptions,
+  CanvasGenerateOutlineOptions,
   CanvasModeCategory,
   CanvasModelType,
   CanvasOutputType,
@@ -112,6 +114,39 @@ import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/wo
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, X } from "lucide-react";
+
+const summarizeCanvasPersistenceState = (nodes: CustomNode[], edges: CustomEdge[]) => {
+  const placeholderNodes = nodes.filter((node) => {
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    return (
+      Boolean(data.fromApi) &&
+      (
+        Boolean(data.isStreaming) ||
+        Boolean(data.pendingGenerate) ||
+        (
+          !String(data.title ?? "").trim() &&
+          !String(data.content ?? "").trim()
+        )
+      )
+    );
+  });
+
+  return {
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    placeholderCount: placeholderNodes.length,
+    streamingCount: nodes.filter((node) => Boolean((node.data as any)?.isStreaming)).length,
+    pendingGenerateCount: nodes.filter((node) => Boolean((node.data as any)?.pendingGenerate)).length,
+    placeholderNodeIds: placeholderNodes.slice(0, 10).map((node) => node.id),
+  };
+};
+
+const shouldBlockCanvasPersistence = (
+  summary: ReturnType<typeof summarizeCanvasPersistenceState>
+) =>
+  summary.placeholderCount > 0 ||
+  summary.streamingCount > 0 ||
+  summary.pendingGenerateCount > 0;
   const nodeTypes = {
     mainCard: MainCardNode,
     summaryCard: SummaryCardNode,
@@ -925,6 +960,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     onCanvasReady,
     autoSyncDirectory = false,
     onAutoSyncDirectory,
+    onCanvasFileContentChange,
+    onCanvasOpenFileRequest,
     canvasRef,
   }: InsCanvasInnerProps) {
     const navigate = useNavigate();
@@ -937,7 +974,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const canvasAutoSaveTimerRef = useRef<number | null>(null);
     const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
     const canvasAutoSaveSuppressedRef = useRef(false);
+    const pendingStablePersistenceRef = useRef(false);
     const hasInitialSnapshotFittedRef = useRef(false);
+    const isUnmountingRef = useRef(false);
     const hasIdeaRef = useRef(false);
     const layoutRequestIdRef = useRef(0);
     const canvasNodeIdSeqRef = useRef(0);
@@ -973,6 +1012,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const generatedWriteFilesRef = useRef<Record<string, string>>({});
     const preparedContextFilesRef = useRef<Record<string, string> | undefined>(undefined);
     const preparedGenerateSourceNodeIdRef = useRef<string | undefined>(undefined);
+    const ignoreDialogReferencesForNextRequestRef = useRef(false);
+    const clearDialogPreviewsForNextRequestRef = useRef<boolean | undefined>(undefined);
     const [smartSuggestionsActive, setSmartSuggestionsActive] = useState(false);
     const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestionItem[]>([]);
     const [pendingSuggestionIdea, setPendingSuggestionIdea] = useState("");
@@ -1010,7 +1051,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           sourceNodeId?: string,
           filesOverride?: Record<string, string>,
           contextActionLabelOverride?: string,
-          requestSourceOverride?: "default" | "carousel"
+          requestSourceOverride?: "default" | "carousel",
+          resetOutputTypeAfterFinish?: boolean,
+          includeDialogReferencesOverride?: boolean,
+          clearDialogPreviewsAfterRequestOverride?: boolean
         ) => void | Promise<void>)
       | null
     >(null);
@@ -1083,7 +1127,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           });
           const nextId = String(res?.id || "").trim();
           if (!nextId) return "";
-          setInspirationDrawId(nextId);
+          if (!isUnmountingRef.current) {
+            setInspirationDrawId(nextId);
+          }
           return nextId;
         })().finally(() => {
           ensureDrawIdPromiseRef.current = null;
@@ -1094,13 +1140,32 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }, [inspirationDrawId, workId]);
 
     const saveCanvasSilently = useCallback(async () => {
+      const summary = summarizeCanvasPersistenceState(
+        nodesRef.current,
+        edgesRef.current as CustomEdge[]
+      );
+      if (shouldBlockCanvasPersistence(summary)) {
+        pendingStablePersistenceRef.current = true;
+        return;
+      }
+
       const drawId = await ensureInspirationDrawId();
       if (!drawId) return;
       await saveInspirationCanvasReq(drawId, {
         nodes: nodesRef.current as unknown[],
         edges: edgesRef.current as unknown[],
       });
-    }, [ensureInspirationDrawId]);
+    }, [ensureInspirationDrawId, inspirationDrawId, workId]);
+    const saveCanvasSilentlyRef = useRef(saveCanvasSilently);
+    saveCanvasSilentlyRef.current = saveCanvasSilently;
+
+    const flushCanvasPersistence = useCallback(async () => {
+      if (canvasAutoSaveTimerRef.current) {
+        window.clearTimeout(canvasAutoSaveTimerRef.current);
+        canvasAutoSaveTimerRef.current = null;
+      }
+      await saveCanvasSilently();
+    }, [inspirationDrawId, saveCanvasSilently, workId]);
 
     const scheduleCanvasAutoSave = useCallback((delayMs = 500) => {
       if (!workId || canvasAutoSaveSuppressedRef.current) return;
@@ -1111,16 +1176,34 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         canvasAutoSaveTimerRef.current = null;
         void saveCanvasSilently().catch(() => {});
       }, delayMs);
-    }, [saveCanvasSilently, workId]);
+    }, [inspirationDrawId, saveCanvasSilently, workId]);
 
     useEffect(() => {
+      if (!pendingStablePersistenceRef.current) return;
+      if (!workId) return;
+      if (canvasAutoSaveSuppressedRef.current) return;
+
+      const summary = summarizeCanvasPersistenceState(
+        nodesRef.current,
+        edgesRef.current as CustomEdge[]
+      );
+      if (shouldBlockCanvasPersistence(summary)) return;
+
+      pendingStablePersistenceRef.current = false;
+      scheduleCanvasAutoSave(0);
+    }, [edges, inspirationDrawId, nodes, scheduleCanvasAutoSave, workId]);
+
+    useEffect(() => {
+      isUnmountingRef.current = false;
       return () => {
+        isUnmountingRef.current = true;
         if (canvasAutoSaveTimerRef.current) {
           window.clearTimeout(canvasAutoSaveTimerRef.current);
           canvasAutoSaveTimerRef.current = null;
+          void saveCanvasSilentlyRef.current?.().catch(() => {});
         }
       };
-    }, []);
+    }, [inspirationDrawId, workId]);
 
   const relayoutGroupsForNodeIds = useCallback((
     currentNodes: CustomNode[],
@@ -1905,6 +1988,45 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return true;
     }, [focusCanvasNodeWhenReady, normalizeCanvasFilePath]);
 
+    const syncFileContentByPath = useCallback((filePath: string, content: string) => {
+      const normalizedPath = normalizeCanvasFilePath(filePath);
+      if (!normalizedPath) return false;
+
+      const suffixPath = `/${normalizedPath}`;
+      const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nodesRef.current);
+      const matchedNodeId =
+        syncPathNodeIdMap[normalizedPath] ||
+        Object.entries(syncPathNodeIdMap).find(([syncPath]) => syncPath.endsWith(suffixPath))?.[1] ||
+        "";
+      let didUpdate = false;
+
+      setNodes((prev) =>
+        prev.map((node) => {
+          const isMatchedBySyncPath = matchedNodeId ? node.id === matchedNodeId : false;
+          const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+          const isMatchedByFilePath =
+            !!nodeFilePath &&
+            (nodeFilePath === normalizedPath || nodeFilePath.endsWith(suffixPath));
+          const isMatched = isMatchedBySyncPath || isMatchedByFilePath;
+          if (!isMatched) return node;
+
+          const nextContent = String(content ?? "");
+          if (String(node.data?.content ?? "") === nextContent) return node;
+
+          didUpdate = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              content: nextContent,
+            },
+          };
+        })
+      );
+
+      return didUpdate;
+    }, [normalizeCanvasFilePath, setNodes]);
+
     const focusNewlyCreatedBlankNode = useCallback((nodeId?: string) => {
       const normalizedNodeId = getTextValue(nodeId);
       if (!normalizedNodeId) return;
@@ -2056,6 +2178,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const [panMode, setPanMode] = useState(true);
     const onAutoSyncDirectoryRef = useRef(onAutoSyncDirectory);
     onAutoSyncDirectoryRef.current = onAutoSyncDirectory;
+    const lastAutoSyncSignatureRef = useRef("");
     const getOrCreateCanvasSessionId = useCanvasStore((s) => s.getOrCreateCanvasSessionId);
     const createNewCanvasSessionId = useCanvasStore((s) => s.createNewCanvasSessionId);
     const clearCanvasSessionId = useCanvasStore((s) => s.clearCanvasSessionId);
@@ -2244,8 +2367,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           images?: string[];
         }
       ) => {
-        setNodes((nds) =>
-          nds.map((n) => {
+        let syncedFilePath = "";
+        let syncedFileContent = "";
+        setNodes((nds) => {
+          const nextNodes = nds.map((n) => {
             if (n.id !== nodeId) return n;
 
             const hasTitleUpdate = Object.prototype.hasOwnProperty.call(options ?? {}, "title");
@@ -2298,8 +2423,22 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             }
 
             return nextNode;
-          })
-        );
+          });
+
+          const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nextNodes);
+          const matchedSyncPath =
+            Object.entries(syncPathNodeIdMap).find(([, id]) => id === nodeId)?.[0] ?? "";
+          if (matchedSyncPath) {
+            const nextFiles = buildCanvasSyncFiles(nextNodes);
+            syncedFilePath = matchedSyncPath;
+            syncedFileContent = String(nextFiles[matchedSyncPath] ?? "");
+          }
+
+          return nextNodes;
+        });
+        if (syncedFilePath) {
+          onCanvasFileContentChangeRef.current?.(syncedFilePath, syncedFileContent);
+        }
       },
       [buildCanvasNodeFilePath, buildCanvasNodeMarkdown, setNodes]
     );
@@ -3754,6 +3893,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
 
         preparedGenerateSourceNodeIdRef.current = nodeId;
         preparedContextFilesRef.current = undefined;
+        ignoreDialogReferencesForNextRequestRef.current = false;
+        clearDialogPreviewsForNextRequestRef.current = undefined;
         handleOutputTypeChange(outputType);
 
         setNodes((prev) =>
@@ -4030,13 +4171,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const handleGenerateOutlineFromContext = useCallback(
       async (
         nodeId: string,
-        options?: {
-          chapterNum?: number;
-          requirement?: string;
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOutlineOptions
       ) => {
         handleOutputTypeChange("outline");
         const shouldOpenOutlineConfig =
@@ -4072,7 +4207,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           "outline",
           nodeId,
           mergedFiles,
-          options?.actionLabel
+          options?.actionLabel,
+          undefined,
+          false,
+          options?.includeDialogReferences ?? true,
+          options?.clearDialogPreviewsAfterRequest
         );
       },
       [getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg, openOutlineSettingsForRequest]
@@ -4166,7 +4305,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       filesOverride?: Record<string, string>,
       contextActionLabelOverride?: string,
       requestSourceOverride?: "default" | "carousel",
-      resetOutputTypeAfterFinish = false
+      resetOutputTypeAfterFinish = false,
+      includeDialogReferencesOverride = true,
+      clearDialogPreviewsAfterRequestOverride?: boolean
     ) => {
       
       if (isLoading) return;
@@ -4197,7 +4338,13 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         );
       const sourceNodeFilePath = getTextValue((sourceNode?.data as any)?.filePath);
       const sourceNodeFileContent = getTextValue(sourceNode?.data?.content);
-      const selectedDialogReferences = [...dialogCardPreviews];
+      const shouldIncludeDialogReferences =
+        includeDialogReferencesOverride && !ignoreDialogReferencesForNextRequestRef.current;
+      const shouldClearDialogPreviews =
+        clearDialogPreviewsAfterRequestOverride ??
+        clearDialogPreviewsForNextRequestRef.current ??
+        true;
+      const selectedDialogReferences = shouldIncludeDialogReferences ? [...dialogCardPreviews] : [];
       const selectedDialogReferenceIds = selectedDialogReferences
         .map((item) => getTextValue(item.nodeId))
         .filter(Boolean);
@@ -4244,7 +4391,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       );
       preparedContextFilesRef.current = undefined;
       preparedGenerateSourceNodeIdRef.current = undefined;
-      setDialogCardPreviews([]);
+      ignoreDialogReferencesForNextRequestRef.current = false;
+      clearDialogPreviewsForNextRequestRef.current = undefined;
+      if (shouldClearDialogPreviews) {
+        setDialogCardPreviews([]);
+      }
       const shouldOpenOutlineConfigFromDock =
         !isAutoRequest &&
         cardOutputType === "outline" &&
@@ -5848,11 +5999,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       (
         nodeId: string,
         _outputType: CanvasOutputType,
-        options?: {
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOptions
       ) => {
         const targetOutputType: CanvasOutputType = "auto";
         const currentNode = nodes.find((node) => node.id === nodeId);
@@ -5864,9 +6011,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         }
         preparedGenerateSourceNodeIdRef.current = nodeId;
         const isGroupNode = currentNode?.type === "roleGroup";
-        const appended = isGroupNode
-          ? appendDialogReferencesByNodeIds(getGroupChildReferenceNodeIds(nodeId))
-          : appendDialogReferenceByNodeId(nodeId);
+        const shouldIncludeDialogReferences = options?.includeDialogReferences ?? true;
+        ignoreDialogReferencesForNextRequestRef.current = !shouldIncludeDialogReferences;
+        clearDialogPreviewsForNextRequestRef.current = options?.clearDialogPreviewsAfterRequest;
+        const appended = shouldIncludeDialogReferences
+          ? (
+            isGroupNode
+              ? appendDialogReferencesByNodeIds(getGroupChildReferenceNodeIds(nodeId))
+              : appendDialogReferenceByNodeId(nodeId)
+          )
+          : null;
         if (options?.files && Object.keys(options.files).length > 0) {
           preparedContextFilesRef.current = mergeFileRecords(
             preparedContextFilesRef.current,
@@ -5931,11 +6085,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       (
         nodeId: string,
         outputType: CanvasOutputType,
-        options?: {
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOptions
       ) => {
         if (outputType !== "auto") {
           handleOutputTypeChange(outputType);
@@ -5960,7 +6110,11 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           outputType,
           nodeId,
           options?.files,
-          options?.actionLabel
+          options?.actionLabel,
+          undefined,
+          false,
+          options?.includeDialogReferences ?? true,
+          options?.clearDialogPreviewsAfterRequest
         );
       },
       [buildContextGeneratePrompt, getTextValue, handleGenerateIns, handleOutputTypeChange, msg, nodes]
@@ -6147,6 +6301,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       creationIdeaContentRef.current = "";
       generatedWriteFilesRef.current = {};
       preparedContextFilesRef.current = undefined;
+      ignoreDialogReferencesForNextRequestRef.current = false;
+      clearDialogPreviewsForNextRequestRef.current = undefined;
       setLatestGeneratedNodeId("");
       latestGeneratedNodeIdRef.current = "";
       setReqPanelAction(null);
@@ -6203,23 +6359,37 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         addNewCanvas,
         addInfoCardFromExternalFile,
         focusFileByPath,
+        syncFileContentByPath,
         openHistory,
+        flushPersistence: flushCanvasPersistence,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, openHistory, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
     onCanvasReadyRef.current = onCanvasReady;
+    const onCanvasFileContentChangeRef = useRef(onCanvasFileContentChange);
+    onCanvasFileContentChangeRef.current = onCanvasFileContentChange;
+    const onCanvasOpenFileRequestRef = useRef(onCanvasOpenFileRequest);
+    onCanvasOpenFileRequestRef.current = onCanvasOpenFileRequest;
     useEffect(() => {
       onCanvasReadyRef.current?.();
     }, [inspirationDrawId, isLoading]);
 
     useEffect(() => {
       if (!autoSyncDirectory) return;
-      onAutoSyncDirectoryRef.current?.(buildCanvasSyncFiles(nodes));
+      const nextFiles = buildCanvasSyncFiles(nodes);
+      const nextSignature = JSON.stringify(
+        Object.keys(nextFiles)
+          .sort()
+          .map((key) => [key, nextFiles[key] ?? ""])
+      );
+      if (lastAutoSyncSignatureRef.current === nextSignature) return;
+      lastAutoSyncSignatureRef.current = nextSignature;
+      onAutoSyncDirectoryRef.current?.(nextFiles);
     }, [autoSyncDirectory, nodes]);
 
     const handleRestoreVersion = useCallback(
@@ -6245,12 +6415,40 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       },
       [setNodes, setEdges, msg, autoLayout]
     );
+
+    const requestOpenFileByPath = useCallback((target: string) => {
+      const normalizedTarget = normalizeCanvasFilePath(target);
+      if (!normalizedTarget) {
+        console.warn("[canvas-open-debug] request-open-empty-target", { target });
+        return;
+      }
+
+      const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nodesRef.current);
+      const matchedNode = nodesRef.current.find((node) => node.id === target);
+      const targetCandidates = Array.from(new Set([
+        normalizedTarget,
+        normalizedTarget.replace(/^角色卡\//, "[角色卡]/"),
+        normalizedTarget.replace(/^脑洞卡\//, "[脑洞卡]/"),
+        normalizedTarget.replace(/^梗概卡\//, "[梗概卡]/"),
+        normalizedTarget.replace(/^设定卡\//, "[设定卡]/"),
+        normalizedTarget.replace(/^大纲卡\//, "[大纲卡]/"),
+      ]));
+      const matchedSyncPath =
+        Object.entries(syncPathNodeIdMap).find(([, nodeId]) => nodeId === target)?.[0] ||
+        targetCandidates.find((candidate) => syncPathNodeIdMap[candidate]) ||
+        Object.keys(syncPathNodeIdMap).find((syncPath) =>
+          targetCandidates.some((candidate) => syncPath.endsWith(`/${candidate}`))
+        ) ||
+        "";
+      onCanvasOpenFileRequestRef.current?.(matchedSyncPath || normalizedTarget);
+    }, [normalizeCanvasFilePath]);
   
     const handlers = useMemo(
       () => ({
         handleMainCardCreate,
         handleAddCardToDialog,
         handleAddGroupToDialog,
+        requestOpenFileByPath,
         handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         handleGroupDelete: deleteNode,
@@ -6314,6 +6512,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         handleMainCardCreate,
         handleAddCardToDialog,
         handleAddGroupToDialog,
+        requestOpenFileByPath,
         handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         deleteNode,
@@ -7343,6 +7542,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           onCanvasReady={props.onCanvasReady}
           autoSyncDirectory={props.autoSyncDirectory}
           onAutoSyncDirectory={props.onAutoSyncDirectory}
+          onCanvasFileContentChange={props.onCanvasFileContentChange}
+          onCanvasOpenFileRequest={props.onCanvasOpenFileRequest}
           canvasRef={ref as React.RefObject<InsCanvasApi | null>}
         />
       </ReactFlowProvider>

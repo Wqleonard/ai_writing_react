@@ -208,6 +208,8 @@ export default function RoleGroupNode(props: any) {
             ...groupOptions,
             title: "角色",
             actionLabel: "以此扩充随机角色",
+            includeDialogReferences: false,
+            clearDialogPreviewsAfterRequest: false,
           });
         },
       });
@@ -222,6 +224,8 @@ export default function RoleGroupNode(props: any) {
               ...groupOptions,
               title: "故事梗概",
               actionLabel: "以此生成故事梗概",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -236,6 +240,8 @@ export default function RoleGroupNode(props: any) {
               ...groupOptions,
               title: "大纲",
               actionLabel: "以此生成大纲",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -251,6 +257,7 @@ export default function RoleGroupNode(props: any) {
           ...groupOptions,
           title: "信息",
           actionLabel: "我想用它生成...",
+          includeDialogReferences: true,
         });
       },
     });
