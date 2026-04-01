@@ -254,6 +254,11 @@ const shouldBlockCanvasPersistence = (
       ? OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
       : OUTLINE_GROUP_DEFAULT_TOP;
 
+type GroupRelayoutOptions = {
+  shiftOtherTopLevelNodes?: boolean;
+  currentEdges?: CustomEdge[];
+};
+
   const getCanvasNodeGroupId = (node?: CustomNode | null) =>
     getTextValue(node?.parentId) ||
     getTextValue((node?.data as any)?.roleGroupId) ||
@@ -306,12 +311,80 @@ const shouldBlockCanvasPersistence = (
     return changed ? nextNodes : currentNodes;
   };
 
+  const shiftImpactedTopLevelNodesHorizontally = (
+    currentNodes: CustomNode[],
+    currentEdges: CustomEdge[],
+    sourceNodeId: string,
+    minX: number,
+    deltaX: number
+  ) => {
+    if (!sourceNodeId || deltaX <= 0) return currentNodes;
+
+    const topLevelOwnerIdByNodeId = new Map<string, string>();
+    currentNodes.forEach((node) => {
+      const ownerId =
+        getTextValue(node.parentId) ||
+        getTextValue((node.data as any)?.roleGroupId) ||
+        getTextValue((node.data as any)?.outlineGroupId) ||
+        node.id;
+      topLevelOwnerIdByNodeId.set(node.id, ownerId);
+    });
+
+    const topLevelNodeById = new Map(
+      currentNodes.filter((node) => !node.parentId).map((node) => [node.id, node] as const)
+    );
+    const downstreamByTopLevelId = new Map<string, Set<string>>();
+    const connectTopLevel = (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) return;
+      if (!downstreamByTopLevelId.has(fromId)) {
+        downstreamByTopLevelId.set(fromId, new Set());
+      }
+      downstreamByTopLevelId.get(fromId)?.add(toId);
+    };
+
+    currentEdges.forEach((edge) => {
+      const sourceOwnerId = topLevelOwnerIdByNodeId.get(String(edge.source ?? "")) ?? "";
+      const targetOwnerId = topLevelOwnerIdByNodeId.get(String(edge.target ?? "")) ?? "";
+      connectTopLevel(sourceOwnerId, targetOwnerId);
+    });
+
+    const queue = Array.from(topLevelNodeById.values())
+      .filter((node) => node.id !== sourceNodeId && Number(node.position?.x ?? 0) >= minX)
+      .map((node) => node.id);
+
+    if (!queue.length) return currentNodes;
+
+    const idsToShift = new Set<string>();
+    while (queue.length > 0) {
+      const currentId = queue.shift() as string;
+      if (!currentId || idsToShift.has(currentId) || currentId === sourceNodeId) continue;
+      idsToShift.add(currentId);
+      downstreamByTopLevelId.get(currentId)?.forEach((nextId) => {
+        if (!idsToShift.has(nextId)) {
+          queue.push(nextId);
+        }
+      });
+    }
+
+    if (!idsToShift.size) return currentNodes;
+
+    return currentNodes.map((node) =>
+      !node.parentId && idsToShift.has(node.id)
+        ? {
+            ...node,
+            position: {
+              ...node.position,
+              x: Number(node.position?.x ?? 0) + deltaX,
+            },
+          }
+        : node
+    );
+  };
+
   const fitGroupNodeToChildren = (
     currentNodes: CustomNode[],
     groupId: string,
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: GroupRelayoutOptions
   ) => {
     if (!groupId) return currentNodes;
 
@@ -408,19 +481,17 @@ const shouldBlockCanvasPersistence = (
 
     // 当分组宽度扩展时，默认顶开右侧顶层节点；局部 relayout 模式下保持组外节点位置不变。
     if (widthDelta > 0 && options?.shiftOtherTopLevelNodes !== false) {
-      nextNodes = nextNodes.map((node) => {
-        if (node.id === groupId || node.parentId) return node;
-        const currentX = Number(node.position?.x ?? 0);
-        if (currentX < groupRightBeforeExpand) return node;
+      const shiftedNodes = shiftImpactedTopLevelNodesHorizontally(
+        nextNodes,
+        options?.currentEdges ?? [],
+        groupId,
+        groupRightBeforeExpand,
+        widthDelta
+      );
+      if (shiftedNodes !== nextNodes) {
         changed = true;
-        return {
-          ...node,
-          position: {
-            ...node.position,
-            x: currentX + widthDelta,
-          },
-        };
-      });
+        nextNodes = shiftedNodes;
+      }
     }
 
     return changed ? nextNodes : currentNodes;
@@ -620,9 +691,7 @@ const shouldBlockCanvasPersistence = (
   const compactGroupNodes = (
     currentNodes: CustomNode[],
     groupId: string,
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: GroupRelayoutOptions
   ) => {
     if (!groupId) return currentNodes;
 
@@ -1183,9 +1252,7 @@ const shouldBlockCanvasPersistence = (
   const relayoutGroupsForNodeIds = useCallback((
     currentNodes: CustomNode[],
     nodeIds: string[],
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: Omit<GroupRelayoutOptions, "currentEdges">
   ) => {
       if (!nodeIds.length) return currentNodes;
 
@@ -1207,7 +1274,10 @@ const shouldBlockCanvasPersistence = (
           ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
           : 0;
 
-        nextNodes = compactGroupNodes(nextNodes, groupId, options);
+        nextNodes = compactGroupNodes(nextNodes, groupId, {
+          ...options,
+          currentEdges: edgesRef.current as CustomEdge[],
+        });
 
         const afterGroupNode = nextNodes.find((node) => node.id === groupId);
         const afterHeight = afterGroupNode
@@ -1229,9 +1299,7 @@ const shouldBlockCanvasPersistence = (
 
     const scheduleGroupMeasureRelayout = useCallback((
       groupId: string,
-      options?: {
-        shiftOtherTopLevelNodes?: boolean;
-      }
+      options?: Omit<GroupRelayoutOptions, "currentEdges">
     ) => {
       if (!groupId) return;
       requestAnimationFrame(() => {
@@ -1241,7 +1309,10 @@ const shouldBlockCanvasPersistence = (
             const beforeHeight = beforeGroupNode
               ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
               : 0;
-            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId, options);
+            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId, {
+              ...options,
+              currentEdges: edgesRef.current as CustomEdge[],
+            });
             const afterGroupNode = nextNodes.find((node) => node.id === groupId);
             const afterHeight = afterGroupNode
               ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
@@ -3151,7 +3222,9 @@ const shouldBlockCanvasPersistence = (
             }
           }
           next.push(...roleNodes);
-          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+            currentEdges: latestEdges,
+          });
           nodesRef.current = normalizedNext;
           return normalizedNext;
         });
@@ -3690,7 +3763,9 @@ const shouldBlockCanvasPersistence = (
             };
           }
           next.push(...outlineNodes);
-          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+            currentEdges: latestEdges,
+          });
           nodesRef.current = normalizedNext;
           return normalizedNext;
         });
@@ -4772,7 +4847,9 @@ const shouldBlockCanvasPersistence = (
                 };
               }
 
-              const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+              const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+                currentEdges: edgesRef.current as CustomEdge[],
+              });
               nodesRef.current = normalizedNext;
               return normalizedNext;
             });
