@@ -1028,6 +1028,9 @@ type GroupRelayoutOptions = {
     const [ideaContent, setIdeaContent] = useState("");
     const [ideaPlaceholderIndex, setIdeaPlaceholderIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const isLoadingRef = useRef(false);
+    const canvasRequestAbortControllerRef = useRef<AbortController | null>(null);
+    const activeCanvasRequestAbortCleanupRef = useRef<(() => void) | null>(null);
     const [generateMode, setGenerateMode] = useState<"smart" | "brainstorm" | "fast">("smart");
     const [canvasModeCategory, setCanvasModeCategory] = useState<CanvasModeCategory>("smart");
     const [settingsPopoverOpen, setSettingsPopoverOpen] = useState(false);
@@ -2329,6 +2332,21 @@ type GroupRelayoutOptions = {
     useEffect(() => {
       hasIdeaRef.current = hasIdea;
     }, [hasIdea]);
+
+    useEffect(() => {
+      isLoadingRef.current = isLoading;
+    }, [isLoading]);
+
+    const stopCurrentRequest = useCallback(async () => {
+      const controller = canvasRequestAbortControllerRef.current;
+      if (!controller || !isLoadingRef.current) return;
+      controller.abort();
+
+      for (let attempts = 0; attempts < 40; attempts += 1) {
+        if (!isLoadingRef.current) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+      }
+    }, []);
 
     // 有「想法」结构时即允许画布交互（拖拽/缩放），包括：1）用户点击「立即创作」后 2）从服务端加载已有画布时
     useEffect(() => {
@@ -4490,6 +4508,9 @@ type GroupRelayoutOptions = {
         OUTPUT_TYPE_OPTIONS.find((item) => item.key === cardOutputType)?.label ?? cardOutputType;
       let shouldAutoSaveAfterStream = false;
       let shouldResetOutputTypeToAuto = false;
+      canvasRequestAbortControllerRef.current?.abort();
+      const requestAbortController = new AbortController();
+      canvasRequestAbortControllerRef.current = requestAbortController;
       try {
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
@@ -4518,6 +4539,11 @@ type GroupRelayoutOptions = {
           setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
           setReqPanelStatus("loading");
           setReqPanelDetail("");
+          activeCanvasRequestAbortCleanupRef.current = () => {
+            setPendingSuggestionIdea("");
+            setSmartSuggestions([]);
+            setSmartSuggestionsActive(false);
+          };
           const { postCanvasChoicesStream } = await import("@/api/works");
           let streamError: any = null;
           let hasChoiceList = false;
@@ -4630,7 +4656,8 @@ type GroupRelayoutOptions = {
             (error: any) => {
               streamError = error;
             },
-            () => {}
+            () => {},
+            { signal: requestAbortController.signal, showError: false }
           );
 
           if (streamError) {
@@ -5559,6 +5586,16 @@ type GroupRelayoutOptions = {
             );
           };
 
+          activeCanvasRequestAbortCleanupRef.current = () => {
+            stopLoadingProgress();
+            if (loadingCardId) cleanupLoadingCard(loadingCardId);
+            if (useBrainstormBatchLoading) {
+              clearBrainstormPlaceholderBatch();
+              brainstormBatchIdsRef.current = [];
+            }
+            setPendingSuggestionIdea("");
+          };
+
           await postCanvasChoicesStream(
             {
               prompt:
@@ -5690,7 +5727,8 @@ type GroupRelayoutOptions = {
             (error: any) => {
               streamError = error;
             },
-            () => {}
+            () => {},
+            { signal: requestAbortController.signal, showError: false }
           );
 
           if (streamError) {
@@ -5995,11 +6033,26 @@ type GroupRelayoutOptions = {
           return;
         }
       } catch (e: any) {
+        const isAbortError = e?.name === "AbortError";
         stopLoadingProgress();
-        setReqPanelStatus("error");
-        setReqPanelDetail("");
-        msg("error", e.message);
-        if (trimmedIdea) {
+        if (isAbortError) {
+          activeCanvasRequestAbortCleanupRef.current?.();
+          setReqPanelStatus("idle");
+          setReqPanelDetail("");
+          setReqPanelBodyDetail("");
+          setReqPanelFooterDetail("");
+          setReqPanelAction(null);
+          setPendingSuggestionIdea("");
+          setPendingContextActionLabel("");
+          setReqPanelUseSmartTheme(false);
+          setSmartSuggestions([]);
+          setSmartSuggestionsActive(false);
+        } else {
+          setReqPanelStatus("error");
+          setReqPanelDetail("");
+          msg("error", e.message);
+        }
+        if (trimmedIdea || isAbortError) {
           setIsLoading(false);
         }
       } finally {
@@ -6014,6 +6067,10 @@ type GroupRelayoutOptions = {
         if (shouldResetOutputTypeToAuto || resetOutputTypeAfterFinish) {
           handleOutputTypeChange("auto");
         }
+        if (canvasRequestAbortControllerRef.current === requestAbortController) {
+          canvasRequestAbortControllerRef.current = null;
+        }
+        activeCanvasRequestAbortCleanupRef.current = null;
       }
     }, [
       canvasOutputType,
@@ -6425,11 +6482,12 @@ type GroupRelayoutOptions = {
         syncFileContentByPath,
         openHistory,
         flushPersistence: flushCanvasPersistence,
+        stopCurrentRequest,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
