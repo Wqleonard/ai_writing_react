@@ -119,10 +119,20 @@ export function useLangGraphStream(
     if (data == null) return "";
     if (typeof data === "string") return data;
     if (Array.isArray(data)) {
-      for (const item of data as { type?: string; text?: string }[]) {
-        if (item?.type === "text" && typeof item.text === "string") return item.text;
-      }
-      return "";
+      return data
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (
+            item &&
+            typeof item === "object" &&
+            (item as { type?: string; text?: string }).type === "text" &&
+            typeof (item as { type?: string; text?: string }).text === "string"
+          ) {
+            return (item as { type?: string; text?: string }).text;
+          }
+          return "";
+        })
+        .join("");
     }
     return "";
   }
