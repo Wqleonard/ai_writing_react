@@ -130,17 +130,6 @@ const normalizeServerData = (data: ServerData): ServerData => {
   return next;
 };
 
-const getDebugContentPreview = (content: unknown, max = 80): string => {
-  if (typeof content !== "string") return "";
-  const flattened = content.replace(/\s+/g, " ").trim();
-  return flattened.length > max ? `${flattened.slice(0, max)}...` : flattened;
-};
-
-const logEditorFlow = (event: string, payload?: Record<string, unknown>) => {
-  if (!import.meta.env.DEV) return;
-  console.log(`[editor-flow] ${event}`, payload ?? {});
-};
-
 const getDefaultEditorServerData = (): ServerData => ({
   "大纲.md": "",
   "知识库/": "",
@@ -339,17 +328,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           const hasServerPayload = Object.keys(serverData ?? {}).length > 0;
           const payloadToSave =
             hasTreePayload || !hasServerPayload ? saveParseServerData : serverData;
-          const currentEditingId = get().currentEditingId || DEFAULT_EDITING_FILE_KEY;
-          logEditorFlow("saveEditorData", {
-            saveStatus,
-            targetWorkId,
-            currentEditingId,
-            hasTreePayload,
-            hasServerPayload,
-            payloadSource: hasTreePayload || !hasServerPayload ? "treeData" : "serverData",
-            treeContentPreview: getDebugContentPreview(saveParseServerData[currentEditingId]),
-            serverContentPreview: getDebugContentPreview(serverData[currentEditingId]),
-          });
           await updateWorkVersionReq(
             targetWorkId,
             JSON.stringify(payloadToSave),
@@ -430,11 +408,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           set((state) => {
             const normalized = normalizeServerData(data);
             const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
-            logEditorFlow("setServerData", {
-              currentEditingId: fileKey,
-              nextKeys: Object.keys(normalized),
-              nextCurrentContentPreview: getDebugContentPreview(normalized[fileKey]),
-            });
             return {
               serverData: normalized,
               treeData: serverDataToTree(normalized),
@@ -449,11 +422,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
               ...state.serverData,
               [path]: normalizedContent,
             };
-            logEditorFlow("setServerDataFile", {
-              path,
-              isCurrentEditingFile: path === state.currentEditingId,
-              contentPreview: getDebugContentPreview(normalizedContent),
-            });
             return {
               serverData: nextServerData,
               treeData: updateTreeNodeContent(
@@ -487,13 +455,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
                     [fileKey]: normalizedContent,
                   }
                 : state.serverData;
-            logEditorFlow("setCurrentContent", {
-              fileKey,
-              shouldSyncFileNode,
-              previousServerPreview: getDebugContentPreview(state.serverData[fileKey]),
-              nextServerPreview: getDebugContentPreview(nextServerData[fileKey]),
-              nextCurrentPreview: getDebugContentPreview(normalizedContent),
-            });
 
             return {
               serverData: nextServerData,
