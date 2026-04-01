@@ -1761,7 +1761,9 @@ const MarkdownEditorPage = () => {
 
   const requestCanvasFocusByFilePath = useCallback((rawFilePath: string) => {
     const normalizedPath = sanitizeIncomingFilePath(rawFilePath);
-    if (!normalizedPath) return;
+    if (!normalizedPath) {
+      return;
+    }
     pendingCanvasFocusFilePathRef.current = normalizedPath;
     if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
       preCanvasRightWidthRemRef.current = rightPanelWidthRem;
@@ -2638,17 +2640,41 @@ const MarkdownEditorPage = () => {
     [setServerData, setServerDataFile, workId, setWorkInfo]
   );
 
-  const handleFileNameClick = useCallback((rawFileName: string) => {
+  const openCanvasFileByPath = useCallback((rawFileName: string, allowPending = false) => {
     const normalized = sanitizeIncomingFilePath(rawFileName);
-    if (!normalized) return;
+    if (!normalized) {
+      console.warn("[canvas-open-debug] open-file-empty-path", {
+        rawFileName,
+        allowPending,
+      });
+      return;
+    }
 
     // 使用 ref 里的最新树数据，保持回调稳定引用
     const tree = treeDataRef.current;
-    const targetNode = resolveFileNodeByPath(tree, normalized);
+    const normalizedCandidates = Array.from(new Set([
+      normalized,
+      normalized.replace(/^角色卡\//, "[角色卡]/"),
+      normalized.replace(/^脑洞卡\//, "[脑洞卡]/"),
+      normalized.replace(/^梗概卡\//, "[梗概卡]/"),
+      normalized.replace(/^设定卡\//, "[设定卡]/"),
+      normalized.replace(/^大纲卡\//, "[大纲卡]/"),
+    ]));
+    const targetNode =
+      normalizedCandidates
+        .map((candidate) => resolveFileNodeByPath(tree, candidate))
+        .find(Boolean) ?? null;
+    const fileName = normalized.split("/").pop()?.trim() ?? "";
+    const flattenTreeIds = (nodes: TreeNodeLike[]): string[] =>
+      nodes.flatMap((node) => [
+        String(node.id ?? ""),
+        ...flattenTreeIds(Array.isArray(node.children) ? (node.children as TreeNodeLike[]) : []),
+      ]);
+    const flatTreeIds = flattenTreeIds(tree).filter(Boolean);
 
     if (!targetNode) {
       // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
-      if (chatInputStatusRef.current === "streaming") {
+      if (allowPending && chatInputStatusRef.current === "streaming") {
         pendingFileNameClickRef.current = normalized;
       }
       return;
@@ -2659,19 +2685,16 @@ const MarkdownEditorPage = () => {
     pendingFileNameClickRef.current = "";
   }, [requestCanvasFocusByFilePath]);
 
+  const handleFileNameClick = useCallback((rawFileName: string) => {
+    openCanvasFileByPath(rawFileName, true);
+  }, [openCanvasFileByPath]);
+
   useEffect(() => {
     const pending = pendingFileNameClickRef.current;
     if (!pending) return;
 
-    const normalized = pending.replace(/^\/+/, "").trim();
-    const tree = treeData as TreeNodeLike[];
-    const targetNode = resolveFileNodeByPath(tree, normalized);
-
-    if (!targetNode) return;
-    useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
-    requestCanvasFocusByFilePath(targetNode.id);
-    pendingFileNameClickRef.current = "";
-  }, [treeData, requestCanvasFocusByFilePath]);
+    openCanvasFileByPath(pending, false);
+  }, [treeData, openCanvasFileByPath]);
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {
@@ -3407,6 +3430,7 @@ const MarkdownEditorPage = () => {
                       autoSyncDirectory={autoSyncCanvasDirectory}
                       onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
                       onCanvasFileContentChange={handleCanvasFileContentChange}
+                      onCanvasOpenFileRequest={handleFileNameClick}
                       onMessage={(type, msg) => {
                         if (type === "success") toast.success(msg);
                         else if (type === "error") toast.error(msg);

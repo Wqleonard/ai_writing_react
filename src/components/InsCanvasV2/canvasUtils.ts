@@ -644,6 +644,23 @@ const getUniqueName = (name: string, bucket: Map<string, number>) => {
   return count === 0 ? name : `${name}${count + 1}`;
 };
 
+const getCanvasGroupId = (node: CustomNode) =>
+  getFirstTextValue(
+    node.parentId,
+    (node.data as { roleGroupId?: unknown })?.roleGroupId,
+    (node.data as { outlineGroupId?: unknown })?.outlineGroupId
+  );
+
+const isGroupedCanvasChild = (node: CustomNode) => Boolean(getCanvasGroupId(node));
+
+const getGroupedChildren = (nodes: CustomNode[], groupId: string) =>
+  nodes
+    .filter((child) => {
+      if (child.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) return false;
+      return getCanvasGroupId(child) === groupId;
+    })
+    .sort(sortCanvasNodes);
+
 export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
   if (!Array.isArray(nodes) || nodes.length === 0) return {};
   const result: Record<string, string> = {};
@@ -658,15 +675,12 @@ export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string
   };
 
   const topLevelNodes = nodes
-    .filter((node) => !node.parentId)
+    .filter((node) => !isGroupedCanvasChild(node))
     .sort(sortCanvasNodes);
 
   topLevelNodes.forEach((node, index) => {
     if (node.type === "roleGroup") {
-      const syncableChildren = nodes
-        .filter((child) => child.parentId === node.id && child.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE)
-        .filter(shouldSyncCanvasNode)
-        .sort(sortCanvasNodes);
+      const syncableChildren = getGroupedChildren(nodes, node.id).filter(shouldSyncCanvasNode);
       if (!syncableChildren.length) return;
 
       const directoryName = getCanvasDirectoryName(node.data?.label);
@@ -702,15 +716,12 @@ export const buildCanvasSyncFileNodeIdMap = (nodes: CustomNode[]): Record<string
   };
 
   const topLevelNodes = nodes
-    .filter((node) => !node.parentId)
+    .filter((node) => !isGroupedCanvasChild(node))
     .sort(sortCanvasNodes);
 
   topLevelNodes.forEach((node, index) => {
     if (node.type === "roleGroup") {
-      const syncableChildren = nodes
-        .filter((child) => child.parentId === node.id && child.type !== OUTLINE_GROUP_SETTINGS_NODE_TYPE)
-        .filter(shouldSyncCanvasNode)
-        .sort(sortCanvasNodes);
+      const syncableChildren = getGroupedChildren(nodes, node.id).filter(shouldSyncCanvasNode);
       if (!syncableChildren.length) return;
 
       const directoryName = getCanvasDirectoryName(node.data?.label);

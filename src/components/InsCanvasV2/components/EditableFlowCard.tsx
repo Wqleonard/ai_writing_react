@@ -251,11 +251,30 @@ export default function EditableFlowCard({
     return [];
   }, [data]);
   const primaryImageSrc = images[0] ?? "";
+  const normalizedFilePath = useMemo(
+    () => String((data as any)?.filePath ?? "").trim().replace(/\\/g, "/").replace(/^\/+/, ""),
+    [data]
+  );
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const displayImageSrc = imageLoadFailed ? canvasErrorImg : primaryImageSrc;
   useEffect(() => {
     setImageLoadFailed(false);
   }, [primaryImageSrc]);
+
+  const handleCardDoubleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (isEditing) return;
+
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button,input,textarea,select,a,[role='button'],[contenteditable='true']"
+      )
+    ) {
+      return;
+    }
+
+    canvasHandlers.requestOpenFileByPath(normalizedFilePath || id);
+  }, [canvasHandlers, data, id, isEditing, normalizedFilePath]);
 
   // 骨架：只在“接口创建且处于流式/加载、且尚无内容”时展示
   // 手动创建卡片：isStreaming=false，不展示骨架
@@ -1649,6 +1668,7 @@ export default function EditableFlowCard({
       )}
       onMouseEnter={shouldShowCardFloatingControls ? showFloatingButtonsNow : undefined}
       onMouseLeave={shouldShowCardFloatingControls ? scheduleHideFloatingButtons : undefined}
+      onDoubleClick={handleCardDoubleClick}
     >
       {isGroupedCardDragging ? (
         <div className="pointer-events-none absolute right-3 top-3 z-40 inline-flex items-center gap-1.5 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-medium text-white shadow-[0px_8px_20px_0px_rgba(37,99,235,0.28)]">

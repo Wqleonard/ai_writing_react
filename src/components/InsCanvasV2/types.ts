@@ -198,6 +198,7 @@ export interface InsCanvasProps {
   autoSyncDirectory?: boolean;
   onAutoSyncDirectory?: (files: Record<string, string>) => void;
   onCanvasFileContentChange?: (filePath: string, content: string) => void;
+  onCanvasOpenFileRequest?: (filePath: string) => void;
 }
 
 export interface InsCanvasInnerProps extends InsCanvasProps {
@@ -208,6 +209,7 @@ export interface InsCanvasHandlers {
   handleMainCardCreate: (nodeId: string) => void;
   handleAddCardToDialog: (nodeId: string) => void;
   handleAddGroupToDialog: (groupNodeId: string) => void;
+  requestOpenFileByPath: (filePath: string) => void;
   handlePrepareGenerateToDialog: (
     nodeId: string,
     outputType: CanvasOutputType,
