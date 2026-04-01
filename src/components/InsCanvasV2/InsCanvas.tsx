@@ -91,6 +91,7 @@ import {
   extractWriteFileTitle,
   formatOutlineMarkdown,
   formatRecordMarkdown,
+  getCanvasNodeLayoutSize as getCanvasNodeLayoutSizeFromUtils,
   getCanvasDirectoryName,
   getCanvasNodeBaseName,
   getFirstTextValue,
@@ -230,39 +231,13 @@ const shouldBlockCanvasPersistence = (
     minHeight: ROLE_GROUP_MIN_HEIGHT,
     maxCols: ROLE_GROUP_MAX_COLS,
     cardWidth: ROLE_GROUP_CARD_WIDTH,
+    cardHeight: ROLE_GROUP_CARD_HEIGHT,
     cardGapX: ROLE_GROUP_CARD_GAP_X,
     cardGapY: ROLE_GROUP_CARD_GAP_Y,
     paddingTop: ROLE_GROUP_PADDING_TOP,
     padding: ROLE_GROUP_PADDING,
   } = ROLE_GROUP_LAYOUT;
-  const getCanvasNodeLayoutSize = (node: CustomNode) => {
-    const measuredWidth = Number((node as any)?.measured?.width ?? (node as any)?.dimensions?.width ?? 0);
-    const measuredHeight = Number((node as any)?.measured?.height ?? (node as any)?.dimensions?.height ?? 0);
-    const styledWidth = Number((node as any)?.style?.width ?? 0);
-    const styledHeight = Number((node as any)?.style?.height ?? 0);
-
-    if (measuredWidth > 0 && measuredHeight > 0) {
-      return { width: measuredWidth, height: measuredHeight };
-    }
-    if (styledWidth > 0 && styledHeight > 0) {
-      return { width: styledWidth, height: styledHeight };
-    }
-
-    const label = String(node.data?.label ?? "").trim();
-    if (node.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) {
-      return {
-        width: OUTLINE_GROUP_SETTINGS_CARD_WIDTH,
-        height: Boolean((node.data as any)?.outlineSettingCollapsed)
-          ? OUTLINE_GROUP_SETTINGS_COLLAPSED_HEIGHT
-          : OUTLINE_GROUP_SETTINGS_CARD_HEIGHT,
-      };
-    }
-    if (node.type === "settingCard" && label === "角色") return { width: 300, height: 450 };
-    if (node.type === "outlineCard") return { width: 600, height: 260 };
-    if (node.type === "settingCard") return { width: 260, height: 220 };
-    if (node.type === "roleGroup") return { width: 340, height: ROLE_GROUP_MIN_HEIGHT };
-    return { width: 260, height: 220 };
-  };
+  const getCanvasNodeLayoutSize = (node: CustomNode) => getCanvasNodeLayoutSizeFromUtils(node);
 
   const getOutlineGroupSettingsNode = (currentNodes: CustomNode[], groupId: string) =>
     currentNodes.find(
@@ -278,6 +253,11 @@ const shouldBlockCanvasPersistence = (
     settingsHeight > 0
       ? OUTLINE_GROUP_SETTINGS_TOP + settingsHeight + OUTLINE_GROUP_SETTINGS_BOTTOM_GAP
       : OUTLINE_GROUP_DEFAULT_TOP;
+
+type GroupRelayoutOptions = {
+  shiftOtherTopLevelNodes?: boolean;
+  currentEdges?: CustomEdge[];
+};
 
   const getCanvasNodeGroupId = (node?: CustomNode | null) =>
     getTextValue(node?.parentId) ||
@@ -331,12 +311,80 @@ const shouldBlockCanvasPersistence = (
     return changed ? nextNodes : currentNodes;
   };
 
+  const shiftImpactedTopLevelNodesHorizontally = (
+    currentNodes: CustomNode[],
+    currentEdges: CustomEdge[],
+    sourceNodeId: string,
+    minX: number,
+    deltaX: number
+  ) => {
+    if (!sourceNodeId || deltaX <= 0) return currentNodes;
+
+    const topLevelOwnerIdByNodeId = new Map<string, string>();
+    currentNodes.forEach((node) => {
+      const ownerId =
+        getTextValue(node.parentId) ||
+        getTextValue((node.data as any)?.roleGroupId) ||
+        getTextValue((node.data as any)?.outlineGroupId) ||
+        node.id;
+      topLevelOwnerIdByNodeId.set(node.id, ownerId);
+    });
+
+    const topLevelNodeById = new Map(
+      currentNodes.filter((node) => !node.parentId).map((node) => [node.id, node] as const)
+    );
+    const downstreamByTopLevelId = new Map<string, Set<string>>();
+    const connectTopLevel = (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) return;
+      if (!downstreamByTopLevelId.has(fromId)) {
+        downstreamByTopLevelId.set(fromId, new Set());
+      }
+      downstreamByTopLevelId.get(fromId)?.add(toId);
+    };
+
+    currentEdges.forEach((edge) => {
+      const sourceOwnerId = topLevelOwnerIdByNodeId.get(String(edge.source ?? "")) ?? "";
+      const targetOwnerId = topLevelOwnerIdByNodeId.get(String(edge.target ?? "")) ?? "";
+      connectTopLevel(sourceOwnerId, targetOwnerId);
+    });
+
+    const queue = Array.from(topLevelNodeById.values())
+      .filter((node) => node.id !== sourceNodeId && Number(node.position?.x ?? 0) >= minX)
+      .map((node) => node.id);
+
+    if (!queue.length) return currentNodes;
+
+    const idsToShift = new Set<string>();
+    while (queue.length > 0) {
+      const currentId = queue.shift() as string;
+      if (!currentId || idsToShift.has(currentId) || currentId === sourceNodeId) continue;
+      idsToShift.add(currentId);
+      downstreamByTopLevelId.get(currentId)?.forEach((nextId) => {
+        if (!idsToShift.has(nextId)) {
+          queue.push(nextId);
+        }
+      });
+    }
+
+    if (!idsToShift.size) return currentNodes;
+
+    return currentNodes.map((node) =>
+      !node.parentId && idsToShift.has(node.id)
+        ? {
+            ...node,
+            position: {
+              ...node.position,
+              x: Number(node.position?.x ?? 0) + deltaX,
+            },
+          }
+        : node
+    );
+  };
+
   const fitGroupNodeToChildren = (
     currentNodes: CustomNode[],
     groupId: string,
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: GroupRelayoutOptions
   ) => {
     if (!groupId) return currentNodes;
 
@@ -433,19 +481,17 @@ const shouldBlockCanvasPersistence = (
 
     // 当分组宽度扩展时，默认顶开右侧顶层节点；局部 relayout 模式下保持组外节点位置不变。
     if (widthDelta > 0 && options?.shiftOtherTopLevelNodes !== false) {
-      nextNodes = nextNodes.map((node) => {
-        if (node.id === groupId || node.parentId) return node;
-        const currentX = Number(node.position?.x ?? 0);
-        if (currentX < groupRightBeforeExpand) return node;
+      const shiftedNodes = shiftImpactedTopLevelNodesHorizontally(
+        nextNodes,
+        options?.currentEdges ?? [],
+        groupId,
+        groupRightBeforeExpand,
+        widthDelta
+      );
+      if (shiftedNodes !== nextNodes) {
         changed = true;
-        return {
-          ...node,
-          position: {
-            ...node.position,
-            x: currentX + widthDelta,
-          },
-        };
-      });
+        nextNodes = shiftedNodes;
+      }
     }
 
     return changed ? nextNodes : currentNodes;
@@ -645,9 +691,7 @@ const shouldBlockCanvasPersistence = (
   const compactGroupNodes = (
     currentNodes: CustomNode[],
     groupId: string,
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: GroupRelayoutOptions
   ) => {
     if (!groupId) return currentNodes;
 
@@ -682,11 +726,11 @@ const shouldBlockCanvasPersistence = (
         return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
       });
 
-    const cardWidth = 300;
-    const cardHeight = 260;
+    const cardWidth = OUTLINE_GROUP_CARD_WIDTH;
+    const cardHeight = OUTLINE_GROUP_CARD_HEIGHT;
     const gapX = OUTLINE_GROUP_CARD_GAP_X;
     const gapY = OUTLINE_GROUP_CARD_GAP_Y;
-    const cols = 3;
+    const cols = OUTLINE_GROUP_MAX_COLS;
     const groupPadding = OUTLINE_GROUP_HORIZONTAL_PADDING;
     const groupPaddingTop = getOutlineGroupCardsTop(settingsHeight);
     const minGroupWidth = hasSettingsNode
@@ -984,6 +1028,9 @@ const shouldBlockCanvasPersistence = (
     const [ideaContent, setIdeaContent] = useState("");
     const [ideaPlaceholderIndex, setIdeaPlaceholderIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const isLoadingRef = useRef(false);
+    const canvasRequestAbortControllerRef = useRef<AbortController | null>(null);
+    const activeCanvasRequestAbortCleanupRef = useRef<(() => void) | null>(null);
     const [generateMode, setGenerateMode] = useState<"smart" | "brainstorm" | "fast">("smart");
     const [canvasModeCategory, setCanvasModeCategory] = useState<CanvasModeCategory>("smart");
     const [settingsPopoverOpen, setSettingsPopoverOpen] = useState(false);
@@ -1208,9 +1255,7 @@ const shouldBlockCanvasPersistence = (
   const relayoutGroupsForNodeIds = useCallback((
     currentNodes: CustomNode[],
     nodeIds: string[],
-    options?: {
-      shiftOtherTopLevelNodes?: boolean;
-    }
+    options?: Omit<GroupRelayoutOptions, "currentEdges">
   ) => {
       if (!nodeIds.length) return currentNodes;
 
@@ -1232,7 +1277,10 @@ const shouldBlockCanvasPersistence = (
           ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
           : 0;
 
-        nextNodes = compactGroupNodes(nextNodes, groupId, options);
+        nextNodes = compactGroupNodes(nextNodes, groupId, {
+          ...options,
+          currentEdges: edgesRef.current as CustomEdge[],
+        });
 
         const afterGroupNode = nextNodes.find((node) => node.id === groupId);
         const afterHeight = afterGroupNode
@@ -1254,9 +1302,7 @@ const shouldBlockCanvasPersistence = (
 
     const scheduleGroupMeasureRelayout = useCallback((
       groupId: string,
-      options?: {
-        shiftOtherTopLevelNodes?: boolean;
-      }
+      options?: Omit<GroupRelayoutOptions, "currentEdges">
     ) => {
       if (!groupId) return;
       requestAnimationFrame(() => {
@@ -1266,7 +1312,10 @@ const shouldBlockCanvasPersistence = (
             const beforeHeight = beforeGroupNode
               ? Number((beforeGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(beforeGroupNode).height)
               : 0;
-            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId, options);
+            let nextNodes = compactGroupNodes(prev as CustomNode[], groupId, {
+              ...options,
+              currentEdges: edgesRef.current as CustomEdge[],
+            });
             const afterGroupNode = nextNodes.find((node) => node.id === groupId);
             const afterHeight = afterGroupNode
               ? Number((afterGroupNode.style as any)?.height ?? getCanvasNodeLayoutSize(afterGroupNode).height)
@@ -2284,6 +2333,21 @@ const shouldBlockCanvasPersistence = (
       hasIdeaRef.current = hasIdea;
     }, [hasIdea]);
 
+    useEffect(() => {
+      isLoadingRef.current = isLoading;
+    }, [isLoading]);
+
+    const stopCurrentRequest = useCallback(async () => {
+      const controller = canvasRequestAbortControllerRef.current;
+      if (!controller || !isLoadingRef.current) return;
+      controller.abort();
+
+      for (let attempts = 0; attempts < 40; attempts += 1) {
+        if (!isLoadingRef.current) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+      }
+    }, []);
+
     // 有「想法」结构时即允许画布交互（拖拽/缩放），包括：1）用户点击「立即创作」后 2）从服务端加载已有画布时
     useEffect(() => {
       if (hasIdea) setCanvasReady(true);
@@ -3047,11 +3111,11 @@ const shouldBlockCanvasPersistence = (
 
         const isSourceRoleGroup = source.type === "roleGroup";
         const groupId = isSourceRoleGroup ? source.id : source.parentId || `role-group-${sourceNodeId}`;
-        const roleCardWidth = 300;
-        const roleCardHeight = 450;
+        const roleCardWidth = ROLE_GROUP_CARD_WIDTH;
+        const roleCardHeight = ROLE_GROUP_CARD_HEIGHT;
         const gapX = ROLE_GROUP_CARD_GAP_X;
         const gapY = ROLE_GROUP_CARD_GAP_Y;
-        const cols = 3;
+        const cols = ROLE_GROUP_MAX_COLS;
         const groupPaddingTop = ROLE_GROUP_PADDING_TOP;
         const groupPadding = ROLE_GROUP_PADDING;
         const minGroupWidth = 340;
@@ -3176,7 +3240,9 @@ const shouldBlockCanvasPersistence = (
             }
           }
           next.push(...roleNodes);
-          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+            currentEdges: latestEdges,
+          });
           nodesRef.current = normalizedNext;
           return normalizedNext;
         });
@@ -3348,11 +3414,11 @@ const shouldBlockCanvasPersistence = (
           return { width: 600, height: 900 };
         }
         if (key === "role" || key === "brainstorm") {
-          return { width: 300, height: 450 };
+          return { width: ROLE_GROUP_CARD_WIDTH, height: ROLE_GROUP_CARD_HEIGHT };
         }
-        return { width: 300, height: 260 };
+        return { width: OUTLINE_GROUP_CARD_WIDTH, height: OUTLINE_GROUP_CARD_HEIGHT };
       },
-      []
+      [OUTLINE_GROUP_CARD_HEIGHT, OUTLINE_GROUP_CARD_WIDTH, ROLE_GROUP_CARD_HEIGHT, ROLE_GROUP_CARD_WIDTH]
     );
 
     const getViewportCenteredCanvasPosition = useCallback(
@@ -3385,8 +3451,8 @@ const shouldBlockCanvasPersistence = (
       (options?: { insertPosition?: "center" | "right" }) => {
         const groupId = getNextCanvasNodeId("role-group");
         const roleNodeId = getNextCanvasNodeId("role");
-        const roleCardWidth = 300;
-        const roleCardHeight = 450;
+        const roleCardWidth = ROLE_GROUP_CARD_WIDTH;
+        const roleCardHeight = ROLE_GROUP_CARD_HEIGHT;
         const groupPaddingTop = ROLE_GROUP_PADDING_TOP;
         const groupPadding = ROLE_GROUP_PADDING;
         const minGroupWidth = 340;
@@ -3588,11 +3654,11 @@ const shouldBlockCanvasPersistence = (
         const isSourceOutlineGroup =
           source.type === "roleGroup" && getTextValue(source.data?.label) === "大纲";
         const groupId = isSourceOutlineGroup ? source.id : `outline-group-${sourceNodeId}`;
-        const cardWidth = 300;
-        const cardHeight = 260;
+        const cardWidth = OUTLINE_GROUP_CARD_WIDTH;
+        const cardHeight = OUTLINE_GROUP_CARD_HEIGHT;
         const gapX = OUTLINE_GROUP_CARD_GAP_X;
         const gapY = OUTLINE_GROUP_CARD_GAP_Y;
-        const cols = 3;
+        const cols = OUTLINE_GROUP_MAX_COLS;
         const settingsHeight = getOutlineGroupSettingsHeight(latestNodes, groupId);
         const hasSettingsNode = settingsHeight > 0;
         const groupPaddingTop = getOutlineGroupCardsTop(settingsHeight);
@@ -3615,10 +3681,13 @@ const shouldBlockCanvasPersistence = (
           const currentSource = prev.find((node) => node.id === sourceNodeId);
           if (!currentSource) return prev;
           const existingOutlineNodes = prev
-            .filter((node) =>
-              node.parentId === groupId ||
-              getTextValue((node.data as any)?.outlineGroupId) === groupId
-            )
+            .filter((node) => {
+              const belongsToGroup =
+                node.parentId === groupId ||
+                getTextValue((node.data as any)?.outlineGroupId) === groupId;
+              if (!belongsToGroup) return false;
+              return node.type === "outlineCard";
+            })
             .sort((a, b) => {
               const ay = Number(a.position?.y ?? 0);
               const by = Number(b.position?.y ?? 0);
@@ -3712,7 +3781,9 @@ const shouldBlockCanvasPersistence = (
             };
           }
           next.push(...outlineNodes);
-          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+          const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+            currentEdges: latestEdges,
+          });
           nodesRef.current = normalizedNext;
           return normalizedNext;
         });
@@ -4437,6 +4508,9 @@ const shouldBlockCanvasPersistence = (
         OUTPUT_TYPE_OPTIONS.find((item) => item.key === cardOutputType)?.label ?? cardOutputType;
       let shouldAutoSaveAfterStream = false;
       let shouldResetOutputTypeToAuto = false;
+      canvasRequestAbortControllerRef.current?.abort();
+      const requestAbortController = new AbortController();
+      canvasRequestAbortControllerRef.current = requestAbortController;
       try {
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
@@ -4465,6 +4539,11 @@ const shouldBlockCanvasPersistence = (
           setReqPanelTitle(isAutoEmptyRequest ? "随机选题" : `${outputTypeLabel}卡`);
           setReqPanelStatus("loading");
           setReqPanelDetail("");
+          activeCanvasRequestAbortCleanupRef.current = () => {
+            setPendingSuggestionIdea("");
+            setSmartSuggestions([]);
+            setSmartSuggestionsActive(false);
+          };
           const { postCanvasChoicesStream } = await import("@/api/works");
           let streamError: any = null;
           let hasChoiceList = false;
@@ -4577,7 +4656,8 @@ const shouldBlockCanvasPersistence = (
             (error: any) => {
               streamError = error;
             },
-            () => {}
+            () => {},
+            { signal: requestAbortController.signal, showError: false }
           );
 
           if (streamError) {
@@ -4681,11 +4761,11 @@ const shouldBlockCanvasPersistence = (
               skipAutoStream?: boolean;
             }
           ) => {
-            const cardWidth = 300;
-            const cardHeight = key === "role" ? 450 : 260;
+            const cardWidth = key === "role" ? ROLE_GROUP_CARD_WIDTH : OUTLINE_GROUP_CARD_WIDTH;
+            const cardHeight = key === "role" ? ROLE_GROUP_CARD_HEIGHT : OUTLINE_GROUP_CARD_HEIGHT;
             const gapX = key === "role" ? ROLE_GROUP_CARD_GAP_X : OUTLINE_GROUP_CARD_GAP_X;
             const gapY = key === "role" ? ROLE_GROUP_CARD_GAP_Y : OUTLINE_GROUP_CARD_GAP_Y;
-            const cols = 3;
+            const cols = key === "role" ? ROLE_GROUP_MAX_COLS : OUTLINE_GROUP_MAX_COLS;
             const groupPaddingTop = key === "role" ? ROLE_GROUP_PADDING_TOP : OUTLINE_GROUP_DEFAULT_TOP;
             const groupPadding = key === "role" ? ROLE_GROUP_PADDING : OUTLINE_GROUP_HORIZONTAL_PADDING;
             const minGroupWidth = 340;
@@ -4724,11 +4804,16 @@ const shouldBlockCanvasPersistence = (
                 } as any;
                 next.push(groupNode as CustomNode);
               }
-              const existingChildren = next.filter((node) =>
-                key === "role"
-                  ? (node.data as any)?.roleGroupId === groupId
-                  : (node.data as any)?.outlineGroupId === groupId
-              );
+              const existingChildren = next.filter((node) => {
+                if (key === "role") {
+                  return (
+                    node.type === "settingCard" &&
+                    getTextValue(node.data?.label) === "角色" &&
+                    (node.data as any)?.roleGroupId === groupId
+                  );
+                }
+                return node.type === "outlineCard" && (node.data as any)?.outlineGroupId === groupId;
+              });
               const idx = existingChildren.length;
               const col = idx % cols;
               const row = Math.floor(idx / cols);
@@ -4789,9 +4874,14 @@ const shouldBlockCanvasPersistence = (
                 };
               }
 
-              const normalizedNext = compactGroupNodes(next as CustomNode[], groupId);
+              const normalizedNext = compactGroupNodes(next as CustomNode[], groupId, {
+                currentEdges: edgesRef.current as CustomEdge[],
+              });
               nodesRef.current = normalizedNext;
               return normalizedNext;
+            });
+            scheduleGroupMeasureRelayout(groupId, {
+              shiftOtherTopLevelNodes: false,
             });
 
             return createdNodeId;
@@ -5496,6 +5586,16 @@ const shouldBlockCanvasPersistence = (
             );
           };
 
+          activeCanvasRequestAbortCleanupRef.current = () => {
+            stopLoadingProgress();
+            if (loadingCardId) cleanupLoadingCard(loadingCardId);
+            if (useBrainstormBatchLoading) {
+              clearBrainstormPlaceholderBatch();
+              brainstormBatchIdsRef.current = [];
+            }
+            setPendingSuggestionIdea("");
+          };
+
           await postCanvasChoicesStream(
             {
               prompt:
@@ -5627,7 +5727,8 @@ const shouldBlockCanvasPersistence = (
             (error: any) => {
               streamError = error;
             },
-            () => {}
+            () => {},
+            { signal: requestAbortController.signal, showError: false }
           );
 
           if (streamError) {
@@ -5708,7 +5809,7 @@ const shouldBlockCanvasPersistence = (
               );
 
               if (roleFiles.length) {
-                const roleCardWidth = 300;
+                const roleCardWidth = ROLE_GROUP_CARD_WIDTH;
                 const loadingNode = loadingCardId
                   ? nodesRef.current.find((node) => node.id === loadingCardId)
                   : null;
@@ -5932,11 +6033,26 @@ const shouldBlockCanvasPersistence = (
           return;
         }
       } catch (e: any) {
+        const isAbortError = e?.name === "AbortError";
         stopLoadingProgress();
-        setReqPanelStatus("error");
-        setReqPanelDetail("");
-        msg("error", e.message);
-        if (trimmedIdea) {
+        if (isAbortError) {
+          activeCanvasRequestAbortCleanupRef.current?.();
+          setReqPanelStatus("idle");
+          setReqPanelDetail("");
+          setReqPanelBodyDetail("");
+          setReqPanelFooterDetail("");
+          setReqPanelAction(null);
+          setPendingSuggestionIdea("");
+          setPendingContextActionLabel("");
+          setReqPanelUseSmartTheme(false);
+          setSmartSuggestions([]);
+          setSmartSuggestionsActive(false);
+        } else {
+          setReqPanelStatus("error");
+          setReqPanelDetail("");
+          msg("error", e.message);
+        }
+        if (trimmedIdea || isAbortError) {
           setIsLoading(false);
         }
       } finally {
@@ -5951,6 +6067,10 @@ const shouldBlockCanvasPersistence = (
         if (shouldResetOutputTypeToAuto || resetOutputTypeAfterFinish) {
           handleOutputTypeChange("auto");
         }
+        if (canvasRequestAbortControllerRef.current === requestAbortController) {
+          canvasRequestAbortControllerRef.current = null;
+        }
+        activeCanvasRequestAbortCleanupRef.current = null;
       }
     }, [
       canvasOutputType,
@@ -6362,11 +6482,12 @@ const shouldBlockCanvasPersistence = (
         syncFileContentByPath,
         openHistory,
         flushPersistence: flushCanvasPersistence,
+        stopCurrentRequest,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
@@ -6751,9 +6872,10 @@ const shouldBlockCanvasPersistence = (
               variant="ghost"
               size="icon-xs"
               className="size-[26px] rounded-full border border-[#e5e7eb] bg-white text-muted-foreground hover:bg-muted"
-              disabled={isLoading}
+              disabled={true}
               aria-label="打开工具"
               title="打开工具"
+              onClick={() => { msg("warning", "暂未开放该功能，尽情期待"); }}
             >
               <Iconfont unicode="&#xe643;" className="size-4 leading-4" />
             </Button>
@@ -7177,9 +7299,9 @@ const shouldBlockCanvasPersistence = (
                   <Iconfont unicode="&#xe64f;" className="text-[#E5E7EB]" />
                   创作灵感社区
                 </Button>
-                <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => {console.log('b站画布视频教程')}}>
+                <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => {window.open('https://icnirh1t37sj.feishu.cn/wiki/VIjgww4SUiPXkVk1Qquc6iTonLc?from=from_copylink')}}>
                   <Iconfont unicode="&#xe641;" className="text-[#E5E7EB]" />
-                  视频教程
+                  使用指南
                 </Button>
               </div>
             </div>
@@ -7225,6 +7347,7 @@ const shouldBlockCanvasPersistence = (
                 panActivationKeyCode={!showInit && panMode ? 'Space' : null}
                 nodesDraggable={!showInit}
                 elementsSelectable={!showInit}
+                multiSelectionKeyCode={null}
                 nodesConnectable={!showInit}
                 minZoom={!showInit ? 0.1 : 1}
                 maxZoom={!showInit ? 2 : 1}

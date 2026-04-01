@@ -1,4 +1,4 @@
-import { AUTO_CARD_FIELD_LABELS, OUTLINE_GROUP_LAYOUT } from "./constant";
+import { AUTO_CARD_FIELD_LABELS, OUTLINE_GROUP_LAYOUT, ROLE_GROUP_LAYOUT } from "./constant";
 import type {
   CanvasCardKey,
   CanvasWriteFileCall,
@@ -8,6 +8,45 @@ import type {
 } from "./types";
 
 const OUTLINE_GROUP_SETTINGS_NODE_TYPE = OUTLINE_GROUP_LAYOUT.settingsNodeType;
+
+export const getCanvasNodeLayoutSize = (node: any) => {
+  const measuredWidth = Number(node?.measured?.width ?? node?.dimensions?.width ?? 0);
+  const measuredHeight = Number(node?.measured?.height ?? node?.dimensions?.height ?? 0);
+  const styledWidth = Number(node?.style?.width ?? 0);
+  const styledHeight = Number(node?.style?.height ?? 0);
+
+  if (measuredWidth > 0 && measuredHeight > 0) {
+    return { width: measuredWidth, height: measuredHeight };
+  }
+  if (styledWidth > 0 && styledHeight > 0) {
+    return { width: styledWidth, height: styledHeight };
+  }
+
+  const label = String(node?.data?.label ?? "").trim();
+  if (node?.type === OUTLINE_GROUP_SETTINGS_NODE_TYPE) {
+    return {
+      width: OUTLINE_GROUP_LAYOUT.settingsCardWidth,
+      height: Boolean(node?.data?.outlineSettingCollapsed)
+        ? OUTLINE_GROUP_LAYOUT.settingsCollapsedHeight
+        : OUTLINE_GROUP_LAYOUT.settingsCardHeight,
+    };
+  }
+  if (node?.type === "settingCard" && label === "角色") {
+    return {
+      width: ROLE_GROUP_LAYOUT.cardWidth,
+      height: ROLE_GROUP_LAYOUT.cardHeight,
+    };
+  }
+  if (node?.type === "outlineCard") {
+    return {
+      width: OUTLINE_GROUP_LAYOUT.cardWidth,
+      height: OUTLINE_GROUP_LAYOUT.cardHeight,
+    };
+  }
+  if (node?.type === "settingCard") return { width: 260, height: 220 };
+  if (node?.type === "roleGroup") return { width: 340, height: ROLE_GROUP_LAYOUT.minHeight };
+  return { width: 260, height: 220 };
+};
 
 export const getTextValue = (value: unknown) => {
   if (typeof value === "string") return value.trim();
