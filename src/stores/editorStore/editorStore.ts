@@ -448,8 +448,16 @@ export const useEditorStore = create<EditorState & EditorActions>()(
                 ? state.currentEditingNode
                 : findNodeById(state.treeData, fileKey);
             const shouldSyncFileNode = !!editingNode && !editingNode.isDirectory;
+            const nextServerData =
+              shouldSyncFileNode && fileKey
+                ? {
+                    ...state.serverData,
+                    [fileKey]: normalizedContent,
+                  }
+                : state.serverData;
 
             return {
+              serverData: nextServerData,
               currentContent: normalizedContent,
               currentEditingNode: shouldSyncFileNode
                 ? {
