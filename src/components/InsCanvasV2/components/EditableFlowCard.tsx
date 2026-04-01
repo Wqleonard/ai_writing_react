@@ -1068,6 +1068,7 @@ export default function EditableFlowCard({
           files: contextGenerateOptions.files,
           title: "信息",
           actionLabel: "我想用它生成...",
+          includeDialogReferences: true,
         });
       },
     };
@@ -1084,6 +1085,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "角色",
               actionLabel: "以此生成角色",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -1098,6 +1101,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "故事梗概",
               actionLabel: "以此生成故事梗概",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -1118,6 +1123,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "角色",
               actionLabel: "以此生成角色",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -1132,6 +1139,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "大纲",
               actionLabel: "以此生成大纲",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -1155,6 +1164,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "角色",
               actionLabel: "以此扩充随机角色",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         },
@@ -1169,6 +1180,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "故事梗概",
               actionLabel: "以此生成故事梗概",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });
@@ -1183,6 +1196,8 @@ export default function EditableFlowCard({
               files: contextGenerateOptions.files,
               title: "大纲",
               actionLabel: "以此生成大纲",
+              includeDialogReferences: false,
+              clearDialogPreviewsAfterRequest: false,
             });
           },
         });

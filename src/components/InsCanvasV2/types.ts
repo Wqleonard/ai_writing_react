@@ -110,6 +110,8 @@ export type CanvasGenerateOptions = {
   files?: Record<string, string>;
   title?: string;
   actionLabel?: string;
+  includeDialogReferences?: boolean;
+  clearDialogPreviewsAfterRequest?: boolean;
 };
 
 export type CanvasGenerateOutlineOptions = CanvasGenerateOptions & {
