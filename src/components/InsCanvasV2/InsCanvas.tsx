@@ -961,6 +961,7 @@ const shouldBlockCanvasPersistence = (
     autoSyncDirectory = false,
     onAutoSyncDirectory,
     onCanvasFileContentChange,
+    onCanvasOpenFileRequest,
     canvasRef,
   }: InsCanvasInnerProps) {
     const navigate = useNavigate();
@@ -6372,6 +6373,8 @@ const shouldBlockCanvasPersistence = (
     onCanvasReadyRef.current = onCanvasReady;
     const onCanvasFileContentChangeRef = useRef(onCanvasFileContentChange);
     onCanvasFileContentChangeRef.current = onCanvasFileContentChange;
+    const onCanvasOpenFileRequestRef = useRef(onCanvasOpenFileRequest);
+    onCanvasOpenFileRequestRef.current = onCanvasOpenFileRequest;
     useEffect(() => {
       onCanvasReadyRef.current?.();
     }, [inspirationDrawId, isLoading]);
@@ -6412,12 +6415,40 @@ const shouldBlockCanvasPersistence = (
       },
       [setNodes, setEdges, msg, autoLayout]
     );
+
+    const requestOpenFileByPath = useCallback((target: string) => {
+      const normalizedTarget = normalizeCanvasFilePath(target);
+      if (!normalizedTarget) {
+        console.warn("[canvas-open-debug] request-open-empty-target", { target });
+        return;
+      }
+
+      const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nodesRef.current);
+      const matchedNode = nodesRef.current.find((node) => node.id === target);
+      const targetCandidates = Array.from(new Set([
+        normalizedTarget,
+        normalizedTarget.replace(/^角色卡\//, "[角色卡]/"),
+        normalizedTarget.replace(/^脑洞卡\//, "[脑洞卡]/"),
+        normalizedTarget.replace(/^梗概卡\//, "[梗概卡]/"),
+        normalizedTarget.replace(/^设定卡\//, "[设定卡]/"),
+        normalizedTarget.replace(/^大纲卡\//, "[大纲卡]/"),
+      ]));
+      const matchedSyncPath =
+        Object.entries(syncPathNodeIdMap).find(([, nodeId]) => nodeId === target)?.[0] ||
+        targetCandidates.find((candidate) => syncPathNodeIdMap[candidate]) ||
+        Object.keys(syncPathNodeIdMap).find((syncPath) =>
+          targetCandidates.some((candidate) => syncPath.endsWith(`/${candidate}`))
+        ) ||
+        "";
+      onCanvasOpenFileRequestRef.current?.(matchedSyncPath || normalizedTarget);
+    }, [normalizeCanvasFilePath]);
   
     const handlers = useMemo(
       () => ({
         handleMainCardCreate,
         handleAddCardToDialog,
         handleAddGroupToDialog,
+        requestOpenFileByPath,
         handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         handleGroupDelete: deleteNode,
@@ -6481,6 +6512,7 @@ const shouldBlockCanvasPersistence = (
         handleMainCardCreate,
         handleAddCardToDialog,
         handleAddGroupToDialog,
+        requestOpenFileByPath,
         handlePrepareGenerateToDialog,
         handlePrepareBrainstormCard,
         deleteNode,
@@ -7510,6 +7542,8 @@ const shouldBlockCanvasPersistence = (
           onCanvasReady={props.onCanvasReady}
           autoSyncDirectory={props.autoSyncDirectory}
           onAutoSyncDirectory={props.onAutoSyncDirectory}
+          onCanvasFileContentChange={props.onCanvasFileContentChange}
+          onCanvasOpenFileRequest={props.onCanvasOpenFileRequest}
           canvasRef={ref as React.RefObject<InsCanvasApi | null>}
         />
       </ReactFlowProvider>
