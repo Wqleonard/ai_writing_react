@@ -7347,6 +7347,7 @@ type GroupRelayoutOptions = {
                 panActivationKeyCode={!showInit && panMode ? 'Space' : null}
                 nodesDraggable={!showInit}
                 elementsSelectable={!showInit}
+                multiSelectionKeyCode={null}
                 nodesConnectable={!showInit}
                 minZoom={!showInit ? 0.1 : 1}
                 maxZoom={!showInit ? 2 : 1}
