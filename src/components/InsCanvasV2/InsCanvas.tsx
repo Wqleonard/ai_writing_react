@@ -925,6 +925,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     onCanvasReady,
     autoSyncDirectory = false,
     onAutoSyncDirectory,
+    onCanvasFileContentChange,
     canvasRef,
   }: InsCanvasInnerProps) {
     const navigate = useNavigate();
@@ -1921,6 +1922,45 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       return true;
     }, [focusCanvasNodeWhenReady, normalizeCanvasFilePath]);
 
+    const syncFileContentByPath = useCallback((filePath: string, content: string) => {
+      const normalizedPath = normalizeCanvasFilePath(filePath);
+      if (!normalizedPath) return false;
+
+      const suffixPath = `/${normalizedPath}`;
+      const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nodesRef.current);
+      const matchedNodeId =
+        syncPathNodeIdMap[normalizedPath] ||
+        Object.entries(syncPathNodeIdMap).find(([syncPath]) => syncPath.endsWith(suffixPath))?.[1] ||
+        "";
+      let didUpdate = false;
+
+      setNodes((prev) =>
+        prev.map((node) => {
+          const isMatchedBySyncPath = matchedNodeId ? node.id === matchedNodeId : false;
+          const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+          const isMatchedByFilePath =
+            !!nodeFilePath &&
+            (nodeFilePath === normalizedPath || nodeFilePath.endsWith(suffixPath));
+          const isMatched = isMatchedBySyncPath || isMatchedByFilePath;
+          if (!isMatched) return node;
+
+          const nextContent = String(content ?? "");
+          if (String(node.data?.content ?? "") === nextContent) return node;
+
+          didUpdate = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              content: nextContent,
+            },
+          };
+        })
+      );
+
+      return didUpdate;
+    }, [normalizeCanvasFilePath, setNodes]);
+
     const focusNewlyCreatedBlankNode = useCallback((nodeId?: string) => {
       const normalizedNodeId = getTextValue(nodeId);
       if (!normalizedNodeId) return;
@@ -2261,8 +2301,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           images?: string[];
         }
       ) => {
-        setNodes((nds) =>
-          nds.map((n) => {
+        let syncedFilePath = "";
+        let syncedFileContent = "";
+        setNodes((nds) => {
+          const nextNodes = nds.map((n) => {
             if (n.id !== nodeId) return n;
 
             const hasTitleUpdate = Object.prototype.hasOwnProperty.call(options ?? {}, "title");
@@ -2315,8 +2357,22 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             }
 
             return nextNode;
-          })
-        );
+          });
+
+          const syncPathNodeIdMap = buildCanvasSyncFileNodeIdMap(nextNodes);
+          const matchedSyncPath =
+            Object.entries(syncPathNodeIdMap).find(([, id]) => id === nodeId)?.[0] ?? "";
+          if (matchedSyncPath) {
+            const nextFiles = buildCanvasSyncFiles(nextNodes);
+            syncedFilePath = matchedSyncPath;
+            syncedFileContent = String(nextFiles[matchedSyncPath] ?? "");
+          }
+
+          return nextNodes;
+        });
+        if (syncedFilePath) {
+          onCanvasFileContentChangeRef.current?.(syncedFilePath, syncedFileContent);
+        }
       },
       [buildCanvasNodeFilePath, buildCanvasNodeMarkdown, setNodes]
     );
@@ -6220,17 +6276,20 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         addNewCanvas,
         addInfoCardFromExternalFile,
         focusFileByPath,
+        syncFileContentByPath,
         openHistory,
         flushPersistence: flushCanvasPersistence,
         saveCanvas: handleSaveCanvas,
         inspirationDrawId,
         isLoading,
       }),
-      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
+      [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, handleSaveCanvas, inspirationDrawId, isLoading]
     );
 
     const onCanvasReadyRef = useRef(onCanvasReady);
     onCanvasReadyRef.current = onCanvasReady;
+    const onCanvasFileContentChangeRef = useRef(onCanvasFileContentChange);
+    onCanvasFileContentChangeRef.current = onCanvasFileContentChange;
     useEffect(() => {
       onCanvasReadyRef.current?.();
     }, [inspirationDrawId, isLoading]);

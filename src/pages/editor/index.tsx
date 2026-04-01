@@ -135,6 +135,17 @@ tips:
 const EDITOR_SETTINGS_STYLE_ID = "react-editor-custom-styles";
 const EDITOR_SETTINGS_STORAGE_KEY = "editorSettings";
 
+const getEditorFlowPreview = (content: unknown, max = 80): string => {
+  if (typeof content !== "string") return "";
+  const flattened = content.replace(/\s+/g, " ").trim();
+  return flattened.length > max ? `${flattened.slice(0, max)}...` : flattened;
+};
+
+const logEditorFlow = (event: string, payload?: Record<string, unknown>) => {
+  if (!import.meta.env.DEV) return;
+  console.log(`[editor-flow] ${event}`, payload ?? {});
+};
+
 type EditorSettings = {
   fontSize: number;
   lineHeight: number;
@@ -539,6 +550,23 @@ const MarkdownEditorPage = () => {
       }
 
       const mergedFiles = { ...currentServerData, ...safeIncomingFiles };
+      logEditorFlow("stream.onUpdateFiles", {
+        fileId,
+        targetFileId,
+        currentEditingId,
+        incomingKeys: Object.keys(normalizedIncomingFiles),
+        safeIncomingKeys: Object.keys(safeIncomingFiles),
+        pendingEditPaths: Array.from(pendingEditPaths),
+        currentEditingServerPreview: getEditorFlowPreview(
+          currentServerData[currentEditingId || DEFAULT_EDITING_FILE_KEY]
+        ),
+        targetBeforePreview: getEditorFlowPreview(
+          targetFileId ? currentServerData[targetFileId] : ""
+        ),
+        targetAfterPreview: getEditorFlowPreview(
+          targetFileId ? mergedFiles[targetFileId] : ""
+        ),
+      });
       setServerData(mergedFiles);
 
       if (targetFileId && !pendingEditPaths.has(targetFileId)) {
@@ -1094,7 +1122,9 @@ const MarkdownEditorPage = () => {
 
   const handleCanvasAutoSyncDirectory = useCallback(
     (canvasFiles: Record<string, string>) => {
-      const currentServerData = useEditorStore.getState().serverData;
+      const latestState = useEditorStore.getState();
+      const currentServerData = latestState.serverData;
+      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       const incomingCanvasKeys = Object.keys(canvasFiles);
       const beforeCanvasKeys = lastCanvasSyncedKeysRef.current;
       const isHydratingFromSnapshot = canvasSnapshotHydratingRef.current;
@@ -1135,6 +1165,17 @@ const MarkdownEditorPage = () => {
           .map((key) => normalizeCanvasFilePath(key))
           .filter((key) => key.toLowerCase().endsWith(".md"))
       );
+      logEditorFlow("handleCanvasAutoSyncDirectory", {
+        editingId,
+        incomingCanvasKeys,
+        beforeCanvasKeys,
+        nextCanvasTrackedKeys,
+        isHydratingFromSnapshot,
+        shouldProtectRollback,
+        currentEditingServerPreview: getEditorFlowPreview(currentServerData[editingId]),
+        incomingEditingPreview: getEditorFlowPreview(canvasFiles[editingId]),
+        mergedEditingPreview: getEditorFlowPreview(mergedFiles[editingId]),
+      });
       setServerData(mergedFiles);
       if (isHydratingFromSnapshot) {
         canvasSnapshotHydratingRef.current = false;
@@ -1310,6 +1351,16 @@ const MarkdownEditorPage = () => {
       return;
     }
     if (workInfo?.stage === "blank") return;
+    const latestState = useEditorStore.getState();
+    const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
+    logEditorFlow("treeAutoSaveTriggered", {
+      activeTab,
+      workId,
+      editingId,
+      treeNodeCount: latestState.treeData.length,
+      serverContentPreview: getEditorFlowPreview(latestState.serverData[editingId]),
+      currentContentPreview: getEditorFlowPreview(latestState.currentContent),
+    });
     void saveEditorData("1", false);
   }, [activeTab, saveEditorData, treeData, workId, workInfo?.stage]);
 
@@ -1581,6 +1632,22 @@ const MarkdownEditorPage = () => {
     setShowSearchReplaceDialog(true);
   }, []);
 
+  const handleMainEditorChange = useCallback((nextContent: string) => {
+    setCurrentContent(nextContent);
+
+    const normalizedPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!normalizedPath) return;
+
+    const didSync = insCanvasRef.current?.syncFileContentByPath(normalizedPath, nextContent) ?? false;
+    if (didSync) {
+      logEditorFlow("handleMainEditorChange.syncToCanvas", {
+        filePath: normalizedPath,
+        currentContentPreview: getEditorFlowPreview(nextContent),
+        activeTab,
+      });
+    }
+  }, [activeTab, currentEditingId, normalizeCanvasFilePath, setCurrentContent]);
+
   // 查找预览使用延迟值，避免每次键入都立即全量扫描正文
   const deferredSearchText = useDeferredValue(searchText);
   const searchMatches = useMemo(() => {
@@ -1766,6 +1833,11 @@ const MarkdownEditorPage = () => {
     const pathFromTree = Array.isArray(node.path) ? node.path.join("/") : "";
     const normalizedPath = normalizeCanvasFilePath(pathFromTree || node.id);
     if (!normalizedPath) return;
+    logEditorFlow("handleTreeFileSelect", {
+      nodeId: node.id,
+      normalizedPath,
+      nodeContentPreview: getEditorFlowPreview(node.content),
+    });
 
     const isCanvasTaggedFile =
       canvasTaggedFilePathSetRef.current.has(normalizedPath) ||
@@ -1847,6 +1919,21 @@ const MarkdownEditorPage = () => {
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
   }, [activeTab, canvasFocusRequestSeq, canvasReadyKey, rightPanelWidthRem, workId]);
+
+  useEffect(() => {
+    const normalizedPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!normalizedPath) return;
+
+    const didSync = insCanvasRef.current?.syncFileContentByPath(normalizedPath, currentContent) ?? false;
+    if (didSync) {
+      logEditorFlow("syncEditorContentToCanvas", {
+        filePath: normalizedPath,
+        currentContentPreview: getEditorFlowPreview(currentContent),
+        activeTab,
+        canvasReadyKey,
+      });
+    }
+  }, [activeTab, canvasReadyKey, currentContent, currentEditingId, normalizeCanvasFilePath]);
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
   // ================== EDIT_FILE START ==================
@@ -2504,9 +2591,19 @@ const MarkdownEditorPage = () => {
   const handleCanvasCreateHere = useCallback(
     async (files: Record<string, string>, chain: { data?: { content?: string } } | null) => {
       if (!workId) return;
+      const latestState = useEditorStore.getState();
+      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       const merged = ensureCanvasTreeSkeleton({
-        ...useEditorStore.getState().serverData,
+        ...latestState.serverData,
         ...files,
+      });
+      logEditorFlow("handleCanvasCreateHere.beforeMerge", {
+        workId,
+        editingId,
+        incomingKeys: Object.keys(files),
+        currentEditingServerPreview: getEditorFlowPreview(latestState.serverData[editingId]),
+        incomingEditingPreview: getEditorFlowPreview(files[editingId]),
+        mergedEditingPreview: getEditorFlowPreview(merged[editingId]),
       });
       setServerData(merged);
 
@@ -2577,6 +2674,17 @@ const MarkdownEditorPage = () => {
     },
     [navigate]
   );
+
+  const handleCanvasFileContentChange = useCallback((filePath: string, content: string) => {
+    const normalizedPath = normalizeCanvasFilePath(filePath);
+    if (!normalizedPath) return;
+    setServerDataFile(normalizedPath, content);
+    logEditorFlow("handleCanvasFileContentChange", {
+      filePath: normalizedPath,
+      contentPreview: getEditorFlowPreview(content),
+      currentEditingId,
+    });
+  }, [currentEditingId, normalizeCanvasFilePath, setServerDataFile]);
 
   // 与 Vue handleKnowledgeBaseUpdate 对齐：合并知识库文件、定位文件，并在 blank 阶段升级为 final
   const handleKnowledgeBaseUpdate = useCallback(
@@ -3223,7 +3331,7 @@ const MarkdownEditorPage = () => {
                               className="editor-outer-scroll-mode"
                               fontClassName="font-KaiTi"
                               value={currentContent}
-                              onChange={setCurrentContent}
+                              onChange={handleMainEditorChange}
                               placeholder={EDITOR_PLACEHOLDER}
                               // readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
@@ -3377,6 +3485,7 @@ const MarkdownEditorPage = () => {
                       onCreateNew={handleCanvasCreateNew}
                       autoSyncDirectory={autoSyncCanvasDirectory}
                       onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
+                      onCanvasFileContentChange={handleCanvasFileContentChange}
                       onMessage={(type, msg) => {
                         if (type === "success") toast.success(msg);
                         else if (type === "error") toast.error(msg);

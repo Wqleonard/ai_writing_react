@@ -176,6 +176,7 @@ export interface InsCanvasApi {
   addNewCanvas: () => void;
   addInfoCardFromExternalFile: (options: AddInfoCardFromExternalFileOptions) => string;
   focusFileByPath: (filePath: string, options?: FocusFileByPathOptions) => boolean;
+  syncFileContentByPath: (filePath: string, content: string) => boolean;
   openHistory: () => void;
   saveCanvas: (sessionId?: string) => void;
   flushPersistence: () => Promise<void>;
@@ -194,6 +195,7 @@ export interface InsCanvasProps {
   onCanvasReady?: () => void;
   autoSyncDirectory?: boolean;
   onAutoSyncDirectory?: (files: Record<string, string>) => void;
+  onCanvasFileContentChange?: (filePath: string, content: string) => void;
 }
 
 export interface InsCanvasInnerProps extends InsCanvasProps {
