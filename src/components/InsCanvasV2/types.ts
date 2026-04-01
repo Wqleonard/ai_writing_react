@@ -182,6 +182,7 @@ export interface InsCanvasApi {
   openHistory: () => void;
   saveCanvas: (sessionId?: string) => void;
   flushPersistence: () => Promise<void>;
+  stopCurrentRequest: () => Promise<void>;
   inspirationDrawId: string;
   isLoading: boolean;
 }

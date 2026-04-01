@@ -1817,6 +1817,18 @@ const MarkdownEditorPage = () => {
   const handleChatHeaderTabChange = useCallback(
     async (tab: ChatTabType) => {
       if (tab === "canvas") {
+        if (activeTab !== "canvas") {
+          if (langGraphStream.isStreaming) {
+            const ok = await confirm({
+              title: "提示",
+              message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+              cancelText: "取消",
+              confirmText: "确认",
+            });
+            if (!ok) return;
+            handleStopStreaming();
+          }
+        }
         setIsCanvasPreviewEditorClosed(false);
         if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
           preCanvasRightWidthRemRef.current = rightPanelWidthRem;
@@ -1826,6 +1838,16 @@ const MarkdownEditorPage = () => {
         }
         maximizeRightPanel();
       } else if (activeTab === "canvas") {
+        if (insCanvasRef.current?.isLoading) {
+          const ok = await confirm({
+            title: "提示",
+            message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+            cancelText: "取消",
+            confirmText: "确认",
+          });
+          if (!ok) return;
+          await insCanvasRef.current.stopCurrentRequest();
+        }
         await flushCanvasBeforeLeave();
         setIsCanvasFilePreviewMode(false);
         setIsCanvasPreviewEditorClosed(false);
@@ -1836,7 +1858,7 @@ const MarkdownEditorPage = () => {
       }
       setActiveTab(tab);
     },
-    [activeTab, flushCanvasBeforeLeave, maximizeRightPanel, rightPanelWidthRem]
+    [activeTab, confirm, flushCanvasBeforeLeave, handleStopStreaming, langGraphStream.isStreaming, maximizeRightPanel, rightPanelWidthRem]
   );
 
   useEffect(() => {
