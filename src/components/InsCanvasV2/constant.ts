@@ -69,6 +69,7 @@ export const ROLE_GROUP_LAYOUT = {
   minHeight: 580,
   maxCols: 3,
   cardWidth: 300,
+  cardHeight: 450,
   cardGapX: 24,
   cardGapY: 28,
   paddingTop: 64,

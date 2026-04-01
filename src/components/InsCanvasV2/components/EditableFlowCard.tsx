@@ -17,6 +17,7 @@ import type {
   CanvasFloatingAction as FloatingAction,
   EditableFlowCardProps,
 } from "@/components/InsCanvasV2/types";
+import { getCanvasNodeLayoutSize as getCanvasNodeLayoutSizeFromUtils } from "@/components/InsCanvasV2/canvasUtils";
 // React 18 StrictMode / ReactFlow 更新可能导致节点组件重挂载，
 // 进而让“挂载即拉流”的逻辑重复触发。用 nodeId 做一次性去重（刷新时会清除）。
 const startedStreamNodeIds = new Set<string>();
@@ -1244,26 +1245,10 @@ export default function EditableFlowCard({
   );
   const hasThirdFloatingAction = visibleFloatingActions.length > 2;
 
-  const getCanvasNodeLayoutSize = useCallback((node: any) => {
-    const measuredWidth = Number(node?.measured?.width ?? node?.dimensions?.width ?? 0);
-    const measuredHeight = Number(node?.measured?.height ?? node?.dimensions?.height ?? 0);
-    const styledWidth = Number(node?.style?.width ?? 0);
-    const styledHeight = Number(node?.style?.height ?? 0);
-
-    if (measuredWidth > 0 && measuredHeight > 0) {
-      return { width: measuredWidth, height: measuredHeight };
-    }
-    if (styledWidth > 0 && styledHeight > 0) {
-      return { width: styledWidth, height: styledHeight };
-    }
-
-    const label = String(node?.data?.label ?? "").trim();
-    if (node?.type === "settingCard" && label === "角色") return { width: 300, height: 450 };
-    if (node?.type === "outlineCard") return { width: 260, height: 260 };
-    if (node?.type === "settingCard") return { width: 260, height: 220 };
-    if (node?.type === "roleGroup") return { width: 340, height: 580 };
-    return { width: 260, height: 220 };
-  }, []);
+  const getCanvasNodeLayoutSize = useCallback(
+    (node: any) => getCanvasNodeLayoutSizeFromUtils(node),
+    []
+  );
 
   const getAbsoluteCanvasNodePosition = useCallback((nodeId: string) => {
     const normalizedNodeId = String(nodeId || "").trim();
