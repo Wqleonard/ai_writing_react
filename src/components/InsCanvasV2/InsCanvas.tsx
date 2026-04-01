@@ -112,6 +112,39 @@ import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/wo
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, X } from "lucide-react";
+
+const summarizeCanvasPersistenceState = (nodes: CustomNode[], edges: CustomEdge[]) => {
+  const placeholderNodes = nodes.filter((node) => {
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    return (
+      Boolean(data.fromApi) &&
+      (
+        Boolean(data.isStreaming) ||
+        Boolean(data.pendingGenerate) ||
+        (
+          !String(data.title ?? "").trim() &&
+          !String(data.content ?? "").trim()
+        )
+      )
+    );
+  });
+
+  return {
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    placeholderCount: placeholderNodes.length,
+    streamingCount: nodes.filter((node) => Boolean((node.data as any)?.isStreaming)).length,
+    pendingGenerateCount: nodes.filter((node) => Boolean((node.data as any)?.pendingGenerate)).length,
+    placeholderNodeIds: placeholderNodes.slice(0, 10).map((node) => node.id),
+  };
+};
+
+const shouldBlockCanvasPersistence = (
+  summary: ReturnType<typeof summarizeCanvasPersistenceState>
+) =>
+  summary.placeholderCount > 0 ||
+  summary.streamingCount > 0 ||
+  summary.pendingGenerateCount > 0;
   const nodeTypes = {
     mainCard: MainCardNode,
     summaryCard: SummaryCardNode,
@@ -938,6 +971,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const canvasAutoSaveTimerRef = useRef<number | null>(null);
     const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
     const canvasAutoSaveSuppressedRef = useRef(false);
+    const pendingStablePersistenceRef = useRef(false);
     const hasInitialSnapshotFittedRef = useRef(false);
     const isUnmountingRef = useRef(false);
     const hasIdeaRef = useRef(false);
@@ -1098,13 +1132,22 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     }, [inspirationDrawId, workId]);
 
     const saveCanvasSilently = useCallback(async () => {
+      const summary = summarizeCanvasPersistenceState(
+        nodesRef.current,
+        edgesRef.current as CustomEdge[]
+      );
+      if (shouldBlockCanvasPersistence(summary)) {
+        pendingStablePersistenceRef.current = true;
+        return;
+      }
+
       const drawId = await ensureInspirationDrawId();
       if (!drawId) return;
       await saveInspirationCanvasReq(drawId, {
         nodes: nodesRef.current as unknown[],
         edges: edgesRef.current as unknown[],
       });
-    }, [ensureInspirationDrawId]);
+    }, [ensureInspirationDrawId, inspirationDrawId, workId]);
     const saveCanvasSilentlyRef = useRef(saveCanvasSilently);
     saveCanvasSilentlyRef.current = saveCanvasSilently;
 
@@ -1114,7 +1157,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         canvasAutoSaveTimerRef.current = null;
       }
       await saveCanvasSilently();
-    }, [saveCanvasSilently]);
+    }, [inspirationDrawId, saveCanvasSilently, workId]);
 
     const scheduleCanvasAutoSave = useCallback((delayMs = 500) => {
       if (!workId || canvasAutoSaveSuppressedRef.current) return;
@@ -1125,7 +1168,22 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         canvasAutoSaveTimerRef.current = null;
         void saveCanvasSilently().catch(() => {});
       }, delayMs);
-    }, [saveCanvasSilently, workId]);
+    }, [inspirationDrawId, saveCanvasSilently, workId]);
+
+    useEffect(() => {
+      if (!pendingStablePersistenceRef.current) return;
+      if (!workId) return;
+      if (canvasAutoSaveSuppressedRef.current) return;
+
+      const summary = summarizeCanvasPersistenceState(
+        nodesRef.current,
+        edgesRef.current as CustomEdge[]
+      );
+      if (shouldBlockCanvasPersistence(summary)) return;
+
+      pendingStablePersistenceRef.current = false;
+      scheduleCanvasAutoSave(0);
+    }, [edges, inspirationDrawId, nodes, scheduleCanvasAutoSave, workId]);
 
     useEffect(() => {
       isUnmountingRef.current = false;
@@ -1137,7 +1195,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           void saveCanvasSilentlyRef.current?.().catch(() => {});
         }
       };
-    }, [workId]);
+    }, [inspirationDrawId, workId]);
 
   const relayoutGroupsForNodeIds = useCallback((
     currentNodes: CustomNode[],
