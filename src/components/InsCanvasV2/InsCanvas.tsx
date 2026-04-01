@@ -42,6 +42,8 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
   import type {
   CanvasAddCardOptions,
   CanvasCardKey,
+  CanvasGenerateOptions,
+  CanvasGenerateOutlineOptions,
   CanvasModeCategory,
   CanvasModelType,
   CanvasOutputType,
@@ -1009,6 +1011,8 @@ const shouldBlockCanvasPersistence = (
     const generatedWriteFilesRef = useRef<Record<string, string>>({});
     const preparedContextFilesRef = useRef<Record<string, string> | undefined>(undefined);
     const preparedGenerateSourceNodeIdRef = useRef<string | undefined>(undefined);
+    const ignoreDialogReferencesForNextRequestRef = useRef(false);
+    const clearDialogPreviewsForNextRequestRef = useRef<boolean | undefined>(undefined);
     const [smartSuggestionsActive, setSmartSuggestionsActive] = useState(false);
     const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestionItem[]>([]);
     const [pendingSuggestionIdea, setPendingSuggestionIdea] = useState("");
@@ -1046,7 +1050,10 @@ const shouldBlockCanvasPersistence = (
           sourceNodeId?: string,
           filesOverride?: Record<string, string>,
           contextActionLabelOverride?: string,
-          requestSourceOverride?: "default" | "carousel"
+          requestSourceOverride?: "default" | "carousel",
+          resetOutputTypeAfterFinish?: boolean,
+          includeDialogReferencesOverride?: boolean,
+          clearDialogPreviewsAfterRequestOverride?: boolean
         ) => void | Promise<void>)
       | null
     >(null);
@@ -3885,6 +3892,8 @@ const shouldBlockCanvasPersistence = (
 
         preparedGenerateSourceNodeIdRef.current = nodeId;
         preparedContextFilesRef.current = undefined;
+        ignoreDialogReferencesForNextRequestRef.current = false;
+        clearDialogPreviewsForNextRequestRef.current = undefined;
         handleOutputTypeChange(outputType);
 
         setNodes((prev) =>
@@ -4161,13 +4170,7 @@ const shouldBlockCanvasPersistence = (
     const handleGenerateOutlineFromContext = useCallback(
       async (
         nodeId: string,
-        options?: {
-          chapterNum?: number;
-          requirement?: string;
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOutlineOptions
       ) => {
         handleOutputTypeChange("outline");
         const shouldOpenOutlineConfig =
@@ -4203,7 +4206,11 @@ const shouldBlockCanvasPersistence = (
           "outline",
           nodeId,
           mergedFiles,
-          options?.actionLabel
+          options?.actionLabel,
+          undefined,
+          false,
+          options?.includeDialogReferences ?? true,
+          options?.clearDialogPreviewsAfterRequest
         );
       },
       [getConnectedContextFiles, handleOutputTypeChange, mergeFileRecords, msg, openOutlineSettingsForRequest]
@@ -4297,7 +4304,9 @@ const shouldBlockCanvasPersistence = (
       filesOverride?: Record<string, string>,
       contextActionLabelOverride?: string,
       requestSourceOverride?: "default" | "carousel",
-      resetOutputTypeAfterFinish = false
+      resetOutputTypeAfterFinish = false,
+      includeDialogReferencesOverride = true,
+      clearDialogPreviewsAfterRequestOverride?: boolean
     ) => {
       
       if (isLoading) return;
@@ -4328,7 +4337,13 @@ const shouldBlockCanvasPersistence = (
         );
       const sourceNodeFilePath = getTextValue((sourceNode?.data as any)?.filePath);
       const sourceNodeFileContent = getTextValue(sourceNode?.data?.content);
-      const selectedDialogReferences = [...dialogCardPreviews];
+      const shouldIncludeDialogReferences =
+        includeDialogReferencesOverride && !ignoreDialogReferencesForNextRequestRef.current;
+      const shouldClearDialogPreviews =
+        clearDialogPreviewsAfterRequestOverride ??
+        clearDialogPreviewsForNextRequestRef.current ??
+        true;
+      const selectedDialogReferences = shouldIncludeDialogReferences ? [...dialogCardPreviews] : [];
       const selectedDialogReferenceIds = selectedDialogReferences
         .map((item) => getTextValue(item.nodeId))
         .filter(Boolean);
@@ -4375,7 +4390,11 @@ const shouldBlockCanvasPersistence = (
       );
       preparedContextFilesRef.current = undefined;
       preparedGenerateSourceNodeIdRef.current = undefined;
-      setDialogCardPreviews([]);
+      ignoreDialogReferencesForNextRequestRef.current = false;
+      clearDialogPreviewsForNextRequestRef.current = undefined;
+      if (shouldClearDialogPreviews) {
+        setDialogCardPreviews([]);
+      }
       const shouldOpenOutlineConfigFromDock =
         !isAutoRequest &&
         cardOutputType === "outline" &&
@@ -5979,11 +5998,7 @@ const shouldBlockCanvasPersistence = (
       (
         nodeId: string,
         _outputType: CanvasOutputType,
-        options?: {
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOptions
       ) => {
         const targetOutputType: CanvasOutputType = "auto";
         const currentNode = nodes.find((node) => node.id === nodeId);
@@ -5995,9 +6010,16 @@ const shouldBlockCanvasPersistence = (
         }
         preparedGenerateSourceNodeIdRef.current = nodeId;
         const isGroupNode = currentNode?.type === "roleGroup";
-        const appended = isGroupNode
-          ? appendDialogReferencesByNodeIds(getGroupChildReferenceNodeIds(nodeId))
-          : appendDialogReferenceByNodeId(nodeId);
+        const shouldIncludeDialogReferences = options?.includeDialogReferences ?? true;
+        ignoreDialogReferencesForNextRequestRef.current = !shouldIncludeDialogReferences;
+        clearDialogPreviewsForNextRequestRef.current = options?.clearDialogPreviewsAfterRequest;
+        const appended = shouldIncludeDialogReferences
+          ? (
+            isGroupNode
+              ? appendDialogReferencesByNodeIds(getGroupChildReferenceNodeIds(nodeId))
+              : appendDialogReferenceByNodeId(nodeId)
+          )
+          : null;
         if (options?.files && Object.keys(options.files).length > 0) {
           preparedContextFilesRef.current = mergeFileRecords(
             preparedContextFilesRef.current,
@@ -6062,11 +6084,7 @@ const shouldBlockCanvasPersistence = (
       (
         nodeId: string,
         outputType: CanvasOutputType,
-        options?: {
-          files?: Record<string, string>;
-          title?: string;
-          actionLabel?: string;
-        }
+        options?: CanvasGenerateOptions
       ) => {
         if (outputType !== "auto") {
           handleOutputTypeChange(outputType);
@@ -6091,7 +6109,11 @@ const shouldBlockCanvasPersistence = (
           outputType,
           nodeId,
           options?.files,
-          options?.actionLabel
+          options?.actionLabel,
+          undefined,
+          false,
+          options?.includeDialogReferences ?? true,
+          options?.clearDialogPreviewsAfterRequest
         );
       },
       [buildContextGeneratePrompt, getTextValue, handleGenerateIns, handleOutputTypeChange, msg, nodes]
@@ -6278,6 +6300,8 @@ const shouldBlockCanvasPersistence = (
       creationIdeaContentRef.current = "";
       generatedWriteFilesRef.current = {};
       preparedContextFilesRef.current = undefined;
+      ignoreDialogReferencesForNextRequestRef.current = false;
+      clearDialogPreviewsForNextRequestRef.current = undefined;
       setLatestGeneratedNodeId("");
       latestGeneratedNodeIdRef.current = "";
       setReqPanelAction(null);
