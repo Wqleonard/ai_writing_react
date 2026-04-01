@@ -99,7 +99,9 @@ export const extractUpdatesMessageContentWithoutReadFile = (value: unknown): str
   const record = value as {
     model?: { messages?: Array<{ content?: unknown; name?: unknown }> };
     messages?: Array<{ content?: unknown; name?: unknown }>;
+    tools?: { files?: Record<string, unknown> };
   } & Record<string, unknown>;
+  const toolFiles = record.tools?.files;
 
   const messages = Array.isArray(record.model?.messages)
     ? record.model.messages
@@ -120,6 +122,15 @@ export const extractUpdatesMessageContentWithoutReadFile = (value: unknown): str
     ) continue;
     const text = getTextValue(message?.content).trim();
     const updatedFilePath = text.match(/^Updated file\s+(.+)$/)?.[1]?.trim() || "";
+    if (
+      updatedFilePath &&
+      isTaskControlWriteFile(
+        updatedFilePath,
+        toolFiles && typeof toolFiles === "object" ? getTextValue(toolFiles[updatedFilePath]) : ""
+      )
+    ) {
+      continue;
+    }
     if (updatedFilePath && /(^|\/)relationship\.json$/i.test(updatedFilePath)) continue;
     if (text) return text;
   }
@@ -346,7 +357,10 @@ export const extractDisplayToolFileContent = (value: unknown): string => {
     const toolFiles = record.tools?.files;
     if (toolFiles && typeof toolFiles === "object") {
       const dynamicFileKey = Object.keys(toolFiles).find(
-        (key) => key !== "/choices.json" && !/(^|\/)relationship\.json$/i.test(key)
+        (key) =>
+          key !== "/choices.json" &&
+          !/(^|\/)relationship\.json$/i.test(key) &&
+          !isTaskControlWriteFile(key, getTextValue(toolFiles[key]))
       );
       if (dynamicFileKey) {
         const dynamicFileContent = getTextValue(toolFiles[dynamicFileKey]);
@@ -363,7 +377,12 @@ export const extractDisplayToolFileContent = (value: unknown): string => {
       for (const toolCall of toolCalls) {
         if (getTextValue(toolCall?.name) !== "write_file") continue;
         const filePath = getTextValue(toolCall?.args?.file_path);
-        if (!filePath || filePath === "/choices.json" || /(^|\/)relationship\.json$/i.test(filePath)) continue;
+        if (
+          !filePath ||
+          filePath === "/choices.json" ||
+          /(^|\/)relationship\.json$/i.test(filePath) ||
+          isTaskControlWriteFile(filePath, getTextValue(toolCall?.args?.content))
+        ) continue;
         const content = getTextValue(toolCall?.args?.content);
         if (content) return content;
       }
@@ -458,6 +477,7 @@ export const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] =>
       Object.entries(toolFiles).forEach(([filePath, fileContent]) => {
         const normalizedPath = getTextValue(filePath);
         if (!normalizedPath) return;
+        if (isTaskControlWriteFile(normalizedPath, getTextValue(fileContent))) return;
         const normalizedCallId = callIdByPath.get(normalizedPath);
         const previous = result.get(normalizedPath);
         if (previous) {
@@ -536,6 +556,24 @@ export const getLatestWriteFiles = (
   return Array.from(filesByPath.values());
 };
 
+export const isTaskControlWriteFile = (filePath: string, content: string) => {
+  if (!/(^|\/)task\.json$/i.test(getTextValue(filePath))) return false;
+  const normalizedContent = getTextValue(content).trim();
+  if (!normalizedContent) return false;
+  try {
+    const parsed = JSON.parse(normalizedContent) as {
+      next_task_type?: unknown;
+      task_type?: unknown;
+    };
+    return (
+      getTextValue(parsed?.next_task_type) === "brain-storm-card" ||
+      getTextValue(parsed?.task_type) === "brain-storm-card"
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const extractWriteFileTitle = (filePath: string, fallback: string) => {
   const fileName = getTextValue(filePath)
     .split("/")
@@ -561,7 +599,9 @@ export const isRelationshipWriteFile = (filePath: string) =>
   /(^|\/)relationship\.json$/i.test(filePath) || /(^|\/)角色关系\.md$/i.test(filePath);
 
 export const shouldSkipWriteFileCardCreation = (filePath: string) =>
-  /(^|\/)relationship\.json$/i.test(filePath) || Boolean(normalizeReplyFilePath(filePath));
+  /(^|\/)relationship\.json$/i.test(filePath) ||
+  /(^|\/)task\.json$/i.test(filePath) ||
+  Boolean(normalizeReplyFilePath(filePath));
 
 export const isRelationshipInfoWriteFile = (filePath: string) =>
   isRelationshipWriteFile(filePath);
