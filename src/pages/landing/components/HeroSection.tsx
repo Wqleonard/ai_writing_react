@@ -14,6 +14,7 @@ interface HeroSectionProps {
   onShortStoryClick: () => void;
   onScriptClick: () => void;
   onProfessionalClick: () => void;
+  onProfessionalShortPlayClick: () => void;
 }
 
 export function HeroSection({
@@ -21,18 +22,26 @@ export function HeroSection({
   onShortStoryClick,
   onScriptClick,
   onProfessionalClick,
+  onProfessionalShortPlayClick,
 }: HeroSectionProps) {
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [isButtonHovered, setIsButtonHovered] = useState(false);
+  const [showProfessionalDropdown, setShowProfessionalDropdown] = useState(false);
   const [isProfessionalButtonHovered, setIsProfessionalButtonHovered] =
     useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [hoveredProfessionalItem, setHoveredProfessionalItem] = useState<string | null>(null);
   const dropdownContainerRef = useRef<HTMLDivElement>(null);
+  const professionalDropdownContainerRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const professionalHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const isHoveredDropdownRef = useRef(false);
+  const isHoveredProfessionalDropdownRef = useRef(false);
 
   const clearHoverTimeout = () => {
     if (hoverTimeoutRef.current) {
@@ -75,6 +84,50 @@ export function HeroSection({
   const toggleDropdown = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowDropdown((prev) => !prev);
+  };
+
+  const clearProfessionalHoverTimeout = () => {
+    if (professionalHoverTimeoutRef.current) {
+      clearTimeout(professionalHoverTimeoutRef.current);
+      professionalHoverTimeoutRef.current = undefined;
+    }
+  };
+
+  const handleProfessionalButtonEnter = () => {
+    clearProfessionalHoverTimeout();
+    setIsProfessionalButtonHovered(true);
+  };
+
+  const handleProfessionalButtonLeave = () => {
+    if (showProfessionalDropdown) {
+      professionalHoverTimeoutRef.current = setTimeout(() => {
+        if (!isHoveredProfessionalDropdownRef.current) {
+          setShowProfessionalDropdown(false);
+        }
+        setIsProfessionalButtonHovered(false);
+      }, 500);
+    } else {
+      setIsProfessionalButtonHovered(false);
+    }
+  };
+
+  const handleProfessionalMenuEnter = () => {
+    clearProfessionalHoverTimeout();
+    isHoveredProfessionalDropdownRef.current = true;
+    setIsProfessionalButtonHovered(false);
+  };
+
+  const handleProfessionalMenuLeave = () => {
+    setTimeout(() => {
+      isHoveredProfessionalDropdownRef.current = false;
+    }, 200);
+    setShowProfessionalDropdown(false);
+  };
+
+  const toggleProfessionalDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isCreatingWork) return;
+    setShowProfessionalDropdown((prev) => !prev);
   };
 
   return (
@@ -144,14 +197,14 @@ export function HeroSection({
                 onMouseEnter={handleMenuEnter}
                 onMouseLeave={handleMenuLeave}
                 onClick={(e) => e.stopPropagation()}
-                className="absolute top-25.25 -right-13 z-1000 w-40.75 h-29.5 overflow-hidden rounded-[1.25rem] bg-[#f7f7f4] shadow-[0px_0px_10px_0px_rgba(0,0,0,0.25)]"
+                className="absolute top-25.25 -right-13 z-1000 w-50.75 h-29.5 overflow-hidden rounded-[1.25rem] bg-[#f7f7f4] shadow-[0px_0px_10px_0px_rgba(0,0,0,0.25)]"
               >
                 {/* Short story item */}
                 <div
                   onClick={onShortStoryClick}
                   onMouseEnter={() => setHoveredItem("short")}
                   onMouseLeave={() => setHoveredItem(null)}
-                  className="absolute left-3 top-4 w-16 h-22.25 cursor-pointer"
+                  className="absolute left-3 top-4 w-20 h-22.25 cursor-pointer"
                 >
                   <div
                     className={cn(
@@ -162,11 +215,11 @@ export function HeroSection({
                   <img
                     src={bookIcon}
                     alt="短篇"
-                    className="absolute z-1 left-0.5 top-0 w-15.5 h-15.5 object-contain"
+                    className="absolute z-1 left-1/2 top-0 h-15.5 w-15.5 -translate-x-1/2 object-contain"
                     loading="lazy"
                   />
-                  <span className="absolute z-1 left-2.5 top-15.5 w-11 h-3.75 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
-                    短篇
+                  <span className="absolute inset-x-0 z-1 top-15.5 h-3.75 px-1 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
+                    小说(快捷)
                   </span>
                 </div>
 
@@ -175,7 +228,7 @@ export function HeroSection({
                   onClick={onScriptClick}
                   onMouseEnter={() => setHoveredItem("script")}
                   onMouseLeave={() => setHoveredItem(null)}
-                  className="absolute left-21.5 top-4 w-16 h-22.25 cursor-pointer"
+                  className="absolute left-27.5 top-4 w-20 h-22.25 cursor-pointer"
                 >
                   <div
                     className={cn(
@@ -186,11 +239,11 @@ export function HeroSection({
                   <img
                     src={scriptIcon}
                     alt="剧本"
-                    className="absolute z-1 left-3.5 top-3 size-9 object-contain"
+                    className="absolute z-1 left-1/2 top-3 size-9 -translate-x-1/2 object-contain"
                     loading="lazy"
                   />
-                  <span className="absolute z-1 left-1.5 top-15.5 w-13.5 h-3.75 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
-                    剧本
+                  <span className="absolute inset-x-0 z-1 top-15.5 h-3.75 px-1 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
+                    剧本(快捷)
                   </span>
                 </div>
               </div>
@@ -206,21 +259,19 @@ export function HeroSection({
           </div>
 
           {/* Professional button */}
-          <div className="relative flex flex-col">
+          <div ref={professionalDropdownContainerRef} className="relative flex flex-col">
             <button
-              onClick={onProfessionalClick}
+              onClick={toggleProfessionalDropdown}
               disabled={isCreatingWork}
-              onMouseEnter={() =>
-                !isCreatingWork && setIsProfessionalButtonHovered(true)
-              }
-              onMouseLeave={() => setIsProfessionalButtonHovered(false)}
+              onMouseEnter={() => !isCreatingWork && handleProfessionalButtonEnter()}
+              onMouseLeave={handleProfessionalButtonLeave}
               style={{ transition: "width 0.3s ease, box-shadow 0.3s ease" }}
               className={cn(
                 "flex h-22.25 flex-row items-center justify-center gap-1.5 rounded-[1.609375rem] border-none bg-linear-to-r from-[#efaf00] to-[#ff9500] relative shrink-0",
                 isCreatingWork
                   ? "cursor-not-allowed opacity-80"
                   : "cursor-pointer",
-                isProfessionalButtonHovered && !isCreatingWork
+                (isProfessionalButtonHovered || showProfessionalDropdown) && !isCreatingWork
                   ? "w-69.5 shadow-[0px_4px_15px_0px_rgba(255,149,0,0.5)]"
                   : "w-61.5",
               )}
@@ -238,7 +289,79 @@ export function HeroSection({
               <span className="text-2xl font-bold text-white font-YaHei leading-[1.2] whitespace-nowrap">
                 {isCreatingWork ? "请稍后..." : "我是专业写手"}
               </span>
+              {isProfessionalButtonHovered && !isCreatingWork && (
+                <svg
+                  className={cn(
+                    "h-1.75 w-4.25 shrink-0 transition-transform duration-300",
+                    showProfessionalDropdown && "rotate-180",
+                  )}
+                  viewBox="0 0 17 7"
+                  fill="none"
+                >
+                  <path
+                    d="M1 1L8.5 6L16 1"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
             </button>
+            {showProfessionalDropdown && !isCreatingWork && (
+              <div
+                onMouseEnter={handleProfessionalMenuEnter}
+                onMouseLeave={handleProfessionalMenuLeave}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-25.25 right-0 z-1000 h-29.5 w-50.75 overflow-hidden rounded-[1.25rem] bg-[#f7f7f4] shadow-[0px_0px_10px_0px_rgba(0,0,0,0.25)]"
+              >
+                <div
+                  onClick={onProfessionalClick}
+                  onMouseEnter={() => setHoveredProfessionalItem("pro-short")}
+                  onMouseLeave={() => setHoveredProfessionalItem(null)}
+                  className="absolute left-3 top-4 h-22.25 w-20 cursor-pointer"
+                >
+                  <div
+                    className={cn(
+                      "absolute inset-0 rounded-[0.625rem] bg-[#f8f3df] transition-opacity duration-300",
+                      hoveredProfessionalItem === "pro-short" ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <img
+                    src={bookIcon}
+                    alt="小说"
+                    className="absolute z-1 left-1/2 top-0 h-15.5 w-15.5 -translate-x-1/2 object-contain"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-x-0 z-1 top-15.5 h-3.75 px-1 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
+                    小说
+                  </span>
+                </div>
+
+                <div
+                  onClick={onProfessionalShortPlayClick}
+                  onMouseEnter={() => setHoveredProfessionalItem("pro-script")}
+                  onMouseLeave={() => setHoveredProfessionalItem(null)}
+                  className="absolute left-27.5 top-4 h-22.25 w-20 cursor-pointer"
+                >
+                  <div
+                    className={cn(
+                      "absolute inset-0 rounded-[0.625rem] bg-[#f8f3df] transition-opacity duration-300",
+                      hoveredProfessionalItem === "pro-script" ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <img
+                    src={scriptIcon}
+                    alt="剧本"
+                    className="absolute z-1 left-1/2 top-3 size-9 -translate-x-1/2 object-contain"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-x-0 z-1 top-15.5 h-3.75 px-1 text-base font-normal text-[#464646] font-YaHei leading-[1.32] text-center whitespace-nowrap">
+                    剧本
+                  </span>
+                </div>
+              </div>
+            )}
             <span className="mt-3 flex-1 text-center text-[1.25rem] text-[#656565] font-YaHei leading-[1.32]">
               深度掌控每个细节
             </span>
