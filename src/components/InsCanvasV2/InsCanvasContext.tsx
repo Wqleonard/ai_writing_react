@@ -5,6 +5,7 @@ const defaultValue: InsCanvasHandlers = {
   handleMainCardCreate: () => {},
   handleAddCardToDialog: () => {},
   handleAddGroupToDialog: () => {},
+  requestOpenFileByPath: () => {},
   handlePrepareGenerateToDialog: () => {},
   handlePrepareBrainstormCard: () => {},
   handleGroupDelete: () => {},

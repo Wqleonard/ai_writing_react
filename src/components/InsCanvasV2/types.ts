@@ -110,6 +110,8 @@ export type CanvasGenerateOptions = {
   files?: Record<string, string>;
   title?: string;
   actionLabel?: string;
+  includeDialogReferences?: boolean;
+  clearDialogPreviewsAfterRequest?: boolean;
 };
 
 export type CanvasGenerateOutlineOptions = CanvasGenerateOptions & {
@@ -176,8 +178,11 @@ export interface InsCanvasApi {
   addNewCanvas: () => void;
   addInfoCardFromExternalFile: (options: AddInfoCardFromExternalFileOptions) => string;
   focusFileByPath: (filePath: string, options?: FocusFileByPathOptions) => boolean;
+  syncFileContentByPath: (filePath: string, content: string) => boolean;
   openHistory: () => void;
   saveCanvas: (sessionId?: string) => void;
+  flushPersistence: () => Promise<void>;
+  stopCurrentRequest: () => Promise<void>;
   inspirationDrawId: string;
   isLoading: boolean;
 }
@@ -193,6 +198,8 @@ export interface InsCanvasProps {
   onCanvasReady?: () => void;
   autoSyncDirectory?: boolean;
   onAutoSyncDirectory?: (files: Record<string, string>) => void;
+  onCanvasFileContentChange?: (filePath: string, content: string) => void;
+  onCanvasOpenFileRequest?: (filePath: string) => void;
 }
 
 export interface InsCanvasInnerProps extends InsCanvasProps {
@@ -203,6 +210,7 @@ export interface InsCanvasHandlers {
   handleMainCardCreate: (nodeId: string) => void;
   handleAddCardToDialog: (nodeId: string) => void;
   handleAddGroupToDialog: (groupNodeId: string) => void;
+  requestOpenFileByPath: (filePath: string) => void;
   handlePrepareGenerateToDialog: (
     nodeId: string,
     outputType: CanvasOutputType,

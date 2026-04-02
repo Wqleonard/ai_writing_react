@@ -149,6 +149,10 @@ type WorkVersion = {
   updatedTime?: string;
 };
 
+type EditorBizType = "short-story" | "short-play";
+type SubmitMode = "chat" | "agent";
+type ChatType = "script";
+
 type EditorInitialParams = {
   message?: string;
   autoSubmitInitialMessage?: boolean;
@@ -162,6 +166,7 @@ type EditorInitialParams = {
   selectedTexts?: import("@/stores/chatStore").SelectedText[];
   selectedTools?: import("@/stores/chatInputStore/types").AgentTalkToolValue[];
   isShowAnswerTip?: boolean;
+  editorBizType?: EditorBizType;
 };
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
@@ -172,6 +177,9 @@ type RankingListTransmissionParams = {
   message?: string;
   disableAutoSubmit?: boolean;
 };
+
+const normalizeEditorBizType = (value: unknown): EditorBizType =>
+  value === "short-play" ? "short-play" : "short-story";
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
   if (!input) return null;
@@ -376,6 +384,11 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
+  const editorBizType = normalizeEditorBizType(
+    (location.state as EditorInitialParams | null)?.editorBizType
+  );
+  const isShortPlayEditor = editorBizType === "short-play";
+  const showStepWorkflow = !isShortPlayEditor;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
   // chatheader 相关
@@ -842,7 +855,8 @@ const MarkdownEditorPage = () => {
         reload?: boolean;
         command?: string;
         addUserMessage?: boolean;
-        submitMode?: "chat" | "agent";
+        submitMode?: SubmitMode;
+        chatType?: ChatType;
         commandOnly?: boolean;
       }
     ) => {
@@ -900,12 +914,15 @@ const MarkdownEditorPage = () => {
               remoteAddress: file.putFilePath,
             }))
             : undefined;
-        const submitMode = options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const submitMode =
+          options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const chatType = options?.chatType ?? (isShortPlayEditor ? "script" : undefined);
         langGraphStream.submit(
           message,
           sessionId,
           workId,
           submitMode,
+          chatType,
           selectedTools,
           attachments,
           options?.reload,
@@ -926,6 +943,7 @@ const MarkdownEditorPage = () => {
       chatCurrentSession,
       createNewSession,
       isAnswerOnly,
+      isShortPlayEditor,
       langGraphStream,
       modelLLM,
       clearSelectedFiles,
@@ -953,11 +971,14 @@ const MarkdownEditorPage = () => {
   const [isCanvasFileDragOver, setIsCanvasFileDragOver] = useState(false);
   const [canvasReadyKey, setCanvasReadyKey] = useState(0);
   const [canvasFocusRequestSeq, setCanvasFocusRequestSeq] = useState(0);
+  const [isCanvasSnapshotPending, setIsCanvasSnapshotPending] = useState(false);
   const [canvasInitialNodes, setCanvasInitialNodes] = useState<unknown[]>([]);
   const [canvasInitialEdges, setCanvasInitialEdges] = useState<unknown[]>([]);
   const [canvasInitialInspirationDrawId, setCanvasInitialInspirationDrawId] = useState("");
   const [canvasInitialSnapshotKey, setCanvasInitialSnapshotKey] = useState(0);
   const canvasSnapshotLoadingRef = useRef(false);
+  const canvasSnapshotRequestSeqRef = useRef(0);
+  const canvasLeaveFlushPromiseRef = useRef<Promise<void> | null>(null);
   const onCanvasReady = useCallback(() => setCanvasReadyKey((k) => k + 1), []);
 
   // editor 相关 - 使用 useShallow 优化订阅，避免不必要的重渲染
@@ -1021,6 +1042,7 @@ const MarkdownEditorPage = () => {
   const treeDataRef = useRef<TreeNodeLike[]>(treeData as TreeNodeLike[]);
   const workInfoStageRef = useRef(workInfo.stage);
   const lastCanvasSyncedKeysRef = useRef<string[]>([]);
+  const canvasSnapshotHydratingRef = useRef(false);
   const canvasTaggedFilePathSetRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     treeDataRef.current = treeData as TreeNodeLike[];
@@ -1090,22 +1112,53 @@ const MarkdownEditorPage = () => {
 
   const handleCanvasAutoSyncDirectory = useCallback(
     (canvasFiles: Record<string, string>) => {
-      const currentServerData = useEditorStore.getState().serverData;
-      const keysToRemove = new Set(lastCanvasSyncedKeysRef.current);
-      const withoutCanvasSync = Object.fromEntries(
-        Object.entries(currentServerData).filter(([key]) => !keysToRemove.has(key))
-      );
-      const mergedFiles = {
-        ...withoutCanvasSync,
-        ...canvasFiles,
-      };
-      lastCanvasSyncedKeysRef.current = Object.keys(canvasFiles);
+      const latestState = useEditorStore.getState();
+      const currentServerData = latestState.serverData;
+      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
+      const incomingCanvasKeys = Object.keys(canvasFiles);
+      const beforeCanvasKeys = lastCanvasSyncedKeysRef.current;
+      const isHydratingFromSnapshot = canvasSnapshotHydratingRef.current;
+      const isStrictSubsetRollback =
+        incomingCanvasKeys.length > 0 &&
+        incomingCanvasKeys.length < beforeCanvasKeys.length &&
+        incomingCanvasKeys.every((key) => beforeCanvasKeys.includes(key));
+      const isEmptyRollback = incomingCanvasKeys.length === 0 && beforeCanvasKeys.length > 0;
+      const shouldProtectRollback =
+        isHydratingFromSnapshot && (isStrictSubsetRollback || isEmptyRollback);
+
+      let mergedFiles: Record<string, string>;
+      let nextCanvasTrackedKeys: string[];
+
+      if (shouldProtectRollback) {
+        mergedFiles = {
+          ...currentServerData,
+          ...canvasFiles,
+        };
+        nextCanvasTrackedKeys = Array.from(
+          new Set([...beforeCanvasKeys, ...incomingCanvasKeys])
+        );
+      } else {
+        const keysToRemove = new Set(beforeCanvasKeys);
+        const withoutCanvasSync = Object.fromEntries(
+          Object.entries(currentServerData).filter(([key]) => !keysToRemove.has(key))
+        );
+        mergedFiles = {
+          ...withoutCanvasSync,
+          ...canvasFiles,
+        };
+        nextCanvasTrackedKeys = incomingCanvasKeys;
+      }
+
+      lastCanvasSyncedKeysRef.current = nextCanvasTrackedKeys;
       canvasTaggedFilePathSetRef.current = new Set(
-        Object.keys(canvasFiles)
+        nextCanvasTrackedKeys
           .map((key) => normalizeCanvasFilePath(key))
           .filter((key) => key.toLowerCase().endsWith(".md"))
       );
       setServerData(mergedFiles);
+      if (isHydratingFromSnapshot) {
+        canvasSnapshotHydratingRef.current = false;
+      }
     },
     [normalizeCanvasFilePath, setServerData]
   );
@@ -1136,7 +1189,10 @@ const MarkdownEditorPage = () => {
   }, [workId, setWorkId]);
 
   useEffect(() => {
+    canvasSnapshotRequestSeqRef.current += 1;
     canvasSnapshotLoadingRef.current = false;
+    canvasSnapshotHydratingRef.current = false;
+    setIsCanvasSnapshotPending(false);
     setCanvasInitialNodes([]);
     setCanvasInitialEdges([]);
     setCanvasInitialInspirationDrawId("");
@@ -1148,7 +1204,10 @@ const MarkdownEditorPage = () => {
   const loadLatestCanvasSnapshot = useCallback(async () => {
     if (!workId) return;
     if (canvasSnapshotLoadingRef.current) return;
+    const requestSeq = canvasSnapshotRequestSeqRef.current + 1;
+    canvasSnapshotRequestSeqRef.current = requestSeq;
     canvasSnapshotLoadingRef.current = true;
+    setIsCanvasSnapshotPending(true);
     try {
       const req = (await getWorksByIdReq(workId)) as
         | {
@@ -1190,6 +1249,10 @@ const MarkdownEditorPage = () => {
       const parsedContent = parseCanvasContent(drawWithCanvas?.content);
       const nextNodes = Array.isArray(parsedContent?.nodes) ? parsedContent.nodes : [];
       const nextEdges = Array.isArray(parsedContent?.edges) ? parsedContent.edges : [];
+      if (canvasSnapshotRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      canvasSnapshotHydratingRef.current = true;
       setCanvasInitialNodes(nextNodes);
       setCanvasInitialEdges(nextEdges);
       setCanvasInitialInspirationDrawId(String(drawWithCanvas?.id ?? ""));
@@ -1198,6 +1261,9 @@ const MarkdownEditorPage = () => {
       // ignore canvas snapshot loading errors; fallback to empty canvas
     } finally {
       canvasSnapshotLoadingRef.current = false;
+      if (canvasSnapshotRequestSeqRef.current === requestSeq) {
+        setIsCanvasSnapshotPending(false);
+      }
     }
   }, [workId]);
 
@@ -1264,8 +1330,10 @@ const MarkdownEditorPage = () => {
       return;
     }
     if (workInfo?.stage === "blank") return;
+    const latestState = useEditorStore.getState();
+    const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
     void saveEditorData("1", false);
-  }, [treeData, workInfo?.stage, saveEditorData]);
+  }, [activeTab, saveEditorData, treeData, workId, workInfo?.stage]);
 
   // 与 Vue 对齐：生产环境每 5 分钟自动保存一次
   useEffect(() => {
@@ -1378,7 +1446,13 @@ const MarkdownEditorPage = () => {
               typeof initialParams.isAnswerOnly === "boolean"
                 ? (initialParams.isAnswerOnly ? "chat" : "agent")
                 : undefined;
-            sendChatText(msg, { addUserMessage: true, submitMode: initialSubmitMode });
+            const initialChatType =
+              initialParams.editorBizType === "short-play" ? "script" : undefined;
+            sendChatText(msg, {
+              addUserMessage: true,
+              submitMode: initialSubmitMode,
+              chatType: initialChatType,
+            });
             setPendingInitialMessage("");
           }, 0);
         }
@@ -1389,7 +1463,7 @@ const MarkdownEditorPage = () => {
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+  }, [isShortPlayEditor, location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
     if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
@@ -1534,6 +1608,16 @@ const MarkdownEditorPage = () => {
   const handleSearchReplace = useCallback(() => {
     setShowSearchReplaceDialog(true);
   }, []);
+
+  const handleMainEditorChange = useCallback((nextContent: string) => {
+    setCurrentContent(nextContent);
+
+    const normalizedPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!normalizedPath) return;
+
+    const didSync = insCanvasRef.current?.syncFileContentByPath(normalizedPath, nextContent) ?? false;
+    void didSync;
+  }, [activeTab, currentEditingId, normalizeCanvasFilePath, setCurrentContent]);
 
   // 查找预览使用延迟值，避免每次键入都立即全量扫描正文
   const deferredSearchText = useDeferredValue(searchText);
@@ -1701,8 +1785,9 @@ const MarkdownEditorPage = () => {
 
   const requestCanvasFocusByFilePath = useCallback((rawFilePath: string) => {
     const normalizedPath = sanitizeIncomingFilePath(rawFilePath);
-    if (!normalizedPath) return;
-
+    if (!normalizedPath) {
+      return;
+    }
     pendingCanvasFocusFilePathRef.current = normalizedPath;
     if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
       preCanvasRightWidthRemRef.current = rightPanelWidthRem;
@@ -1710,37 +1795,84 @@ const MarkdownEditorPage = () => {
     setIsCanvasFilePreviewMode(true);
     setIsCanvasPreviewEditorClosed(false);
     setCanvasPreviewSplitLayout();
+    if (activeTab !== "canvas") {
+      setIsCanvasSnapshotPending(true);
+    }
     setActiveTab("canvas");
     setCanvasFocusRequestSeq((seq) => seq + 1);
-  }, [activeTab, rightPanelWidthRem, setCanvasPreviewSplitLayout]);
+  }, [activeTab, rightPanelWidthRem, setCanvasPreviewSplitLayout, workId]);
 
   const handleTreeFileSelect = useCallback((node: FileTreeNode) => {
     const pathFromTree = Array.isArray(node.path) ? node.path.join("/") : "";
     const normalizedPath = normalizeCanvasFilePath(pathFromTree || node.id);
     if (!normalizedPath) return;
-
     const isCanvasTaggedFile =
       canvasTaggedFilePathSetRef.current.has(normalizedPath) ||
       isLikelyCanvasGeneratedPath(normalizedPath);
-
     if (!isCanvasTaggedFile) return;
     requestCanvasFocusByFilePath(normalizedPath);
-  }, [isLikelyCanvasGeneratedPath, normalizeCanvasFilePath, requestCanvasFocusByFilePath]);
+  }, [
+    isLikelyCanvasGeneratedPath,
+    normalizeCanvasFilePath,
+    requestCanvasFocusByFilePath,
+  ]);
 
   const handleCloseCanvasPreviewEditor = useCallback(() => {
     setIsCanvasPreviewEditorClosed(true);
     maximizeRightPanel();
   }, [maximizeRightPanel]);
 
+  const flushCanvasBeforeLeave = useCallback(async () => {
+    if (activeTab !== "canvas") return;
+    if (canvasLeaveFlushPromiseRef.current) {
+      await canvasLeaveFlushPromiseRef.current;
+      return;
+    }
+    const flushPromise = (insCanvasRef.current?.flushPersistence?.() ?? Promise.resolve()).catch(() => undefined);
+    const trackedFlushPromise = flushPromise.finally(() => {
+      if (canvasLeaveFlushPromiseRef.current === trackedFlushPromise) {
+        canvasLeaveFlushPromiseRef.current = null;
+      }
+    });
+    canvasLeaveFlushPromiseRef.current = trackedFlushPromise;
+    await canvasLeaveFlushPromiseRef.current;
+  }, [activeTab]);
+
   const handleChatHeaderTabChange = useCallback(
-    (tab: ChatTabType) => {
+    async (tab: ChatTabType) => {
       if (tab === "canvas") {
+        if (activeTab !== "canvas") {
+          if (langGraphStream.isStreaming) {
+            const ok = await confirm({
+              title: "提示",
+              message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+              cancelText: "取消",
+              confirmText: "确认",
+            });
+            if (!ok) return;
+            handleStopStreaming();
+          }
+        }
         setIsCanvasPreviewEditorClosed(false);
         if (activeTab !== "canvas" && preCanvasRightWidthRemRef.current == null) {
           preCanvasRightWidthRemRef.current = rightPanelWidthRem;
         }
+        if (activeTab !== "canvas") {
+          setIsCanvasSnapshotPending(true);
+        }
         maximizeRightPanel();
-      } else if (tab === "chat" && activeTab === "canvas") {
+      } else if (activeTab === "canvas") {
+        if (insCanvasRef.current?.isLoading) {
+          const ok = await confirm({
+            title: "提示",
+            message: "检测到正在进行流式任务，确认操作将中断当前任务，是否继续？",
+            cancelText: "取消",
+            confirmText: "确认",
+          });
+          if (!ok) return;
+          await insCanvasRef.current.stopCurrentRequest();
+        }
+        await flushCanvasBeforeLeave();
         setIsCanvasFilePreviewMode(false);
         setIsCanvasPreviewEditorClosed(false);
         if (preCanvasRightWidthRemRef.current != null) {
@@ -1750,7 +1882,7 @@ const MarkdownEditorPage = () => {
       }
       setActiveTab(tab);
     },
-    [activeTab, maximizeRightPanel, rightPanelWidthRem]
+    [activeTab, confirm, flushCanvasBeforeLeave, handleStopStreaming, langGraphStream.isStreaming, maximizeRightPanel, rightPanelWidthRem]
   );
 
   useEffect(() => {
@@ -1761,13 +1893,12 @@ const MarkdownEditorPage = () => {
     let secondFrame = 0;
     firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        const focused =
-          insCanvasRef.current?.focusFileByPath(pendingFilePath, {
-            zoom: 0.95,
-            duration: 500,
-            maxAttempts: 24,
-          }) ?? false;
-        if (focused && pendingCanvasFocusFilePathRef.current === pendingFilePath) {
+        insCanvasRef.current?.focusFileByPath(pendingFilePath, {
+          zoom: 0.95,
+          duration: 500,
+          maxAttempts: 24,
+        });
+        if (pendingCanvasFocusFilePathRef.current === pendingFilePath) {
           pendingCanvasFocusFilePathRef.current = "";
         }
       });
@@ -1776,7 +1907,15 @@ const MarkdownEditorPage = () => {
       if (firstFrame) cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [activeTab, canvasReadyKey, rightPanelWidthRem, canvasFocusRequestSeq]);
+  }, [activeTab, canvasFocusRequestSeq, canvasReadyKey, rightPanelWidthRem, workId]);
+
+  useEffect(() => {
+    const normalizedPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!normalizedPath) return;
+
+    const didSync = insCanvasRef.current?.syncFileContentByPath(normalizedPath, currentContent) ?? false;
+    void didSync;
+  }, [activeTab, canvasReadyKey, currentContent, currentEditingId, normalizeCanvasFilePath]);
 
   const fileKey = currentEditingId || DEFAULT_EDITING_FILE_KEY;
   // ================== EDIT_FILE START ==================
@@ -2259,6 +2398,7 @@ const MarkdownEditorPage = () => {
 
   // stepWorkFlow 相关逻辑
   useEffect(() => {
+    if (!showStepWorkflow) return;
     const { template, showTake2 } = location.state ?? {};
     if (!template && !showTake2) return;
 
@@ -2290,7 +2430,7 @@ const MarkdownEditorPage = () => {
     return () => {
       cancelAnimationFrame(rafId);
     };
-  }, [location]);
+  }, [location, showStepWorkflow]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
@@ -2434,8 +2574,10 @@ const MarkdownEditorPage = () => {
   const handleCanvasCreateHere = useCallback(
     async (files: Record<string, string>, chain: { data?: { content?: string } } | null) => {
       if (!workId) return;
+      const latestState = useEditorStore.getState();
+      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       const merged = ensureCanvasTreeSkeleton({
-        ...useEditorStore.getState().serverData,
+        ...latestState.serverData,
         ...files,
       });
       setServerData(merged);
@@ -2458,7 +2600,7 @@ const MarkdownEditorPage = () => {
         // 后端保存失败时不打断本地继续创作
       }
 
-      handleChatHeaderTabChange("chat");
+      await handleChatHeaderTabChange("chat");
       const prompt = "现在根据故事简介、故事设定和大纲，使用内容创作代理开始逐章写小说正文。";
       setPendingInitialMessage(prompt);
       setShouldAutoSubmitInitialMessage(false);
@@ -2508,6 +2650,12 @@ const MarkdownEditorPage = () => {
     [navigate]
   );
 
+  const handleCanvasFileContentChange = useCallback((filePath: string, content: string) => {
+    const normalizedPath = normalizeCanvasFilePath(filePath);
+    if (!normalizedPath) return;
+    setServerDataFile(normalizedPath, content);
+  }, [currentEditingId, normalizeCanvasFilePath, setServerDataFile]);
+
   // 与 Vue handleKnowledgeBaseUpdate 对齐：合并知识库文件、定位文件，并在 blank 阶段升级为 final
   const handleKnowledgeBaseUpdate = useCallback(
     (knowledgeBase: Record<string, string>) => {
@@ -2539,17 +2687,41 @@ const MarkdownEditorPage = () => {
     [setServerData, setServerDataFile, workId, setWorkInfo]
   );
 
-  const handleFileNameClick = useCallback((rawFileName: string) => {
+  const openCanvasFileByPath = useCallback((rawFileName: string, allowPending = false) => {
     const normalized = sanitizeIncomingFilePath(rawFileName);
-    if (!normalized) return;
+    if (!normalized) {
+      console.warn("[canvas-open-debug] open-file-empty-path", {
+        rawFileName,
+        allowPending,
+      });
+      return;
+    }
 
     // 使用 ref 里的最新树数据，保持回调稳定引用
     const tree = treeDataRef.current;
-    const targetNode = resolveFileNodeByPath(tree, normalized);
+    const normalizedCandidates = Array.from(new Set([
+      normalized,
+      normalized.replace(/^角色卡\//, "[角色卡]/"),
+      normalized.replace(/^脑洞卡\//, "[脑洞卡]/"),
+      normalized.replace(/^梗概卡\//, "[梗概卡]/"),
+      normalized.replace(/^设定卡\//, "[设定卡]/"),
+      normalized.replace(/^大纲卡\//, "[大纲卡]/"),
+    ]));
+    const targetNode =
+      normalizedCandidates
+        .map((candidate) => resolveFileNodeByPath(tree, candidate))
+        .find(Boolean) ?? null;
+    const fileName = normalized.split("/").pop()?.trim() ?? "";
+    const flattenTreeIds = (nodes: TreeNodeLike[]): string[] =>
+      nodes.flatMap((node) => [
+        String(node.id ?? ""),
+        ...flattenTreeIds(Array.isArray(node.children) ? (node.children as TreeNodeLike[]) : []),
+      ]);
+    const flatTreeIds = flattenTreeIds(tree).filter(Boolean);
 
     if (!targetNode) {
       // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
-      if (chatInputStatusRef.current === "streaming") {
+      if (allowPending && chatInputStatusRef.current === "streaming") {
         pendingFileNameClickRef.current = normalized;
       }
       return;
@@ -2560,19 +2732,16 @@ const MarkdownEditorPage = () => {
     pendingFileNameClickRef.current = "";
   }, [requestCanvasFocusByFilePath]);
 
+  const handleFileNameClick = useCallback((rawFileName: string) => {
+    openCanvasFileByPath(rawFileName, true);
+  }, [openCanvasFileByPath]);
+
   useEffect(() => {
     const pending = pendingFileNameClickRef.current;
     if (!pending) return;
 
-    const normalized = pending.replace(/^\/+/, "").trim();
-    const tree = treeData as TreeNodeLike[];
-    const targetNode = resolveFileNodeByPath(tree, normalized);
-
-    if (!targetNode) return;
-    useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
-    requestCanvasFocusByFilePath(targetNode.id);
-    pendingFileNameClickRef.current = "";
-  }, [treeData, requestCanvasFocusByFilePath]);
+    openCanvasFileByPath(pending, false);
+  }, [treeData, openCanvasFileByPath]);
 
   // 进入编辑态后聚焦并选中输入框
   useEffect(() => {
@@ -2864,6 +3033,7 @@ const MarkdownEditorPage = () => {
         onUpdateTitle={handleTitleUpdate}
         onHelpWriteClick={helpWriteClick}
         updatedTime={workInfo.updatedTime}
+        hidePromptActions={isShortPlayEditor}
       />
       <div
         ref={resizeContainerRef}
@@ -3153,7 +3323,7 @@ const MarkdownEditorPage = () => {
                               className="editor-outer-scroll-mode"
                               fontClassName="font-KaiTi"
                               value={currentContent}
-                              onChange={setCurrentContent}
+                              onChange={handleMainEditorChange}
                               placeholder={EDITOR_PLACEHOLDER}
                               // readonly={!isEditorEditable}
                               btns={["edit", "expand", "add", "note"]}
@@ -3164,7 +3334,7 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow ref={stepWorkflowRef}/>
+                        {showStepWorkflow ? <StepWorkflow ref={stepWorkflowRef} /> : null}
                       </div>
                     </div>
                   </div>
@@ -3291,24 +3461,32 @@ const MarkdownEditorPage = () => {
                   onDragLeaveCapture={handleCanvasFileDragLeave}
                   onDropCapture={handleCanvasFileDrop}
                 >
-                  <InsCanvas
-                    key={`ins-canvas-${workId}-${canvasInitialSnapshotKey}`}
-                    ref={insCanvasRef}
-                    workId={workId}
-                    nodes={canvasInitialNodes as any}
-                    edges={canvasInitialEdges as any}
-                    inspirationDrawId={canvasInitialInspirationDrawId}
-                    onCreateHere={handleCanvasCreateHere}
-                    onCreateNew={handleCanvasCreateNew}
-                    autoSyncDirectory={autoSyncCanvasDirectory}
-                    onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
-                    onMessage={(type, msg) => {
-                      if (type === "success") toast.success(msg);
-                      else if (type === "error") toast.error(msg);
-                      else toast(msg);
-                    }}
-                    onCanvasReady={onCanvasReady}
-                  />
+                  {isCanvasSnapshotPending ? (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      正在加载画布...
+                    </div>
+                  ) : (
+                    <InsCanvas
+                      key={`ins-canvas-${workId}-${canvasInitialSnapshotKey}`}
+                      ref={insCanvasRef}
+                      workId={workId}
+                      nodes={canvasInitialNodes as any}
+                      edges={canvasInitialEdges as any}
+                      inspirationDrawId={canvasInitialInspirationDrawId}
+                      onCreateHere={handleCanvasCreateHere}
+                      onCreateNew={handleCanvasCreateNew}
+                      autoSyncDirectory={autoSyncCanvasDirectory}
+                      onAutoSyncDirectory={handleCanvasAutoSyncDirectory}
+                      onCanvasFileContentChange={handleCanvasFileContentChange}
+                      onCanvasOpenFileRequest={handleFileNameClick}
+                      onMessage={(type, msg) => {
+                        if (type === "success") toast.success(msg);
+                        else if (type === "error") toast.error(msg);
+                        else toast(msg);
+                      }}
+                      onCanvasReady={onCanvasReady}
+                    />
+                  )}
                   {isCanvasFileDragOver ? (
                     <div className="pointer-events-none absolute inset-0 z-20 rounded-[20px] border-2 border-dashed border-[#8E77F0] bg-[#8E77F0]/8">
                       <div className="flex h-full items-center justify-center">
