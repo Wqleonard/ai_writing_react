@@ -2,9 +2,14 @@ import {
   createBrowserRouter,
   Navigate,
   redirect,
+  type LoaderFunctionArgs,
   type RouteObject,
 } from "react-router-dom";
 import { lazy } from "react";
+import {
+  hardNavigateToEditorOnce,
+  isEditorAssetLoadError,
+} from "@/utils/editorNavigationFallback";
 
 // 首屏关键组件保持同步导入
 import LandingPage from "@/pages/landing";
@@ -17,7 +22,20 @@ import ChildrenPrivacyProtectionPolicyPage from "@/pages/agreement/children-priv
 
 const StoryClawLandingPage = lazy(() => import("@/pages/story-claw-landing"));
 // 懒加载页面组件
-const MarkdownEditorPage = lazy(() => import("@/pages/editor"));
+const MarkdownEditorPage = lazy(async () => {
+  try {
+    return await import("@/pages/editor");
+  } catch (error) {
+    if (isEditorAssetLoadError(error)) {
+      hardNavigateToEditorOnce({
+        targetPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        reason: "编辑器懒加载资源失败",
+        error,
+      });
+    }
+    throw error;
+  }
+});
 const TrendingListPage = lazy(() => import("@/pages/trending-list"));
 const CoursePage = lazy(() => import("@/pages/creation-community/course"));
 const CourseDetailsPage = lazy(
@@ -62,7 +80,7 @@ const MFeedbackIssuePage = lazy(() => import("@/m-pages/feedback-issue"));
 const MUserAgreementPage = lazy(() => import("@/m-pages/user-agreement"));
 const MPrivacyPolicyPage = lazy(() => import("@/m-pages/privacy-policy"));
 
-const editorAuthMiddleware = () => {
+const editorAuthMiddleware = ({ request, params }: LoaderFunctionArgs) => {
   const token = localStorage.getItem("token");
   if (!token) {
     throw redirect("/workspace/my-place");

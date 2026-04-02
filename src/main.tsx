@@ -9,6 +9,10 @@ import { initMatomo } from "@certible/use-matomo";
 import { setMatomoTracker } from '@/matomo/trackingMatomoEvent'
 import { useLoginStore } from '@/stores/loginStore'
 import { initInvitationCode } from '@/utils/invitationCode'
+import {
+  hardNavigateToEditorOnce,
+  isEditorAssetLoadError,
+} from '@/utils/editorNavigationFallback'
 import '@/stores/themeStore'
 import './index.css'
 
@@ -30,6 +34,36 @@ try {
 
 useLoginStore.getState().initUserInfo()
 void initInvitationCode()
+
+window.addEventListener('error', event => {
+  const pathname = window.location.pathname
+  const eventError = event.error ?? new Error(event.message)
+
+  if (!pathname.startsWith('/editor/') || !isEditorAssetLoadError(eventError)) {
+    return
+  }
+
+  hardNavigateToEditorOnce({
+    targetPath: `${pathname}${window.location.search}${window.location.hash}`,
+    reason: '编辑器资源加载失败（window error）',
+    error: eventError,
+  })
+})
+
+window.addEventListener('unhandledrejection', event => {
+  const pathname = window.location.pathname
+  const reason = event.reason
+
+  if (!pathname.startsWith('/editor/') || !isEditorAssetLoadError(reason)) {
+    return
+  }
+
+  hardNavigateToEditorOnce({
+    targetPath: `${pathname}${window.location.search}${window.location.hash}`,
+    reason: '编辑器资源加载失败（unhandledrejection）',
+    error: reason,
+  })
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

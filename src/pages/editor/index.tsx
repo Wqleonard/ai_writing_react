@@ -33,6 +33,7 @@ import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
 import { resetLLMState, useLLM } from "@/hooks/useLLM";
 import useMarkdownEditor, { type HighlightMarkerInfo } from "@/hooks/useMarkdownEditor";
+import { clearEditorReloadTarget } from "@/utils/editorNavigationFallback";
 import type {
   AgentCustomMessageItem,
   ChatMessage,
@@ -376,6 +377,9 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
+  useEffect(() => {
+    clearEditorReloadTarget();
+  }, [location.key, location.pathname, location.state, workId]);
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
   // chatheader 相关
