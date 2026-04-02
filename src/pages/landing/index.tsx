@@ -87,6 +87,21 @@ export default function LandingPage() {
     }
   }, [isCreatingWork, navigate])
 
+  const addShortPlayWorkEditor = useCallback(async () => {
+    if (isCreatingWork) return
+    try {
+      setIsCreatingWork(true)
+      const req = await createWorkReq('editor')
+      if (req?.id) {
+        navigate(`/editor/${req.id}`, { state: { editorBizType: "short-play" } })
+      }
+    } catch {
+      toast.error('创建作品失败，请稍后重试')
+    } finally {
+      setIsCreatingWork(false)
+    }
+  }, [isCreatingWork, navigate])
+
   const handleQuickEditorClick = async () => {
     trackEvent('Story Creation', 'Click', 'Quick New from Landing')
     await requireLogin(addQuickWork)
@@ -100,6 +115,11 @@ export default function LandingPage() {
   const handleEditorClick = async () => {
     trackEvent('Story Creation', 'Click', "Common New from Landing")
     await requireLogin(addWorkEditor)
+  }
+
+  const handleProfessionalShortPlayClick = async () => {
+    trackEvent('Story Creation', 'Click', 'Script New from Landing')
+    await requireLogin(addShortPlayWorkEditor)
   }
 
   return (
@@ -145,6 +165,7 @@ export default function LandingPage() {
                   onShortStoryClick={handleQuickEditorClick}
                   onScriptClick={handleScriptEditorClick}
                   onProfessionalClick={handleEditorClick}
+                  onProfessionalShortPlayClick={handleProfessionalShortPlayClick}
                 />
               </div>
 
