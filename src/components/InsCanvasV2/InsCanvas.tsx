@@ -200,6 +200,112 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     paddingTop: ROLE_GROUP_PADDING_TOP,
     padding: ROLE_GROUP_PADDING,
   } = ROLE_GROUP_LAYOUT;
+  const TASK_TYPE_LABEL_MAP: Record<string, string> = {
+    "brain-storm-card": "脑洞",
+    "info-card": "信息",
+    "story-setting-card": "梗概",
+    "role-setting-card": "角色",
+    "outline-card": "大纲",
+  };
+  const TASK_TYPE_CARD_KEY_MAP: Record<string, CanvasCardKey> = {
+    "brain-storm-card": "brainstorm",
+    "info-card": "info",
+    "story-setting-card": "summary",
+    "role-setting-card": "role",
+    "outline-card": "outline",
+  };
+  const getTaskTypeLabel = (taskType: unknown) => {
+    const normalizedTaskType = getTextValue(taskType);
+    return TASK_TYPE_LABEL_MAP[normalizedTaskType] ?? "";
+  };
+  const getTaskCardKey = (taskType: unknown): CanvasCardKey | "" => {
+    const normalizedTaskType = getTextValue(taskType);
+    return TASK_TYPE_CARD_KEY_MAP[normalizedTaskType] ?? "";
+  };
+  const getPositiveTaskNum = (taskNum: unknown) => {
+    const normalizedTaskNum = Number.parseInt(getTextValue(taskNum), 10);
+    return Number.isFinite(normalizedTaskNum) && normalizedTaskNum > 0 ? normalizedTaskNum : 0;
+  };
+  const parseTaskJsonContent = (content: unknown): Record<string, unknown> | null => {
+    const normalizedContent = getTextValue(content);
+    if (!normalizedContent) return null;
+    try {
+      const parsed = JSON.parse(normalizedContent);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+  const extractTaskJsonPayload = (value: unknown): Record<string, unknown> | null => {
+    let result: Record<string, unknown> | null = null;
+
+    const visit = (input: unknown) => {
+      if (result || !input) return;
+      if (Array.isArray(input)) {
+        input.forEach(visit);
+        return;
+      }
+      if (typeof input !== "object") return;
+
+      const record = input as {
+        tool_calls?: Array<{
+          name?: string;
+          args?: { file_path?: string; content?: string };
+        }>;
+        tools?: {
+          files?: Record<string, unknown>;
+        };
+      } & Record<string, unknown>;
+      const toolFiles = record.tools?.files;
+      if (toolFiles && typeof toolFiles === "object") {
+        const directTaskJson =
+          toolFiles["/task.json"] ??
+          toolFiles["task.json"] ??
+          Object.entries(toolFiles).find(([filePath]) => /(^|\/)task\.json$/i.test(filePath))?.[1];
+        const parsedTaskJson = parseTaskJsonContent(directTaskJson);
+        if (parsedTaskJson) {
+          result = parsedTaskJson;
+          return;
+        }
+      }
+
+      if (Array.isArray(record.tool_calls)) {
+        for (const toolCall of record.tool_calls) {
+          if (getTextValue(toolCall?.name) !== "write_file") continue;
+          if (!/(^|\/)task\.json$/i.test(getTextValue(toolCall?.args?.file_path))) continue;
+          const parsedTaskJson = parseTaskJsonContent(toolCall?.args?.content);
+          if (parsedTaskJson) {
+            result = parsedTaskJson;
+            return;
+          }
+        }
+      }
+
+      Object.values(record).forEach(visit);
+    };
+
+    visit(value);
+    return result;
+  };
+  const getNextTaskPanelLabelFromStream = (value: unknown) => {
+    const taskJson = extractTaskJsonPayload(value);
+    return getTaskTypeLabel(taskJson?.next_task_type);
+  };
+  const getCurrentTaskPanelLabelFromStream = (value: unknown) => {
+    const taskJson = extractTaskJsonPayload(value);
+    const taskTypeLabel = getTaskTypeLabel(taskJson?.task_type);
+    // const taskNum = getPositiveTaskNum(taskJson?.task_num);
+    if (!taskTypeLabel) return "";
+    return taskTypeLabel;
+  };
+  const getCurrentTaskPlaceholderConfigFromStream = (value: unknown) => {
+    const taskJson = extractTaskJsonPayload(value);
+    const key = getTaskCardKey(taskJson?.task_type);
+    const taskNum = getPositiveTaskNum(taskJson?.task_num);
+    if (!key || taskNum <= 0) return null;
+    return { key, taskNum };
+  };
   const getCanvasNodeLayoutSize = (node: CustomNode) => {
     const measuredWidth = Number((node as any)?.measured?.width ?? (node as any)?.dimensions?.width ?? 0);
     const measuredHeight = Number((node as any)?.measured?.height ?? (node as any)?.dimensions?.height ?? 0);
@@ -954,6 +1060,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
     const [reqPanelVisible, setReqPanelVisible] = useState(false);
     const [reqPanelExpanded, setReqPanelExpanded] = useState(false);
     const [cardKeyLabel, setCardKeyLabel] = useState<string>("脑洞");
+    const nextReqPanelTaskLabelRef = useRef("");
+    const [reqPanelTaskLabel, setReqPanelTaskLabel] = useState("");
     const [reqPanelTitle, setReqPanelTitle] = useState("");
     const [reqPanelStatus, setReqPanelStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [reqPanelDetail, setReqPanelDetail] = useState<string>("");
@@ -4258,6 +4366,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setSmartSuggestionsActive(false);
         setSmartSuggestions([]);
         resetReqPanelTextRefs();
+        setReqPanelTaskLabel("");
         setReqPanelAction(null);
         setForceCanvasView(true);
         setCanvasReady(true);
@@ -4287,6 +4396,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       let shouldAutoSaveAfterStream = false;
       let shouldResetOutputTypeToAuto = false;
       try {
+        const pendingTaskLabel = nextReqPanelTaskLabelRef.current;
+        nextReqPanelTaskLabelRef.current = "";
         setPendingContextActionLabel(contextActionLabelOverride?.trim?.() || "");
         setReqPanelVisible(true);
         setReqPanelUseSmartTheme(
@@ -4297,6 +4408,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setSmartSuggestionsActive(false);
         setSmartSuggestions([]);
         resetReqPanelTextRefs();
+        setReqPanelTaskLabel(pendingTaskLabel);
         setReqPanelAction(null);
 
         setForceCanvasView(true);
@@ -4375,6 +4487,10 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               }
               const writeFiles = extractUpdateToolFiles(streamData?.data);
               persistGeneratedWriteFiles(writeFiles);
+              const nextTaskPanelLabel = getNextTaskPanelLabelFromStream(streamData?.data);
+              if (nextTaskPanelLabel) {
+                nextReqPanelTaskLabelRef.current = nextTaskPanelLabel;
+              }
               if (!hasWriteFileSuggestions) {
                 const choicesContent = extractChoicesToolFileContent(streamData?.data);
                 if (choicesContent) {
@@ -4716,6 +4832,133 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             : [];
           const brainstormLoadingCardId =
             brainstormPlaceholderIds[brainstormPlaceholderIds.length - 1] ?? "";
+          const extraLoadingCardIdsByKey = new Map<CanvasCardKey, string[]>();
+          const registerExtraLoadingCardIds = (key: CanvasCardKey, nodeIds: string[]) => {
+            if (!nodeIds.length) return;
+            const existingIds = extraLoadingCardIdsByKey.get(key) ?? [];
+            const dedupedIds = nodeIds.filter((nodeId) => nodeId && !existingIds.includes(nodeId));
+            if (!dedupedIds.length) return;
+            extraLoadingCardIdsByKey.set(key, [...existingIds, ...dedupedIds]);
+          };
+          const consumeExtraLoadingCardId = (key: CanvasCardKey) => {
+            const existingIds = extraLoadingCardIdsByKey.get(key) ?? [];
+            while (existingIds.length > 0) {
+              const nextNodeId = existingIds.shift() ?? "";
+              if (!nextNodeId) continue;
+              if (!nodesRef.current.some((node) => node.id === nextNodeId)) continue;
+              if (existingIds.length > 0) {
+                extraLoadingCardIdsByKey.set(key, [...existingIds]);
+              } else {
+                extraLoadingCardIdsByKey.delete(key);
+              }
+              return nextNodeId;
+            }
+            extraLoadingCardIdsByKey.delete(key);
+            return "";
+          };
+          const cleanupExtraLoadingCards = () => {
+            Array.from(extraLoadingCardIdsByKey.values())
+              .flat()
+              .forEach((nodeId) => {
+                cleanupLoadingCard(nodeId);
+              });
+            extraLoadingCardIdsByKey.clear();
+          };
+          const createAdditionalManualLoadingCards = (key: CanvasCardKey, count: number) => {
+            if (count <= 0) return [] as string[];
+            if (key === "brainstorm" && useBrainstormBatchLoading) {
+              const placeholderFiles = Array.from({ length: count }, (_, index) => ({
+                filePath: `brainstorm-placeholder-${Date.now()}-${index + 1}.md`,
+                content: "",
+              }));
+              const nextPlaceholderIds = startBrainstormPlaceholderBatch(
+                placeholderFiles,
+                brainstormBatchIdsRef.current.length > 0 || nodesRef.current.length > 0 ? "append" : "replace"
+              );
+              return nextPlaceholderIds.slice(-count);
+            }
+
+            const commonOptions = {
+              title: "",
+              content: "",
+              image: "",
+              fromApi: true,
+              isStreaming: true,
+              skipAutoStream: true,
+            };
+
+            if (key === "role") {
+              if (useContextLinkedCreation && effectiveSourceNodeId) {
+                return appendRoleCardsToGroup(
+                  effectiveSourceNodeId,
+                  Array.from({ length: count }, () => ({ ...commonOptions }))
+                ).roleNodeIds;
+              }
+              return Array.from({ length: count }, () => createStandaloneGroupedCardByKey("role", commonOptions))
+                .filter(Boolean);
+            }
+
+            if (key === "outline") {
+              if (useContextLinkedCreation && effectiveSourceNodeId) {
+                return appendOutlineCardsToGroup(
+                  effectiveSourceNodeId,
+                  Array.from({ length: count }, () => ({ ...commonOptions }))
+                ).outlineNodeIds;
+              }
+              return Array.from({ length: count }, () => createStandaloneGroupedCardByKey("outline", commonOptions))
+                .filter(Boolean);
+            }
+
+            if (key === "summary" && useContextLinkedCreation && effectiveSourceNodeId) {
+              return Array.from({ length: count }, () =>
+                addSummaryCard(effectiveSourceNodeId, {
+                  ...commonOptions,
+                  allowTitleEdit: true,
+                  allowImageUpload: true,
+                })
+              ).filter(Boolean);
+            }
+
+            if (key === "info" && useContextLinkedCreation && effectiveSourceNodeId) {
+              return Array.from({ length: count }, () =>
+                addSettingCard(effectiveSourceNodeId, {
+                  ...commonOptions,
+                  label: "信息",
+                  allowTitleEdit: true,
+                  allowImageUpload: false,
+                })
+              ).filter(Boolean);
+            }
+
+            return Array.from({ length: count }, () =>
+              createCardByKey(key, {
+                ...commonOptions,
+                allowTitleEdit: true,
+                allowImageUpload: true,
+                autoEdit: true,
+              })
+            ).filter(Boolean);
+          };
+          const ensureTaskPlaceholderCount = (key: CanvasCardKey, taskNum: number) => {
+            if (taskNum <= 0) return;
+            if (key === "brainstorm" && useBrainstormBatchLoading) {
+              createAdditionalManualLoadingCards(key, taskNum);
+              return;
+            }
+            const reservedCount = (extraLoadingCardIdsByKey.get(key) ?? []).length;
+            const baseCount =
+              key === requestedCardKey && loadingCardId
+                  ? 1
+                  : 0;
+            const missingCount = taskNum - baseCount - reservedCount;
+            if (missingCount <= 0) return;
+            const createdIds = createAdditionalManualLoadingCards(key, missingCount);
+            if (!createdIds.length) return;
+            registerExtraLoadingCardIds(key, createdIds);
+            rememberLatestGeneratedNode(createdIds[createdIds.length - 1] ?? "");
+            connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, createdIds);
+            startLoadingProgressForNodes(createdIds);
+          };
           const restoreReusedRoleDraftNode = (nodeId: string) => {
             if (!nodeId || !isReusingRoleDraftNode || nodeId !== reusableRoleDraftNodeId) return;
             finishLoadingProgressForNode(nodeId, 0);
@@ -5030,6 +5273,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
             if (shouldConsumeLoadingCardForKey(key)) {
               nextNodeId = loadingCardId;
               loadingCardConsumed = true;
+            }
+            if (!nextNodeId) {
+              nextNodeId = consumeExtraLoadingCardId(key);
             }
 
             if (!nextNodeId && useContextLinkedCreation && effectiveSourceNodeId) {
@@ -5406,6 +5652,17 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               }
               const writeFiles = extractUpdateToolFiles(streamData?.data);
               persistGeneratedWriteFiles(writeFiles);
+              const currentTaskPanelLabel = getCurrentTaskPanelLabelFromStream(streamData?.data);
+              if (currentTaskPanelLabel) {
+                setReqPanelTaskLabel(currentTaskPanelLabel);
+              }
+              const currentTaskPlaceholderConfig = getCurrentTaskPlaceholderConfigFromStream(streamData?.data);
+              if (currentTaskPlaceholderConfig) {
+                ensureTaskPlaceholderCount(
+                  currentTaskPlaceholderConfig.key,
+                  currentTaskPlaceholderConfig.taskNum
+                );
+              }
               if (writeFiles.length) {
                 writeFiles.forEach((item) => {
                   const normalizedPath = getTextValue(item.filePath);
@@ -5482,6 +5739,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           if (streamError) {
             stopLoadingProgress();
             if (loadingCardId) cleanupLoadingCard(loadingCardId);
+            cleanupExtraLoadingCards();
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             throw streamError;
           }
@@ -5498,6 +5756,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               updateBrainstormPlaceholderBatch(effectiveFiles, trimmedIdea || "脑洞", true);
               finalizePendingStreamNodes();
               brainstormBatchIdsRef.current = [];
+              cleanupExtraLoadingCards();
               setIsLoading(false);
               return;
             }
@@ -5509,6 +5768,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
               if (loadingCardId && !loadingCardConsumed) {
                 cleanupLoadingCard(loadingCardId);
               }
+              cleanupExtraLoadingCards();
               finalizePendingStreamNodes();
               setIsLoading(false);
               return;
@@ -5765,13 +6025,16 @@ import { ArrowUp, MapPin, X } from "lucide-react";
                 });
               }
             }
+            cleanupExtraLoadingCards();
             finalizePendingStreamNodes();
           } else if (hasChoiceList) {
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
+            cleanupExtraLoadingCards();
             setReqPanelStatus("success");
           } else {
             if (loadingCardId) cleanupLoadingCard(loadingCardId);
             if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
+            cleanupExtraLoadingCards();
             setReqPanelStatus("error");
             setReqPanelDetail("");
             msg("warning", "返回数据格式不正确，请重试");
@@ -6038,6 +6301,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
           shouldUseTwoOptionFlow &&
           suggestionIndex === 0 &&
           nextOutputType === "outline";
+        const shouldKeepSmartPanelTitle =
+          shouldUseTwoOptionFlow &&
+          suggestionIndex === 1;
 
         stopBrainstormProgress();
         brainstormBatchIdsRef.current = [];
@@ -6051,6 +6317,9 @@ import { ArrowUp, MapPin, X } from "lucide-react";
         setReqPanelDetail(`正在根据所选${nextCardTitle}生成卡片，请稍等...`);
         setReqPanelFooterDetail("");
         setPendingSuggestionIdea(suggestion.theme);
+        if (shouldKeepSmartPanelTitle) {
+          nextReqPanelTaskLabelRef.current = "";
+        }
         void handleGenerateIns(
           nextRequestType,
           nextIdeaContent,
@@ -6137,6 +6406,8 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       setReqPanelVisible(false);
       setReqPanelExpanded(false);
       setCardKeyLabel("脑洞");
+      nextReqPanelTaskLabelRef.current = "";
+      setReqPanelTaskLabel("");
       setReqPanelUseSmartTheme(false);
       setReqPanelTitle("");
       setReqPanelStatus("idle");
@@ -6376,7 +6647,7 @@ import { ArrowUp, MapPin, X } from "lucide-react";
       );
     }, [showInit]);
 
-    const panelThemeLabel = reqPanelUseSmartTheme ? "智能" : (cardKeyLabel || "脑洞");
+    const panelThemeLabel = reqPanelTaskLabel || (reqPanelUseSmartTheme ? "智能" : (cardKeyLabel || "脑洞"));
     const panelTitleText =
       reqPanelStatus === "loading"
         ? `${panelThemeLabel}喵思考中`
