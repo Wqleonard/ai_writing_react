@@ -26,25 +26,21 @@ const WORK_TYPES: WorkType[] = [
   {
     id: "short-story",
     label: "小说",
-    description: "全智能工作台,专业首选",
     isQuick: false,
   },
   {
     id: "short-story-quick",
     label: "小说(快捷)",
-    description: "快捷流程创作,成篇速通",
     isQuick: true,
   },
   {
     id: "short-play",
     label: "剧本",
-    description: "小说转剧本,从拆书到完集",
     isQuick: false,
   },
   {
     id: "short-play-quick",
     label: "剧本(快捷)",
-    description: "小说转剧本,从拆书到完集",
     isQuick: true,
   },
 ]
