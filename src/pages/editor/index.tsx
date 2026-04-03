@@ -149,6 +149,10 @@ type WorkVersion = {
   updatedTime?: string;
 };
 
+type EditorBizType = "short-story" | "short-play";
+type SubmitMode = "chat" | "agent";
+type ChatType = "script";
+
 type EditorInitialParams = {
   message?: string;
   autoSubmitInitialMessage?: boolean;
@@ -162,6 +166,7 @@ type EditorInitialParams = {
   selectedTexts?: import("@/stores/chatStore").SelectedText[];
   selectedTools?: import("@/stores/chatInputStore/types").AgentTalkToolValue[];
   isShowAnswerTip?: boolean;
+  editorBizType?: EditorBizType;
 };
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
@@ -172,6 +177,9 @@ type RankingListTransmissionParams = {
   message?: string;
   disableAutoSubmit?: boolean;
 };
+
+const normalizeEditorBizType = (value: unknown): EditorBizType =>
+  value === "short-play" ? "short-play" : "short-story";
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
   if (!input) return null;
@@ -376,6 +384,11 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
+  const editorBizType = normalizeEditorBizType(
+    (location.state as EditorInitialParams | null)?.editorBizType
+  );
+  const isShortPlayEditor = editorBizType === "short-play";
+  const showStepWorkflow = !isShortPlayEditor;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
   // chatheader 相关
@@ -842,7 +855,8 @@ const MarkdownEditorPage = () => {
         reload?: boolean;
         command?: string;
         addUserMessage?: boolean;
-        submitMode?: "chat" | "agent";
+        submitMode?: SubmitMode;
+        chatType?: ChatType;
         commandOnly?: boolean;
       }
     ) => {
@@ -900,12 +914,15 @@ const MarkdownEditorPage = () => {
               remoteAddress: file.putFilePath,
             }))
             : undefined;
-        const submitMode = options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const submitMode =
+          options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const chatType = options?.chatType ?? (isShortPlayEditor ? "script" : undefined);
         langGraphStream.submit(
           message,
           sessionId,
           workId,
           submitMode,
+          chatType,
           selectedTools,
           attachments,
           options?.reload,
@@ -926,6 +943,7 @@ const MarkdownEditorPage = () => {
       chatCurrentSession,
       createNewSession,
       isAnswerOnly,
+      isShortPlayEditor,
       langGraphStream,
       modelLLM,
       clearSelectedFiles,
@@ -1428,7 +1446,13 @@ const MarkdownEditorPage = () => {
               typeof initialParams.isAnswerOnly === "boolean"
                 ? (initialParams.isAnswerOnly ? "chat" : "agent")
                 : undefined;
-            sendChatText(msg, { addUserMessage: true, submitMode: initialSubmitMode });
+            const initialChatType =
+              initialParams.editorBizType === "short-play" ? "script" : undefined;
+            sendChatText(msg, {
+              addUserMessage: true,
+              submitMode: initialSubmitMode,
+              chatType: initialChatType,
+            });
             setPendingInitialMessage("");
           }, 0);
         }
@@ -1439,7 +1463,7 @@ const MarkdownEditorPage = () => {
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+  }, [isShortPlayEditor, location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
 
   const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
     if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
@@ -2374,6 +2398,7 @@ const MarkdownEditorPage = () => {
 
   // stepWorkFlow 相关逻辑
   useEffect(() => {
+    if (!showStepWorkflow) return;
     const { template, showTake2 } = location.state ?? {};
     if (!template && !showTake2) return;
 
@@ -2405,7 +2430,7 @@ const MarkdownEditorPage = () => {
     return () => {
       cancelAnimationFrame(rafId);
     };
-  }, [location]);
+  }, [location, showStepWorkflow]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
@@ -3008,6 +3033,7 @@ const MarkdownEditorPage = () => {
         onUpdateTitle={handleTitleUpdate}
         onHelpWriteClick={helpWriteClick}
         updatedTime={workInfo.updatedTime}
+        hidePromptActions={isShortPlayEditor}
       />
       <div
         ref={resizeContainerRef}
@@ -3308,7 +3334,7 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow ref={stepWorkflowRef}/>
+                        {showStepWorkflow ? <StepWorkflow ref={stepWorkflowRef} /> : null}
                       </div>
                     </div>
                   </div>
