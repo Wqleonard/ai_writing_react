@@ -1,6 +1,7 @@
 import { AUTO_CARD_FIELD_LABELS, OUTLINE_GROUP_LAYOUT, ROLE_GROUP_LAYOUT } from "./constant";
 import type {
   CanvasCardKey,
+  PartialCanvasWriteFileCall,
   CanvasWriteFileCall,
   CustomNode,
   ReplySegments,
@@ -126,7 +127,11 @@ export const extractUpdatesMessageContentWithoutReadFile = (value: unknown): str
     const updatedFilePath = text.match(/^Updated file\s+(.+)$/)?.[1]?.trim() || "";
     if (
       updatedFilePath &&
-      (/(^|\/)relationship\.json$/i.test(updatedFilePath) || isTaskWriteFile(updatedFilePath))
+      (
+        updatedFilePath === "/choices.json" ||
+        /(^|\/)relationship\.json$/i.test(updatedFilePath) ||
+        isTaskWriteFile(updatedFilePath)
+      )
     ) {
       continue;
     }
@@ -508,6 +513,76 @@ export const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] =>
   return Array.from(result.values());
 };
 
+export const extractPartialWriteToolFiles = (value: unknown): PartialCanvasWriteFileCall[] => {
+  const result = new Map<string, PartialCanvasWriteFileCall>();
+
+  const visit = (current: unknown) => {
+    if (!current) return;
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (typeof current !== "object") return;
+
+    const record = current as {
+      tool_calls?: Array<{
+        id?: unknown;
+        name?: unknown;
+        args?: { file_path?: unknown; content?: unknown };
+      }>;
+      tool_call_chunks?: Array<{
+        id?: unknown;
+        name?: unknown;
+        args?: unknown;
+      }>;
+    } & Record<string, unknown>;
+
+    if (Array.isArray(record.tool_calls)) {
+      record.tool_calls.forEach((toolCall) => {
+        if (getTextValue(toolCall?.name) !== "write_file") return;
+        const callId = getTextValue(toolCall?.id);
+        const filePath = getTextValue(toolCall?.args?.file_path);
+        if (!callId || !filePath || isTaskWriteFile(filePath)) return;
+        result.set(callId, {
+          callId,
+          filePath,
+          content: getTextValue(toolCall?.args?.content),
+        });
+      });
+    }
+
+    if (Array.isArray(record.tool_call_chunks)) {
+      record.tool_call_chunks.forEach((chunk) => {
+        if (getTextValue(chunk?.name) !== "write_file") return;
+        const callId = getTextValue(chunk?.id);
+        if (!callId || result.has(callId)) return;
+        const rawArgs = getTextValue(chunk?.args);
+        if (!rawArgs) return;
+        try {
+          const parsedArgs = JSON.parse(rawArgs) as {
+            file_path?: unknown;
+            content?: unknown;
+          };
+          const filePath = getTextValue(parsedArgs.file_path);
+          if (!filePath || isTaskWriteFile(filePath)) return;
+          result.set(callId, {
+            callId,
+            filePath,
+            content: getTextValue(parsedArgs.content),
+          });
+        } catch {
+          // tool_call_chunks 可能仍是不完整 JSON，忽略即可
+        }
+      });
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(value);
+  return Array.from(result.values());
+};
+
 export const extractCreationIdeaFileContent = (value: unknown): string => {
   if (!value) return "";
   if (Array.isArray(value)) {
@@ -576,7 +651,8 @@ export const inferCardKeyFromWriteFilePath = (filePath: string): CanvasCardKey =
 };
 
 export const isRelationshipWriteFile = (filePath: string) =>
-  /(^|\/)relationship\.json$/i.test(filePath) || /(^|\/)角色关系\.md$/i.test(filePath);
+  /(^|\/)relationship\.json$/i.test(filePath) ||
+  /(^|\/)角色关系(?:-[^/]+)?\.md$/i.test(filePath);
 
 export const shouldSkipWriteFileCardCreation = (filePath: string) =>
   /(^|\/)relationship\.json$/i.test(filePath) ||
