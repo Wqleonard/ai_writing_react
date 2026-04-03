@@ -1115,9 +1115,19 @@ const createDirectedCanvasEdge = (
   target,
   sourceHandle: options?.sourceHandle,
   targetHandle: options?.targetHandle,
-  type: "bezier",
+  type: "default",
   animated: false,
 });
+
+const normalizeCanvasEdges = (input: CustomEdge[] = []): CustomEdge[] =>
+  input.map((edge) =>
+    getTextValue(edge?.type).toLowerCase() === "bezier"
+      ? {
+        ...edge,
+        type: "default",
+      }
+      : edge
+  );
 
 const withVerticalPorts = (node: CustomNode): CustomNode => {
   if (isInfoCanvasNode(node)) {
@@ -1158,11 +1168,15 @@ function InsCanvasInner({
 }: InsCanvasInnerProps) {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const normalizedInitialEdges = useMemo(
+    () => normalizeCanvasEdges(initialEdges),
+    [initialEdges]
+  );
   const [nodes, setNodes] = useNodesState<CustomNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(normalizedInitialEdges);
   // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
   const nodesRef = useRef<CustomNode[]>(initialNodes);
-  const edgesRef = useRef<CustomEdge[]>(initialEdges);
+  const edgesRef = useRef<CustomEdge[]>(normalizedInitialEdges);
   const canvasAutoSaveTimerRef = useRef<number | null>(null);
   const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
   const canvasAutoSaveSuppressedRef = useRef(false);
@@ -2506,6 +2520,16 @@ function InsCanvasInner({
   }, [edges]);
 
   useEffect(() => {
+    const hasLegacyBezierEdge = edges.some(
+      (edge) => getTextValue(edge?.type).toLowerCase() === "bezier"
+    );
+    if (!hasLegacyBezierEdge) return;
+    const normalizedEdges = normalizeCanvasEdges(edges);
+    edgesRef.current = normalizedEdges;
+    setEdges(normalizedEdges);
+  }, [edges, setEdges]);
+
+  useEffect(() => {
     hasIdeaRef.current = hasIdea;
   }, [hasIdea]);
 
@@ -2795,7 +2819,7 @@ function InsCanvasInner({
           id: `e${sourceNodeId}-${nid}`,
           source: sourceNodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -2889,7 +2913,7 @@ function InsCanvasInner({
           id: `e${nodeId}-${nid}`,
           source: nodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -3433,7 +3457,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: groupSourceId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3572,7 +3596,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3967,7 +3991,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -7200,8 +7224,10 @@ function InsCanvasInner({
         if (version.content) {
           const data = JSON.parse(version.content);
           if (data.nodes && data.edges) {
+            const normalizedEdges = normalizeCanvasEdges(data.edges);
             setNodes(data.nodes);
-            setEdges(data.edges);
+            edgesRef.current = normalizedEdges;
+            setEdges(normalizedEdges);
             setInspirationDrawId(String(version?.inspirationDrawId ?? ""));
             msg("success", "版本恢复成功");
             setTimeout(autoLayout, 100);
@@ -8036,7 +8062,7 @@ function InsCanvasInner({
                 setZoomPercent(Math.round((viewport.zoom || 1) * 100));
               }}
               defaultEdgeOptions={{
-                type: "bezier",
+                type: "default",
                 style: {
                   // 基础连线样式：细一点、浅灰色、圆角
                   stroke: "#EFAF00",
