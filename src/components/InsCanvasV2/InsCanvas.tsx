@@ -52,7 +52,6 @@ import type {
   CustomNode,
   CustomEdge,
   DialogReferenceCard,
-  InspirationItem,
   InsCanvasApi,
   InsCanvasInnerProps,
   InsCanvasProps,
@@ -74,6 +73,8 @@ import {
   OUTLINE_GROUP_LAYOUT,
   OUTPUT_TYPE_OPTIONS,
   ROLE_GROUP_LAYOUT,
+  TASK_TYPE_CARD_KEY_MAP,
+  TASK_TYPE_LABEL_MAP,
 } from "./constant";
 import {
   buildCanvasNodeFilePath,
@@ -94,8 +95,6 @@ import {
   formatOutlineMarkdown,
   formatRecordMarkdown,
   getCanvasNodeLayoutSize as getCanvasNodeLayoutSizeFromUtils,
-  getCanvasDirectoryName,
-  getCanvasNodeBaseName,
   getFirstTextValue,
   getLatestWriteFiles,
   getPanelTextsFromMessageMap,
@@ -103,11 +102,7 @@ import {
   inferCardKeyFromWriteFilePath,
   isRelationshipWriteFile,
   isRelationshipInfoWriteFile,
-  normalizeReplyFilePath,
   parseChoicesSuggestionItems,
-  sanitizeCanvasEntryName,
-  shouldSyncCanvasNode,
-  sortCanvasNodes,
   shouldSkipWriteFileCardCreation,
   splitAutoUpdatesContent,
 } from "./canvasUtils";
@@ -116,22 +111,6 @@ import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/wo
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, Pause, X } from "lucide-react";
-
-const TASK_TYPE_LABEL_MAP: Record<string, string> = {
-  "brain-storm-card": "脑洞",
-  "info-card": "信息",
-  "story-setting-card": "梗概",
-  "role-setting-card": "角色",
-  "outline-card": "大纲",
-};
-
-const TASK_TYPE_CARD_KEY_MAP: Record<string, CanvasCardKey> = {
-  "brain-storm-card": "brainstorm",
-  "info-card": "info",
-  "story-setting-card": "summary",
-  "role-setting-card": "role",
-  "outline-card": "outline",
-};
 
 const getTaskTypeLabel = (taskType: unknown) => {
   const normalizedTaskType = getTextValue(taskType);
@@ -2226,14 +2205,58 @@ function InsCanvasInner({
         if (!isMatched) return node;
 
         const nextContent = String(content ?? "");
-        if (String(node.data?.content ?? "") === nextContent) return node;
+        // 命中 sync-path（由 tree/currentEditingId 驱动）时，优先将节点 filePath 对齐到该路径。
+        // 这样在重命名/拖拽后，卡片保存不会继续回写旧路径，避免出现重复文件。
+        const nextNodeFilePath = isMatchedBySyncPath
+          ? normalizedPath
+          : nodeFilePath;
+        const shouldUpdateContent = String(node.data?.content ?? "") !== nextContent;
+        const shouldUpdateFilePath =
+          Boolean(nextNodeFilePath) &&
+          getTextValue((node.data as any)?.filePath).trim() !== nextNodeFilePath;
+        if (!shouldUpdateContent && !shouldUpdateFilePath) return node;
 
         didUpdate = true;
         return {
           ...node,
           data: {
             ...node.data,
-            content: nextContent,
+            ...(shouldUpdateContent ? { content: nextContent } : {}),
+            ...(shouldUpdateFilePath ? { filePath: nextNodeFilePath } : {}),
+          },
+        };
+      })
+    );
+
+    return didUpdate;
+  }, [normalizeCanvasFilePath, setNodes]);
+
+  const syncFilePathByRename = useCallback((oldPath: string, newPath: string) => {
+    const normalizedOldPath = normalizeCanvasFilePath(oldPath);
+    const normalizedNewPath = normalizeCanvasFilePath(newPath);
+    if (!normalizedOldPath || !normalizedNewPath) return false;
+
+    let didUpdate = false;
+    setNodes((prev) =>
+      prev.map((node) => {
+        const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+        if (!nodeFilePath) return node;
+
+        const isExactMatch = nodeFilePath === normalizedOldPath;
+        const isDirectorySubPathMatch = nodeFilePath.startsWith(`${normalizedOldPath}/`);
+        if (!isExactMatch && !isDirectorySubPathMatch) return node;
+
+        const nextNodeFilePath = isExactMatch
+          ? normalizedNewPath
+          : `${normalizedNewPath}/${nodeFilePath.slice(normalizedOldPath.length + 1)}`;
+        if (!nextNodeFilePath || nextNodeFilePath === nodeFilePath) return node;
+
+        didUpdate = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            filePath: nextNodeFilePath,
           },
         };
       })
@@ -7185,6 +7208,7 @@ function InsCanvasInner({
       addInfoCardFromExternalFile,
       focusFileByPath,
       syncFileContentByPath,
+      syncFilePathByRename,
       openHistory,
       flushPersistence: flushCanvasPersistence,
       stopCurrentRequest,
@@ -7192,7 +7216,7 @@ function InsCanvasInner({
       inspirationDrawId,
       isLoading,
     }),
-    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
+    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, syncFilePathByRename, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
   );
 
   const onCanvasReadyRef = useRef(onCanvasReady);
