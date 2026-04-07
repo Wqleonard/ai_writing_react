@@ -91,7 +91,7 @@ export default function LandingPage() {
     if (isCreatingWork) return
     try {
       setIsCreatingWork(true)
-      const req = await createWorkReq('editor')
+      const req = await createWorkReq('script_editor')
       if (req?.id) {
         navigate(`/editor/${req.id}`, { state: { editorBizType: "short-play" } })
       }
