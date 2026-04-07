@@ -119,7 +119,7 @@ export const AddNewWorkPopover = (
   const addNewShortPlayWork = useCallback(async () => {
     try {
       setLoading(true)
-      const req = await createWorkReq("editor")
+      const req = await createWorkReq("script_editor")
       if (!req?.id) return
       navigate(`/editor/${req.id}`, {
         state: { editorBizType: "short-play" },
@@ -277,9 +277,9 @@ export const AddNewWorkPopover = (
                     &#xe736;
                   </span>
                 </div>
-                <div className="mt-1 hidden leading-[1.4] text-xs text-[#757575] group-hover:block">
+                {/* <div className="mt-1 hidden leading-[1.4] text-xs text-[#757575] group-hover:block">
                   {workType.description}
-                </div>
+                </div> */}
               </button>
             ))}
           </div>
