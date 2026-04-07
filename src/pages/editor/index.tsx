@@ -993,6 +993,7 @@ const MarkdownEditorPage = () => {
     saveEditorData,
     setServerData,
     setServerDataFile,
+    addServerDataPath,
     setCurrentContent,
     setWorkInfo,
     renameServerDataPath,
@@ -1009,6 +1010,7 @@ const MarkdownEditorPage = () => {
       saveEditorData: s.saveEditorData,
       setServerData: s.setServerData,
       setServerDataFile: s.setServerDataFile,
+      addServerDataPath: s.addServerDataPath,
       setCurrentContent: s.setCurrentContent,
       setWorkInfo: s.setWorkInfo,
       renameServerDataPath: s.renameServerDataPath,
@@ -1114,7 +1116,6 @@ const MarkdownEditorPage = () => {
     (canvasFiles: Record<string, string>) => {
       const latestState = useEditorStore.getState();
       const currentServerData = latestState.serverData;
-      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       const incomingCanvasKeys = Object.keys(canvasFiles);
       const beforeCanvasKeys = lastCanvasSyncedKeysRef.current;
       const isHydratingFromSnapshot = canvasSnapshotHydratingRef.current;
@@ -1149,6 +1150,18 @@ const MarkdownEditorPage = () => {
         nextCanvasTrackedKeys = incomingCanvasKeys;
       }
 
+      const latestTreeNodeIds = new Set<string>();
+      const collectTreeNodeIds = (nodes: FileTreeNode[]) => {
+        nodes.forEach((node) => {
+          latestTreeNodeIds.add(node.id);
+          if (node.children?.length) collectTreeNodeIds(node.children);
+        });
+      };
+      collectTreeNodeIds(latestState.treeData ?? []);
+      const missingInServerBeforeSync = Array.from(latestTreeNodeIds).filter((id) => {
+        if (!id) return false;
+        return !(id in currentServerData) && !(`${id}/` in currentServerData);
+      });
       lastCanvasSyncedKeysRef.current = nextCanvasTrackedKeys;
       canvasTaggedFilePathSetRef.current = new Set(
         nextCanvasTrackedKeys
@@ -2653,8 +2666,50 @@ const MarkdownEditorPage = () => {
   const handleCanvasFileContentChange = useCallback((filePath: string, content: string) => {
     const normalizedPath = normalizeCanvasFilePath(filePath);
     if (!normalizedPath) return;
-    setServerDataFile(normalizedPath, content);
-  }, [currentEditingId, normalizeCanvasFilePath, setServerDataFile]);
+
+    const nextContent = String(content ?? "");
+    const tree = treeDataRef.current;
+    const candidatePaths = Array.from(new Set([
+      normalizedPath,
+      normalizedPath.replace(/^角色卡\//, "[角色卡]/"),
+      normalizedPath.replace(/^脑洞卡\//, "[脑洞卡]/"),
+      normalizedPath.replace(/^梗概卡\//, "[梗概卡]/"),
+      normalizedPath.replace(/^设定卡\//, "[设定卡]/"),
+      normalizedPath.replace(/^大纲卡\//, "[大纲卡]/"),
+      normalizedPath.replace(/^\[角色卡\]\//, "角色卡/"),
+      normalizedPath.replace(/^\[脑洞卡\]\//, "脑洞卡/"),
+      normalizedPath.replace(/^\[梗概卡\]\//, "梗概卡/"),
+      normalizedPath.replace(/^\[设定卡\]\//, "设定卡/"),
+      normalizedPath.replace(/^\[大纲卡\]\//, "大纲卡/"),
+    ]));
+    const targetNode =
+      candidatePaths
+        .map((candidate) => resolveFileNodeByPath(tree, candidate))
+        .find(Boolean) ?? null;
+    const targetNodeId = targetNode?.id ? normalizeCanvasFilePath(String(targetNode.id)) : "";
+
+    // 首次从卡片编辑保存时，tree 中可能还没有该文件节点；
+    // 用 addServerDataPath 先建路径，避免“第一次不回写编辑区，第二次才正常”。
+    if (!targetNodeId) {
+      addServerDataPath(normalizedPath, nextContent);
+    } else {
+      // 1) 先写入画布事件原始路径，保证 serverData 与画布同步
+      setServerDataFile(normalizedPath, nextContent);
+    }
+    // 2) 再写入 tree 实际命中的节点路径，避免“路径别名”导致主编辑区不刷新
+    if (targetNodeId && targetNodeId !== normalizedPath) {
+      setServerDataFile(targetNodeId, nextContent);
+    }
+
+    const currentEditingPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!currentEditingPath) return;
+    if (
+      currentEditingPath === normalizedPath ||
+      (targetNodeId && currentEditingPath === targetNodeId)
+    ) {
+      setCurrentContent(nextContent);
+    }
+  }, [addServerDataPath, currentEditingId, normalizeCanvasFilePath, setCurrentContent, setServerDataFile]);
 
   // 与 Vue handleKnowledgeBaseUpdate 对齐：合并知识库文件、定位文件，并在 blank 阶段升级为 final
   const handleKnowledgeBaseUpdate = useCallback(
@@ -2711,13 +2766,6 @@ const MarkdownEditorPage = () => {
       normalizedCandidates
         .map((candidate) => resolveFileNodeByPath(tree, candidate))
         .find(Boolean) ?? null;
-    const fileName = normalized.split("/").pop()?.trim() ?? "";
-    const flattenTreeIds = (nodes: TreeNodeLike[]): string[] =>
-      nodes.flatMap((node) => [
-        String(node.id ?? ""),
-        ...flattenTreeIds(Array.isArray(node.children) ? (node.children as TreeNodeLike[]) : []),
-      ]);
-    const flatTreeIds = flattenTreeIds(tree).filter(Boolean);
 
     if (!targetNode) {
       // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
@@ -2735,6 +2783,13 @@ const MarkdownEditorPage = () => {
   const handleFileNameClick = useCallback((rawFileName: string) => {
     openCanvasFileByPath(rawFileName, true);
   }, [openCanvasFileByPath]);
+
+  const handleTreePathRenameForCanvas = useCallback((oldPath: string, newPath: string) => {
+    const normalizedOldPath = sanitizeIncomingFilePath(oldPath);
+    const normalizedNewPath = sanitizeIncomingFilePath(newPath);
+    if (!normalizedOldPath || !normalizedNewPath) return;
+    insCanvasRef.current?.syncFilePathByRename(normalizedOldPath, normalizedNewPath);
+  }, [sanitizeIncomingFilePath]);
 
   useEffect(() => {
     const pending = pendingFileNameClickRef.current;
@@ -3045,7 +3100,11 @@ const MarkdownEditorPage = () => {
           className="box-border shrink-0 h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-primary) p-2"
           style={{ width: `${leftPanelWidthRem}rem` }}
         >
-          <EditorTreeSidebar className="h-full" onFileSelect={handleTreeFileSelect}/>
+          <EditorTreeSidebar
+            className="h-full"
+            onFileSelect={handleTreeFileSelect}
+            onPathRenamed={handleTreePathRenameForCanvas}
+          />
         </div>
 
         <EditorResizeHandle
