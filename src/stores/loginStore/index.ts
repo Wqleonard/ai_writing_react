@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { verifyTicket, getNewbieMission, completeNewbieMissionReq, getUserBalanceReq, getLogoutReq, type GuideTask } from '@/api/users'
+import { verifyTicket, getNewbieMission, completeNewbieMissionReq, getUserBalanceReq, type GuideTask } from '@/api/users'
 import { getInsiteNotification, type NotificationItem } from '@/api/insite-notification'
 import { openLoginDialog } from '@/components/LoginDialog'
 import type {
@@ -329,9 +329,6 @@ export const useLoginStore = create<LoginStore>((set, get) => {
     },
 
     logout: () => {
-      void getLogoutReq().catch((error) => {
-        console.error('调用退出登录接口失败:', error)
-      })
       get().saveUserInfo(null)
       localStorage.removeItem('token')
       localStorage.removeItem('___first_in_editor___')
