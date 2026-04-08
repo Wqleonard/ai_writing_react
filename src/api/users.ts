@@ -110,10 +110,6 @@ const completeNewbieMissionReq = (taskId: number) => {
   return apiClient.post(`/api/users/guide/tasks/${taskId}/complete`);
 };
 
-const getLogoutReq = ()=>{
-  return apiClient.get('/api/users/logout')
-}
-
 export {
   getUserBalanceReq,
   createNewUserReq,
@@ -129,5 +125,4 @@ export {
   getFrozenUserEmailReq,
   getNewbieMission,
   completeNewbieMissionReq,
-  getLogoutReq
 };
