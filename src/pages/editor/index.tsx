@@ -171,6 +171,7 @@ type EditorInitialParams = {
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
 const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
+const EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX = "editorBizTypeByWorkId:";
 
 type RankingListTransmissionParams = {
   content?: string;
@@ -384,9 +385,28 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
-  const editorBizType = normalizeEditorBizType(
-    (location.state as EditorInitialParams | null)?.editorBizType
-  );
+  const stateEditorBizType = (location.state as EditorInitialParams | null)?.editorBizType;
+  const hasExplicitStateEditorBizType =
+    stateEditorBizType === "short-story" || stateEditorBizType === "short-play";
+  const [cachedEditorBizType, setCachedEditorBizType] = useState<EditorBizType>("short-story");
+  useEffect(() => {
+    if (!workId || typeof window === "undefined") return;
+    if (hasExplicitStateEditorBizType) {
+      const normalizedFromState = normalizeEditorBizType(stateEditorBizType);
+      setCachedEditorBizType(normalizedFromState);
+      sessionStorage.setItem(
+        `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`,
+        normalizedFromState
+      );
+      return;
+    }
+    const cached = sessionStorage.getItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`);
+    if (!cached) return;
+    setCachedEditorBizType(normalizeEditorBizType(cached));
+  }, [hasExplicitStateEditorBizType, stateEditorBizType, workId]);
+  const editorBizType = hasExplicitStateEditorBizType
+    ? normalizeEditorBizType(stateEditorBizType)
+    : cachedEditorBizType;
   const isShortPlayEditor = editorBizType === "short-play";
   const showStepWorkflow = !isShortPlayEditor;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
@@ -522,6 +542,15 @@ const MarkdownEditorPage = () => {
         if (fromEditInfo) {
           targetFileId = sanitizeIncomingFilePath(fromEditInfo);
         }
+      }
+
+      // 与 Vue 链路对齐：当流式 payload 同时给出 files 且能解析出目标 fileId 时，
+      // 自动请求定位该文件（树未刷新时先放入 pending，待 treeData 更新后再落地跳转）。
+      const hasResolvedTargetInFiles =
+        !!targetFileId &&
+        Object.prototype.hasOwnProperty.call(normalizedIncomingFiles, targetFileId);
+      if (hasResolvedTargetInFiles) {
+        pendingFileNameClickRef.current = targetFileId;
       }
 
       const hasOldPendingEdits =
@@ -2776,9 +2805,18 @@ const MarkdownEditorPage = () => {
     }
     // 与 Vue 行为一致：只定位到左侧目录并切换当前编辑文件，不在这里改写 serverData
     useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
-    requestCanvasFocusByFilePath(targetNode.id);
+    const normalizedTargetPath = normalizeCanvasFilePath(normalized);
+    const normalizedNodePath = normalizeCanvasFilePath(String(targetNode.id ?? ""));
+    const shouldOpenCanvasPreview =
+      canvasTaggedFilePathSetRef.current.has(normalizedTargetPath) ||
+      canvasTaggedFilePathSetRef.current.has(normalizedNodePath) ||
+      isLikelyCanvasGeneratedPath(normalizedTargetPath) ||
+      isLikelyCanvasGeneratedPath(normalizedNodePath);
+    if (shouldOpenCanvasPreview) {
+      requestCanvasFocusByFilePath(targetNode.id);
+    }
     pendingFileNameClickRef.current = "";
-  }, [requestCanvasFocusByFilePath]);
+  }, [isLikelyCanvasGeneratedPath, normalizeCanvasFilePath, requestCanvasFocusByFilePath]);
 
   const handleFileNameClick = useCallback((rawFileName: string) => {
     openCanvasFileByPath(rawFileName, true);
@@ -3583,7 +3621,7 @@ const MarkdownEditorPage = () => {
                   onAnswerOnlyChange={setIsAnswerOnly}
                   slots={chatSlots}
                 >
-                  <ProChatPanel/>
+                  <ProChatPanel creationType={isShortPlayEditor ? "script" : "novel"} />
                 </ProChatContainer>
                 <AssociationSelectorDialog
                   open={showAssociationSelector}

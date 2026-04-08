@@ -8,6 +8,7 @@ import type { ChatMessage } from "@/stores/chatStore"
 import { useProChatContainerRequired } from "./ProChatContext"
 import titleLogo from "@/assets/images/logo.webp"
 import { Iconfont } from "@/components/Iconfont"
+import type { QuickChatCreationType } from "@/hooks/useModels"
 
 type RenderMessageFn = (
   message: ChatMessage,
@@ -64,7 +65,11 @@ const MessageItems = React.memo(
  * 通过 useProChatContainer 从 ProChatContainer 获取状态。
  * 必须在 ProChatContainer 内部使用。
  */
-export const ProChatPanel = () => {
+interface ProChatPanelProps {
+  creationType?: QuickChatCreationType
+}
+
+export const ProChatPanel = ({ creationType = "novel" }: ProChatPanelProps) => {
   const ctx = useProChatContainerRequired()
   const panelRootRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef<AutoScrollAreaRef | null>(null)
@@ -155,6 +160,7 @@ export const ProChatPanel = () => {
             onOpenAssociationSelector={onOpenAssociationSelector}
             isAnswerOnly={isAnswerOnly}
             onAnswerOnlyChange={onAnswerOnlyChange}
+            creationType={creationType}
           />
         </div>
       </div>
@@ -183,6 +189,7 @@ export const ProChatPanel = () => {
         onOpenAssociationSelector={onOpenAssociationSelector}
         isAnswerOnly={isAnswerOnly}
         onAnswerOnlyChange={onAnswerOnlyChange}
+        creationType={creationType}
       />
       {slots?.afterInput}
     </div>

@@ -246,10 +246,10 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
       const target = e.target as HTMLElement | null;
       const res = tryHandleMdLink(target);
       if (!res.handled || !res.key) return;
-      if (shouldIgnoreDuplicate(res.key)) return;
 
       e.preventDefault();
       e.stopPropagation();
+      if (shouldIgnoreDuplicate(res.key)) return;
       rememberHandled(res.key);
     },
     [rememberHandled, shouldIgnoreDuplicate, tryHandleMdLink]
@@ -260,10 +260,10 @@ const MarkdownRenderer = ({ content, onFileNameClick }: MarkdownRendererProps) =
       const target = e.target as HTMLElement | null;
       const res = tryHandleMdLink(target);
       if (!res.handled || !res.key) return;
-      if (shouldIgnoreDuplicate(res.key)) return;
 
       e.preventDefault();
       e.stopPropagation();
+      if (shouldIgnoreDuplicate(res.key)) return;
       rememberHandled(res.key);
     },
     [rememberHandled, shouldIgnoreDuplicate, tryHandleMdLink]
