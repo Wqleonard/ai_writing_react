@@ -8057,7 +8057,7 @@ function InsCanvasInner({
             <h1 className="z-10 mt-3 text-center text-[26px] font-semibold text-[#4f4f4f]">
               {isLoading
                 ? `脑洞喵正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
-                : "与脑洞喵一起脑洞大开地创作"}
+                : "与爆文猫一起脑洞大开地创作"}
             </h1>
             <div className="mt-4 flex gap-2">
               <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => navigate("/workspace/creation-community/course")}>
