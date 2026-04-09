@@ -18,7 +18,7 @@ export default function MMinePage() {
   const navigate = useNavigate();
   const userInfo = useLoginStore(selectUserInfo);
   const avatarDataUrl = useLoginStore(selectAvatarDataUrl);
-  const { logout } = useLoginStore();
+  const logout = useLoginStore(s => s.logout);
   const userBalance = useLoginStore(selectDailyBalance);
   const dailyBalanceLimit = useLoginStore(selectDailyBalanceLimit);
   const fixedToken = useLoginStore(selectFixedBalance);
@@ -45,9 +45,9 @@ export default function MMinePage() {
     setLogoutDialogOpen(true);
   }, []);
 
-  const handleConfirmLogout = useCallback(() => {
+  const handleConfirmLogout = useCallback(async () => {
     setLogoutDialogOpen(false);
-    logout();
+    await logout();
     navigate("/m");
   }, [logout, navigate]);
 

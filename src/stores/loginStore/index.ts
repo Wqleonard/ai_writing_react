@@ -328,10 +328,12 @@ export const useLoginStore = create<LoginStore>((set, get) => {
       }
     },
 
-    logout: () => {
-      void getLogoutReq().catch((error) => {
-        console.error('调用退出登录接口失败:', error)
-      })
+    logout: async() => {
+      try {
+        const req: any = await getLogoutReq()
+      } catch (error) {
+        console.error('退出登录失败:', error)
+      }
       get().saveUserInfo(null)
       localStorage.removeItem('token')
       localStorage.removeItem('___first_in_editor___')
