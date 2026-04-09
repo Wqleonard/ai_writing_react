@@ -32,7 +32,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>();
 
 // 文件上传状态
-type UploadStatus = "empty" | "hover" | "uploading" | "uploaded" | 'completed';
+type UploadStatus = "empty" | "hover" | "uploading" | "uploaded" | 'completed' | 'skipped';
 
 const uploadStatus = ref<UploadStatus>("empty");
 const uploadedFile = ref<FileItem | null>(null);
@@ -554,6 +554,12 @@ const handleConfirm = async () => {
   }
 };
 
+// 处理跳过
+const handleSkip = () => {
+  if (props.locked) return;
+  emit("confirm", { skipped: true, content: "", originalName: undefined, serverFileName: undefined, wordCount: 0, chapterNum: 0 });
+};
+
 // 处理回退
 const handleRevert = () => {
   emit("revert");
@@ -569,34 +575,28 @@ const initFromProps = () => {
   if (props.novelContent) {
     try {
       const data = JSON.parse(props.novelContent);
+      // 跳过状态：skipped 标志为 true，content 为空
+      if (data.skipped) {
+        uploadStatus.value = "skipped";
+        outlineResult.value = null;
+        return;
+      }
       // 待完善，只记录最终生成的数据
       outlineResult.value = data;
       uploadStatus.value = "completed";
-      // if (data.fileName) {
-      //   uploadedFile.value = {
-      //     originalName: data.fileName,
-      //     size: data.fileSize || 0,
-      //     type: "",
-      //     extension: data.fileName.split(".").pop()?.toLowerCase() || "",
-      //   };
-      //   totalWords.value = data.totalWords || 0;
-      //   totalChapters.value = data.totalChapters || 0;
-      //   // 兼容旧数据格式
-      //   if (data.chapterRange && Array.isArray(data.chapterRange)) {
-      //     selectedChapter.value = data.chapterRange[1] || data.chapterRange[0] || 1;
-      //   } else if (data.selectedChapter) {
-      //     selectedChapter.value = data.selectedChapter;
-      //   } else {
-      //     selectedChapter.value = totalChapters.value || 1;
-      //   }
-      //   hasChapterFormat.value = data.hasChapterFormat || false;
-      //   uploadStatus.value = "uploaded";
-      //   // 初始化数据后更新提示位置
-      //   updateChapterValuePosition();
-      // }
     } catch (e) {
       console.error("Failed to parse novelContent:", e);
     }
+  } else {
+    // 内容被清空（如回退），重置为初始空状态
+    uploadStatus.value = "empty";
+    uploadedFile.value = null;
+    outlineResult.value = null;
+    streamingContent.value = "";
+    totalWords.value = 0;
+    totalChapters.value = 0;
+    selectedChapter.value = 1;
+    hasChapterFormat.value = false;
   }
 };
 
@@ -636,26 +636,27 @@ onUnmounted(() => {
     <div class="novel-outline-chapter-layout" v-loading.lock="isStreaming && uploadStatus !== 'completed'">
       <!-- 标题 -->
       <div v-if="uploadStatus !== 'uploaded' && uploadStatus !== 'completed'" class="section-title">
-        导入小说原文,进行<span class="title-highlight">章纲拆解</span>
+        导入小说原文,进行<span class="title-highlight">拆解改编</span>
       </div>
 
       <!-- 文件上传区域 -->
       <div class="upload-area" :class="{
-        'upload-area-empty': uploadStatus === 'empty',
+        'upload-area-empty': uploadStatus === 'empty' || uploadStatus === 'skipped',
         'upload-area-hover': uploadStatus === 'hover',
         'upload-area-uploading': uploadStatus === 'uploading',
         'upload-area-uploaded': uploadStatus === 'uploaded',
         'upload-area-completed': uploadStatus === 'completed',
+        'upload-area-skipped': uploadStatus === 'skipped',
       }" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop"
         @click="uploadStatus === 'empty' || uploadStatus === 'hover' ? handleFileSelect() : null">
-        <!-- 空状态 -->
-        <template v-if="uploadStatus === 'empty'">
+        <!-- 空状态 / 跳过锁定状态（复用同一UI，skipped时置灰不可操作） -->
+        <template v-if="uploadStatus === 'empty' || uploadStatus === 'skipped'">
           <div class="upload-icon-wrapper">
             <img :src="scriptEmptyUploadIcon" alt="上传" class="upload-icon-empty"></img>
           </div>
           <div class="upload-text">
             <span>拖拽文件到此或点击</span>
-            <span class="upload-link">上传</span>
+            <span class="upload-link" :class="{ 'upload-link-disabled': uploadStatus === 'skipped' }">上传</span>
           </div>
           <div class="upload-hint">仅支持 .txt格式,文件大小限制10MB</div>
         </template>
@@ -776,6 +777,14 @@ onUnmounted(() => {
             </div>
           </div>
         </template>
+
+      </div>
+
+      <!-- 跳过按钮：悬浮右下角，仅未上传且未锁定时显示 -->
+      <div v-if="!locked && (uploadStatus === 'empty' || uploadStatus === 'hover')" class="skip-btn-wrap">
+        <el-button class="skip-btn" @click="handleSkip">
+          我要原创，跳过此步骤
+        </el-button>
       </div>
 
       <!-- 底部回退按钮 -->
@@ -883,6 +892,28 @@ onUnmounted(() => {
     border: none;
     padding: 0;
     height: 100%;
+    flex: 1;
+    min-height: 0;
+    flex-shrink: 1;
+  }
+
+  &.upload-area-skipped {
+    cursor: default;
+    background: #f5f5f5;
+    border: 1px dashed #d0d0d0;
+    pointer-events: none;
+
+    .upload-icon-empty {
+      filter: grayscale(100%) opacity(0.4);
+    }
+
+    .upload-text {
+      color: #c8c8c8;
+    }
+
+    .upload-hint {
+      color: #c8c8c8;
+    }
   }
 }
 
@@ -971,6 +1002,14 @@ onUnmounted(() => {
     text-decoration: underline;
     text-decoration-color: rgba(239, 175, 0, 1);
     text-underline-offset: 2px;
+
+    &.upload-link-disabled {
+      background: none;
+      -webkit-text-fill-color: #c8c8c8;
+      color: #c8c8c8;
+      text-decoration-color: #c8c8c8;
+      cursor: default;
+    }
   }
 }
 
@@ -981,6 +1020,30 @@ onUnmounted(() => {
   letter-spacing: 0.04em;
   color: #949494;
   text-align: center;
+}
+
+.skip-btn-wrap {
+  position: absolute;
+  right: 0;
+  bottom: 60px;
+  z-index: 10;
+}
+
+.skip-btn {
+  width: 250px;
+  height: 52px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.32em;
+  color: #ffffff;
+  background: linear-gradient(90deg, rgba(239, 175, 0, 1) 0%, rgba(255, 149, 0, 1) 100%);
+  border: none;
+
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
 }
 
 .loading-indicator {

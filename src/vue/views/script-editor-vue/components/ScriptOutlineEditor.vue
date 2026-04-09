@@ -779,13 +779,13 @@ watch(outlineContentMd, (val) => {
 // 调用 getScriptSplitOutline 获取大纲分段，并通过事件通知父组件（小说原版只传 novelPlot，非原版传全参数）
 const fetchSplitOutline = async () => {
   try {
-    if (!props.novelPlot?.trim()) {
-      console.warn("[ScriptOutlineEditor] fetchSplitOutline skipped: missing novelPlot");
-      return;
-    }
+    // if (!props.novelPlot?.trim()) {
+    //   console.warn("[ScriptOutlineEditor] fetchSplitOutline skipped: missing novelPlot");
+    //   return;
+    // }
     const { description, brainStorm } = getStoryParamsForRequest();
     const resp: any = await getScriptSplitOutline(
-      props.novelPlot,
+      props.novelPlot || '',
       description,
       brainStorm,
       props.episodeNum || 60

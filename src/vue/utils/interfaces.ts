@@ -630,6 +630,7 @@ export interface ScriptNovelOutlineChapterResult {
   wordCount?: number;
   chapterNum?: number;
   content?: string;
+  skipped?: boolean;
 }
 
 // 剧本标签默认选中项

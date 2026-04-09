@@ -19,6 +19,7 @@ interface Props {
   locked?: boolean; // 是否锁定（不可编辑）
   hasNextContent?: boolean; // 后面是否有内容
   triggerGenerate?: number; // 触发生成的标志（当值增加时触发生成）
+  novelPlotSkipped?: boolean; // 是否跳过了小说纲章拆解
 }
 
 interface Emits {
@@ -34,27 +35,31 @@ const props = withDefaults(defineProps<Props>(), {
   storyContent: "",
   locked: false,
   triggerGenerate: 0,
+  novelPlotSkipped: false,
 });
 
 const emit = defineEmits<Emits>();
 
 // 标签类型：固定 + 自定义槽位（最多3个）
-type TabType = "original" | "inspiration1" | "inspiration2" | "custom1" | "custom2" | "custom3";
+type TabType = "original" | "inspiration1" | "inspiration2" | "inspiration3" | "custom1" | "custom2" | "custom3";
 
-// const FIXED_TAB_IDS: TabType[] = ["original", "inspiration1", "inspiration2"];
 const CUSTOM_TAB_IDS: TabType[] = ["custom1", "custom2", "custom3"];
 const MAX_CUSTOM_TABS = 3;
 
 // 当前启用的自定义槽位数量（0~3）
 const customTabCount = ref(0);
 
-// 计算标签列表：固定三项 + 已启用的自定义 + “自定义+”（未满3个时显示）
+// 计算标签列表：跳过拆解时隐藏「小说原版」并增加「灵感版3」；否则保持原逻辑
 const tabs = computed(() => {
-  const list: { id: TabType | "customAdd"; label: string }[] = [
-    { id: "original", label: "小说原版" },
-    { id: "inspiration1", label: "灵感版1" },
-    { id: "inspiration2", label: "灵感版2" },
-  ];
+  const list: { id: TabType | "customAdd"; label: string }[] = [];
+  if (!props.novelPlotSkipped) {
+    list.push({ id: "original", label: "小说原版" });
+  }
+  list.push({ id: "inspiration1", label: "灵感版1" });
+  list.push({ id: "inspiration2", label: "灵感版2" });
+  if (props.novelPlotSkipped) {
+    list.push({ id: "inspiration3", label: "灵感版3" });
+  }
   for (let i = 0; i < customTabCount.value; i++) {
     list.push({ id: CUSTOM_TAB_IDS[i], label: `自定义${i + 1}` });
   }
@@ -65,7 +70,19 @@ const tabs = computed(() => {
 });
 
 // 当前选中的标签（不含 customAdd）
-const activeTab = ref<TabType>("original");
+const activeTab = ref<TabType>(props.novelPlotSkipped ? "inspiration1" : "original");
+
+// novelPlotSkipped 变化时（如父组件异步传入），同步修正 activeTab
+watch(
+  () => props.novelPlotSkipped,
+  (skipped) => {
+    // 仅在当前还停留在 original（未手动切换过）时才自动修正
+    if (skipped && activeTab.value === "original") {
+      activeTab.value = "inspiration1";
+    }
+  },
+  { immediate: true }
+);
 
 // 当前标签是否可编辑：锁定后都不可编辑；未锁定时「小说原版」也不可编辑，仅灵感版/自定义可编辑
 const isCurrentTabEditable = computed(() => !props.locked && activeTab.value !== "original");
@@ -84,6 +101,7 @@ const cards = ref<Record<TabType, ScriptStorySynopsisResult>>({
   original: emptyCard(),
   inspiration1: emptyCard(),
   inspiration2: emptyCard(),
+  inspiration3: emptyCard(),
   custom1: emptyCard(),
   custom2: emptyCard(),
   custom3: emptyCard(),
@@ -139,14 +157,16 @@ const isFormValid = computed(() => {
   );
 });
 
-// 生成故事梗概：接口调用三次——第一次只传 novelPlot（小说原版），第二、三次传 novelPlot + description（灵感版1、灵感版2）
+// 生成故事梗概：
+// 未跳过：调用3次——第1次只传 novelPlot（小说原版），第2、3次传 novelPlot + description（灵感版1、2）
+// 已跳过：调用3次——全部传 description（灵感版1、2、3），不生成小说原版
 const generateStorySynopsis = async () => {
   if (loading.value) {
     console.log("[ScriptStorySelector] Already generating, skip");
     return;
   }
 
-  if (!props.novelPlot) {
+  if (!props.novelPlotSkipped && !props.novelPlot) {
     ElMessage.warning("请先完成小说纲章");
     return;
   }
@@ -159,35 +179,29 @@ const generateStorySynopsis = async () => {
   loading.value = true;
 
   try {
-    const [resOriginal, resInspiration1, resInspiration2]: ScriptStorySynopsisResult[] = await Promise.all([
-      getScriptStorySynopsisReq(props.novelPlot, ""),
-      getScriptStorySynopsisReq(props.novelPlot, props.description),
-      getScriptStorySynopsisReq(props.novelPlot, props.description),
-    ]);
-
-    cards.value.original = {
-      title: resOriginal?.title || "",
-      synopsis: resOriginal?.synopsis || "",
-      background: resOriginal?.background || "",
-      highlight: resOriginal?.highlight || "",
-      informationGap: resOriginal?.informationGap || "",
-    };
-    cards.value.inspiration1 = {
-      title: resInspiration1?.title || "",
-      synopsis: resInspiration1?.synopsis || "",
-      background: resInspiration1?.background || "",
-      highlight: resInspiration1?.highlight || "",
-      informationGap: resInspiration1?.informationGap || "",
-    };
-    cards.value.inspiration2 = {
-      title: resInspiration2?.title || "",
-      synopsis: resInspiration2?.synopsis || "",
-      background: resInspiration2?.background || "",
-      highlight: resInspiration2?.highlight || "",
-      informationGap: resInspiration2?.informationGap || "",
-    };
-
-    activeTab.value = "original";
+    if (props.novelPlotSkipped) {
+      // 跳过拆解：3次都用 description，生成灵感版1、2、3，不传 novelPlot
+      const [res1, res2, res3]: ScriptStorySynopsisResult[] = await Promise.all([
+        getScriptStorySynopsisReq('', props.description),
+        getScriptStorySynopsisReq('', props.description),
+        getScriptStorySynopsisReq('', props.description),
+      ]);
+      cards.value.inspiration1 = { title: res1?.title || "", synopsis: res1?.synopsis || "", background: res1?.background || "", highlight: res1?.highlight || "", informationGap: res1?.informationGap || "" };
+      cards.value.inspiration2 = { title: res2?.title || "", synopsis: res2?.synopsis || "", background: res2?.background || "", highlight: res2?.highlight || "", informationGap: res2?.informationGap || "" };
+      cards.value.inspiration3 = { title: res3?.title || "", synopsis: res3?.synopsis || "", background: res3?.background || "", highlight: res3?.highlight || "", informationGap: res3?.informationGap || "" };
+      activeTab.value = "inspiration1";
+    } else {
+      // 未跳过：原逻辑
+      const [resOriginal, resInspiration1, resInspiration2]: ScriptStorySynopsisResult[] = await Promise.all([
+        getScriptStorySynopsisReq(props.novelPlot, ""),
+        getScriptStorySynopsisReq(props.novelPlot, props.description),
+        getScriptStorySynopsisReq(props.novelPlot, props.description),
+      ]);
+      cards.value.original = { title: resOriginal?.title || "", synopsis: resOriginal?.synopsis || "", background: resOriginal?.background || "", highlight: resOriginal?.highlight || "", informationGap: resOriginal?.informationGap || "" };
+      cards.value.inspiration1 = { title: resInspiration1?.title || "", synopsis: resInspiration1?.synopsis || "", background: resInspiration1?.background || "", highlight: resInspiration1?.highlight || "", informationGap: resInspiration1?.informationGap || "" };
+      cards.value.inspiration2 = { title: resInspiration2?.title || "", synopsis: resInspiration2?.synopsis || "", background: resInspiration2?.background || "", highlight: resInspiration2?.highlight || "", informationGap: resInspiration2?.informationGap || "" };
+      activeTab.value = "original";
+    }
   } catch (e) {
     console.error("[ScriptStorySelector] 获取故事梗概失败:", e);
     emit("error-and-revert", "标签.md");
@@ -196,7 +210,7 @@ const generateStorySynopsis = async () => {
   }
 };
 
-// 切换标签（含“自定义+”）：锁定时仍可切换查看，但不可添加自定义标签
+// 切换标签（含"自定义+"）：锁定时仍可切换查看，但不可添加自定义标签
 const handleTabChange = (tab: TabType | "customAdd") => {
   if (tab === "customAdd") {
     if (props.locked) return;
@@ -295,7 +309,9 @@ const initFromProps = () => {
       if (data.selectedTab && data.allCards) {
         console.log("[ScriptStorySelector] Loading story data");
         cards.value = { ...cards.value, ...data.allCards };
-        activeTab.value = data.selectedTab || "original";
+        // 跳过模式下若保存的 selectedTab 是 original，回退到 inspiration1
+        const fallbackTab = props.novelPlotSkipped && data.selectedTab === "original" ? "inspiration1" : data.selectedTab;
+        activeTab.value = fallbackTab || (props.novelPlotSkipped ? "inspiration1" : "original");
         if (typeof data.customTabCount === "number" && data.customTabCount >= 0 && data.customTabCount <= MAX_CUSTOM_TABS) {
           customTabCount.value = data.customTabCount;
         }
@@ -320,7 +336,7 @@ watch(
         cards.value[key as TabType] = emptyCard();
       });
       customTabCount.value = 0;
-      activeTab.value = "original";
+      activeTab.value = props.novelPlotSkipped ? "inspiration1" : "original";
       activeFieldIndex.value = null;
     } else {
       initFromProps();
@@ -335,7 +351,10 @@ watch(
   (newVal, oldVal) => {
     if (newVal > oldVal && newVal > 0) {
       console.log("[ScriptStorySelector] triggerGenerate changed, trigger generate:", { newVal, oldVal });
-      if (props.novelPlot && props.description && !props.locked) {
+      const canGenerate = props.novelPlotSkipped
+        ? props.description && !props.locked
+        : props.novelPlot && props.description && !props.locked;
+      if (canGenerate) {
         console.log("[ScriptStorySelector] Conditions met, auto generate");
         generateStorySynopsis();
       } else {
@@ -434,7 +453,7 @@ onMounted(() => {
                 {{ field.label }}<span v-if="field.required" class="required-mark">*</span>
               </div>
 
-              <!-- 未选中状态：单行显示，浅灰色，裁剪；hover 显示“编辑” -->
+              <!-- 未选中状态：单行显示，浅灰色，裁剪；hover 显示"编辑" -->
               <div v-if="activeFieldIndex !== index" class="field-preview">
                 <div class="field-preview-text" :class="{ 'has-content': getFieldValue(field.key) }">
                   {{ getFieldValue(field.key) || `请输入${field.label}` }}
@@ -768,10 +787,12 @@ onMounted(() => {
   &.loading {
     .skeleton-field {
       display: flex;
-      // gap: 30px;
-      // padding: 15px;
-      // min-height: 90px;
-      align-items: flex-start;
+      align-items: center;
+      min-height: 65px;
+      padding: 10px 20px;
+      border-radius: 12px;
+      background: #ffffff;
+      box-sizing: border-box;
 
       .field-icon-skeleton {
         flex-shrink: 0;

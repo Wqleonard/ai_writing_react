@@ -718,6 +718,18 @@ const tagSelectorNovelPlot = computed(() => {
   return result;
 });
 
+// 是否跳过了小说纲章拆解
+const novelPlotSkipped = computed(() => {
+  const novelOutlineData = serverData.value["小说纲章.md"];
+  if (!novelOutlineData) return false;
+  try {
+    const parsed = JSON.parse(novelOutlineData);
+    return parsed?.skipped === true;
+  } catch {
+    return false;
+  }
+});
+
 // 从serverData中提取小说纲章内容（作为novelPlot）
 const getNovelPlotFromServerData = (novelOutlineData: string): string => {
   if (!novelOutlineData) return "";
@@ -848,7 +860,7 @@ const handleNovelOutlineConfirm = async (data: ScriptNovelOutlineChapterResult) 
   try {
     const stringifyServerData = JSON.stringify(serverData.value);
     await updateWorkVersionReq(workId.value, stringifyServerData, "1");
-    ElMessage.success("小说纲章保存成功");
+    ElMessage.success(data.skipped ? "已跳过" : "小说纲章保存成功");
 
     // 锁定小说纲章目录
     lockedDirectories.value.add("小说纲章.md");
@@ -1592,6 +1604,21 @@ const handleRevertToCurrentStep = async (currentDir: string) => {
 
   // 解锁当前目录
   lockedDirectories.value.delete(currentDir);
+
+  // 若回退到小说纲章且之前是跳过状态，清除 skipped 标志
+  if (currentDir === "小说纲章.md") {
+    try {
+      const raw = serverData.value["小说纲章.md"];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.skipped) {
+          serverData.value["小说纲章.md"] = "";
+        }
+      }
+    } catch {
+      // 非 JSON 格式，不处理
+    }
+  }
 
   // 清空当前目录之后的所有内容
   directories.value.slice(currentIndex + 1).forEach((dir) => {
@@ -2580,6 +2607,7 @@ onUnmounted(() => {
             <div v-else-if="dir === '故事梗概.md'" class="section-content">
               <ScriptStorySelector
               :novel-plot="tagSelectorNovelPlot" :description="tagSelectorDescription"
+                :novel-plot-skipped="novelPlotSkipped"
                 :story-content="serverData['故事梗概.md'] || ''" :locked="lockedDirectories.has('故事梗概.md')"
                 :has-next-content="hasNextDirectoryContent('故事梗概.md')" :trigger-generate="storyGenerateTrigger"
                 @confirm="handleStoryConfirm" @revert="handleStoryRevert"

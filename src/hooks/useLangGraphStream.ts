@@ -2,7 +2,7 @@
  * useLangGraphStream - React 实现
  * 与 Vue 版对齐：发送消息时调用 api/works/chat 流式接口，解析 SSE 并回调。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentCustomMessage } from "../types/chat";
 import { apiClient, STREAM_CHAT_URL } from "@/api";
 import { useChatInputStore } from "@/stores/chatInputStore";
@@ -98,7 +98,9 @@ export function useLangGraphStream(
   const optionsRef = useRef(options);
   const currentSessionIdRef = useRef<string>("");
   const currentWorkIdRef = useRef<number | string | null>(null);
-  optionsRef.current = options;
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   const isMainAgentEvent = (event: string): boolean => {
     return event === "updates" || !event.includes("|tools:");
