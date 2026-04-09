@@ -1,4 +1,5 @@
 import type {
+  CanvasCardKey,
   CanvasModeCategory,
   CanvasModelType,
   CanvasOutputType,
@@ -91,3 +92,19 @@ export const OUTLINE_GROUP_LAYOUT = {
   cardGapX: 24,
   cardGapY: 28,
 } as const;
+
+export const TASK_TYPE_LABEL_MAP: Record<string, string> = {
+  "brain-storm-card": "脑洞",
+  "info-card": "信息",
+  "story-setting-card": "梗概",
+  "role-setting-card": "角色",
+  "outline-card": "大纲",
+};
+
+export const TASK_TYPE_CARD_KEY_MAP: Record<string, CanvasCardKey> = {
+  "brain-storm-card": "brainstorm",
+  "info-card": "info",
+  "story-setting-card": "summary",
+  "role-setting-card": "role",
+  "outline-card": "outline",
+};

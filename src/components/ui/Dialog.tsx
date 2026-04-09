@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/Button"
+import { isMobileDevice } from "@/utils/rem"
 
 export interface DialogProps {
   open: boolean
@@ -62,6 +63,8 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const isMobile = isMobileDevice()
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -82,9 +85,12 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="cursor-pointer ring-offset-background w-7 h-7 flex items-center justify-center hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-sm disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className={cn(
+              "cursor-pointer ring-offset-background w-7 h-7 flex items-center justify-center hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-sm disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+              isMobile && 'size-10 active::bg-accent',
+            )}
           >
-            <XIcon />
+            <XIcon className={cn(isMobile && 'size-9')} />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}

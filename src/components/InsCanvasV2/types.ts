@@ -179,6 +179,7 @@ export interface InsCanvasApi {
   addInfoCardFromExternalFile: (options: AddInfoCardFromExternalFileOptions) => string;
   focusFileByPath: (filePath: string, options?: FocusFileByPathOptions) => boolean;
   syncFileContentByPath: (filePath: string, content: string) => boolean;
+  syncFilePathByRename: (oldPath: string, newPath: string) => boolean;
   openHistory: () => void;
   saveCanvas: (sessionId?: string) => void;
   flushPersistence: () => Promise<void>;

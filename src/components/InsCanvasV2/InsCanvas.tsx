@@ -52,7 +52,6 @@ import type {
   CustomNode,
   CustomEdge,
   DialogReferenceCard,
-  InspirationItem,
   InsCanvasApi,
   InsCanvasInnerProps,
   InsCanvasProps,
@@ -74,6 +73,8 @@ import {
   OUTLINE_GROUP_LAYOUT,
   OUTPUT_TYPE_OPTIONS,
   ROLE_GROUP_LAYOUT,
+  TASK_TYPE_CARD_KEY_MAP,
+  TASK_TYPE_LABEL_MAP,
 } from "./constant";
 import {
   buildCanvasNodeFilePath,
@@ -86,6 +87,7 @@ import {
   extractCreationIdeaFileContent,
   extractDisplayToolFileContent,
   extractMarkdownImage,
+  extractPartialWriteToolFiles,
   extractReplySegmentsFromToolFiles,
   extractUpdatesMessageContentWithoutReadFile,
   extractUpdateToolFiles,
@@ -93,8 +95,6 @@ import {
   formatOutlineMarkdown,
   formatRecordMarkdown,
   getCanvasNodeLayoutSize as getCanvasNodeLayoutSizeFromUtils,
-  getCanvasDirectoryName,
-  getCanvasNodeBaseName,
   getFirstTextValue,
   getLatestWriteFiles,
   getPanelTextsFromMessageMap,
@@ -102,12 +102,7 @@ import {
   inferCardKeyFromWriteFilePath,
   isRelationshipWriteFile,
   isRelationshipInfoWriteFile,
-  logCanvasStreamDebug,
-  normalizeReplyFilePath,
   parseChoicesSuggestionItems,
-  sanitizeCanvasEntryName,
-  shouldSyncCanvasNode,
-  sortCanvasNodes,
   shouldSkipWriteFileCardCreation,
   splitAutoUpdatesContent,
 } from "./canvasUtils";
@@ -116,6 +111,115 @@ import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/wo
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, Pause, X } from "lucide-react";
+
+const getTaskTypeLabel = (taskType: unknown) => {
+  const normalizedTaskType = getTextValue(taskType);
+  return TASK_TYPE_LABEL_MAP[normalizedTaskType] ?? "";
+};
+
+const getTaskCardKey = (taskType: unknown): CanvasCardKey | "" => {
+  const normalizedTaskType = getTextValue(taskType);
+  return TASK_TYPE_CARD_KEY_MAP[normalizedTaskType] ?? "";
+};
+
+const getPositiveTaskNum = (taskNum: unknown) => {
+  const normalizedTaskNum = Number.parseInt(getTextValue(taskNum), 10);
+  return Number.isFinite(normalizedTaskNum) && normalizedTaskNum > 0
+    ? normalizedTaskNum
+    : 0;
+};
+
+const parseTaskJsonContent = (
+  content: unknown
+): Record<string, unknown> | null => {
+  const normalizedContent = getTextValue(content);
+  if (!normalizedContent) return null;
+  try {
+    const parsed = JSON.parse(normalizedContent);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const extractTaskJsonPayload = (value: unknown): Record<string, unknown> | null => {
+  let result: Record<string, unknown> | null = null;
+
+  const visit = (input: unknown) => {
+    if (result || !input) return;
+    if (Array.isArray(input)) {
+      input.forEach(visit);
+      return;
+    }
+    if (typeof input !== "object") return;
+
+    const record = input as {
+      tool_calls?: Array<{
+        name?: string;
+        args?: { file_path?: string; content?: string };
+      }>;
+      tools?: {
+        files?: Record<string, unknown>;
+      };
+    } & Record<string, unknown>;
+    const toolFiles = record.tools?.files;
+
+    if (toolFiles && typeof toolFiles === "object") {
+      const directTaskJson =
+        toolFiles["/task.json"] ??
+        toolFiles["task.json"] ??
+        Object.entries(toolFiles).find(([filePath]) =>
+          /(^|\/)task\.json$/i.test(filePath)
+        )?.[1];
+      const parsedTaskJson = parseTaskJsonContent(directTaskJson);
+      if (parsedTaskJson) {
+        result = parsedTaskJson;
+        return;
+      }
+    }
+
+    if (Array.isArray(record.tool_calls)) {
+      for (const toolCall of record.tool_calls) {
+        if (getTextValue(toolCall?.name) !== "write_file") continue;
+        if (!/(^|\/)task\.json$/i.test(getTextValue(toolCall?.args?.file_path))) {
+          continue;
+        }
+        const parsedTaskJson = parseTaskJsonContent(toolCall?.args?.content);
+        if (parsedTaskJson) {
+          result = parsedTaskJson;
+          return;
+        }
+      }
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(value);
+  return result;
+};
+
+const getNextTaskPanelLabelFromStream = (value: unknown) => {
+  const taskJson = extractTaskJsonPayload(value);
+  return getTaskTypeLabel(taskJson?.next_task_type);
+};
+
+const getCurrentTaskPanelLabelFromStream = (value: unknown) => {
+  const taskJson = extractTaskJsonPayload(value);
+  const taskTypeLabel = getTaskTypeLabel(taskJson?.task_type);
+  return taskTypeLabel || "";
+};
+
+const getCurrentTaskPlaceholderConfigFromStream = (value: unknown) => {
+  const taskJson = extractTaskJsonPayload(value);
+  const key = getTaskCardKey(taskJson?.task_type);
+  const taskNum = getPositiveTaskNum(taskJson?.task_num);
+  if (!key || taskNum <= 0) return null;
+  return { key, taskNum };
+};
 
 const summarizeCanvasPersistenceState = (nodes: CustomNode[], edges: CustomEdge[]) => {
   const placeholderNodes = nodes.filter((node) => {
@@ -835,6 +939,28 @@ const getStandaloneNextRightInsertPosition = (currentNodes: CustomNode[]) => {
   };
 };
 
+const getStandaloneBatchRowPositions = (
+  currentNodes: CustomNode[],
+  cardWidth: number,
+  count: number,
+  anchorNode?: CustomNode | null
+) => {
+  if (count <= 0) return [] as Array<{ x: number; y: number }>;
+
+  const anchorIsTopLevel = anchorNode && !anchorNode.parentId;
+  const basePosition = anchorIsTopLevel
+    ? {
+      x: getCanvasNodeRight(anchorNode) + CARD_LAYOUT_GAP_X,
+      y: anchorNode.position.y,
+    }
+    : getStandaloneNextRowPosition(currentNodes);
+
+  return Array.from({ length: count }, (_, index) => ({
+    x: basePosition.x + index * (cardWidth + CARD_LAYOUT_GAP_X),
+    y: basePosition.y,
+  }));
+};
+
 const getLinkedCardPosition = (
   sourceNodeId: string,
   currentNodes: CustomNode[],
@@ -968,9 +1094,19 @@ const createDirectedCanvasEdge = (
   target,
   sourceHandle: options?.sourceHandle,
   targetHandle: options?.targetHandle,
-  type: "bezier",
+  type: "default",
   animated: false,
 });
+
+const normalizeCanvasEdges = (input: CustomEdge[] = []): CustomEdge[] =>
+  input.map((edge) =>
+    getTextValue(edge?.type).toLowerCase() === "bezier"
+      ? {
+        ...edge,
+        type: "default",
+      }
+      : edge
+  );
 
 const withVerticalPorts = (node: CustomNode): CustomNode => {
   if (isInfoCanvasNode(node)) {
@@ -1011,11 +1147,15 @@ function InsCanvasInner({
 }: InsCanvasInnerProps) {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const normalizedInitialEdges = useMemo(
+    () => normalizeCanvasEdges(initialEdges),
+    [initialEdges]
+  );
   const [nodes, setNodes] = useNodesState<CustomNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(normalizedInitialEdges);
   // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
   const nodesRef = useRef<CustomNode[]>(initialNodes);
-  const edgesRef = useRef<CustomEdge[]>(initialEdges);
+  const edgesRef = useRef<CustomEdge[]>(normalizedInitialEdges);
   const canvasAutoSaveTimerRef = useRef<number | null>(null);
   const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
   const canvasAutoSaveSuppressedRef = useRef(false);
@@ -1043,6 +1183,8 @@ function InsCanvasInner({
   const [reqPanelVisible, setReqPanelVisible] = useState(false);
   const [reqPanelExpanded, setReqPanelExpanded] = useState(false);
   const [cardKeyLabel, setCardKeyLabel] = useState<string>("脑洞");
+  const nextReqPanelTaskLabelRef = useRef("");
+  const [reqPanelTaskLabel, setReqPanelTaskLabel] = useState("");
   const [reqPanelTitle, setReqPanelTitle] = useState("");
   const [reqPanelStatus, setReqPanelStatus] = useState<"idle" | "loading" | "success" | "error" | "paused">("idle");
   const [reqPanelDetail, setReqPanelDetail] = useState<string>("");
@@ -2063,14 +2205,58 @@ function InsCanvasInner({
         if (!isMatched) return node;
 
         const nextContent = String(content ?? "");
-        if (String(node.data?.content ?? "") === nextContent) return node;
+        // 命中 sync-path（由 tree/currentEditingId 驱动）时，优先将节点 filePath 对齐到该路径。
+        // 这样在重命名/拖拽后，卡片保存不会继续回写旧路径，避免出现重复文件。
+        const nextNodeFilePath = isMatchedBySyncPath
+          ? normalizedPath
+          : nodeFilePath;
+        const shouldUpdateContent = String(node.data?.content ?? "") !== nextContent;
+        const shouldUpdateFilePath =
+          Boolean(nextNodeFilePath) &&
+          getTextValue((node.data as any)?.filePath).trim() !== nextNodeFilePath;
+        if (!shouldUpdateContent && !shouldUpdateFilePath) return node;
 
         didUpdate = true;
         return {
           ...node,
           data: {
             ...node.data,
-            content: nextContent,
+            ...(shouldUpdateContent ? { content: nextContent } : {}),
+            ...(shouldUpdateFilePath ? { filePath: nextNodeFilePath } : {}),
+          },
+        };
+      })
+    );
+
+    return didUpdate;
+  }, [normalizeCanvasFilePath, setNodes]);
+
+  const syncFilePathByRename = useCallback((oldPath: string, newPath: string) => {
+    const normalizedOldPath = normalizeCanvasFilePath(oldPath);
+    const normalizedNewPath = normalizeCanvasFilePath(newPath);
+    if (!normalizedOldPath || !normalizedNewPath) return false;
+
+    let didUpdate = false;
+    setNodes((prev) =>
+      prev.map((node) => {
+        const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+        if (!nodeFilePath) return node;
+
+        const isExactMatch = nodeFilePath === normalizedOldPath;
+        const isDirectorySubPathMatch = nodeFilePath.startsWith(`${normalizedOldPath}/`);
+        if (!isExactMatch && !isDirectorySubPathMatch) return node;
+
+        const nextNodeFilePath = isExactMatch
+          ? normalizedNewPath
+          : `${normalizedNewPath}/${nodeFilePath.slice(normalizedOldPath.length + 1)}`;
+        if (!nextNodeFilePath || nextNodeFilePath === nodeFilePath) return node;
+
+        didUpdate = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            filePath: nextNodeFilePath,
           },
         };
       })
@@ -2100,6 +2286,29 @@ function InsCanvasInner({
     if (!normalizedSourceIds.length || !normalizedTargetIds.length) return;
 
     setEdges((prev) => {
+      const latestNodes = nodesRef.current;
+      const isContainerToOwnChildEdge = (sourceId: string, targetId: string) => {
+        const sourceNode = latestNodes.find((node) => node.id === sourceId);
+        const targetNode = latestNodes.find((node) => node.id === targetId);
+        if (!sourceNode || !targetNode) return false;
+
+        const sourceGroupId =
+          getTextValue(sourceNode.parentId) ||
+          getTextValue((sourceNode.data as any)?.roleGroupId) ||
+          getTextValue((sourceNode.data as any)?.outlineGroupId);
+        const targetGroupId =
+          getTextValue(targetNode.parentId) ||
+          getTextValue((targetNode.data as any)?.roleGroupId) ||
+          getTextValue((targetNode.data as any)?.outlineGroupId);
+
+        const sourceIsGroupContainer = sourceNode.type === "roleGroup";
+        const targetIsGroupContainer = targetNode.type === "roleGroup";
+
+        return (
+          (sourceIsGroupContainer && targetGroupId === sourceId) ||
+          (targetIsGroupContainer && sourceGroupId === targetId)
+        );
+      };
       const existingPairs = new Set(
         (prev as CustomEdge[]).map((edge) => `${edge.source}->${edge.target}`)
       );
@@ -2109,6 +2318,7 @@ function InsCanvasInner({
       normalizedSourceIds.forEach((sourceId) => {
         normalizedTargetIds.forEach((targetId) => {
           if (!sourceId || !targetId || sourceId === targetId) return;
+          if (isContainerToOwnChildEdge(sourceId, targetId)) return;
           const pairKey = `${sourceId}->${targetId}`;
           if (existingPairs.has(pairKey)) return;
           existingPairs.add(pairKey);
@@ -2331,6 +2541,16 @@ function InsCanvasInner({
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  useEffect(() => {
+    const hasLegacyBezierEdge = edges.some(
+      (edge) => getTextValue(edge?.type).toLowerCase() === "bezier"
+    );
+    if (!hasLegacyBezierEdge) return;
+    const normalizedEdges = normalizeCanvasEdges(edges);
+    edgesRef.current = normalizedEdges;
+    setEdges(normalizedEdges);
+  }, [edges, setEdges]);
 
   useEffect(() => {
     hasIdeaRef.current = hasIdea;
@@ -2622,7 +2842,7 @@ function InsCanvasInner({
           id: `e${sourceNodeId}-${nid}`,
           source: sourceNodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -2716,7 +2936,7 @@ function InsCanvasInner({
           id: `e${nodeId}-${nid}`,
           source: nodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -3260,7 +3480,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: groupSourceId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3399,7 +3619,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3699,17 +3919,6 @@ function InsCanvasInner({
             if (ay !== by) return ay - by;
             return Number(a.position?.x ?? 0) - Number(b.position?.x ?? 0);
           });
-        logCanvasStreamDebug("appendOutlineCardsToGroup", {
-          sourceNodeId,
-          groupId,
-          isSourceOutlineGroup,
-          existingOutlineNodesCount: existingOutlineNodes.length,
-          incomingOutlineCards: outlineCards.map((item) => ({
-            filePath: item.filePath ?? "",
-            contentLength: getTextValue(item.content).length,
-            isStreaming: item.isStreaming ?? false,
-          })),
-        });
         const startIndex = existingOutlineNodes.length;
         const outlineNodes = outlineCards.map((item, index) => {
           const idx = startIndex + index;
@@ -3805,7 +4014,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -4074,7 +4283,6 @@ function InsCanvasInner({
       nodesRef.current = [...currentNodes, ...placeholderNodes];
       setNodes((prev) => [...prev, ...placeholderNodes]);
     }
-
     if (!brainstormProgressTimerRef.current) {
       brainstormProgressTimerRef.current = setInterval(() => {
         const cur = brainstormProgressValueRef.current;
@@ -4612,6 +4820,10 @@ function InsCanvasInner({
             }
             const writeFiles = extractUpdateToolFiles(streamData?.data);
             persistGeneratedWriteFiles(writeFiles);
+            const nextTaskPanelLabel = getNextTaskPanelLabelFromStream(streamData?.data);
+            if (nextTaskPanelLabel) {
+              nextReqPanelTaskLabelRef.current = nextTaskPanelLabel;
+            }
             if (!hasWriteFileSuggestions) {
               const choicesContent = extractChoicesToolFileContent(streamData?.data);
               if (choicesContent) {
@@ -4714,6 +4926,7 @@ function InsCanvasInner({
         const partialPanelContentById = new Map<string, string>();
         const collectedWriteFilesByPath = new Map<string, CanvasWriteFileCall>();
         const persistedReplySegments: ReplySegments = { start: "", middle: "", end: "" };
+        const streamedNodeIdsByCallId = new Map<string, string>();
         const streamedNodeIdsByFilePath = new Map<string, string>();
         const streamPendingNodeIds = new Set<string>();
         const standaloneGroupIdsByKey = new Map<"role" | "outline", string>();
@@ -4761,8 +4974,10 @@ function InsCanvasInner({
         const reusableRoleDraftNodeId = resolveReusableRoleDraftNodeId();
         const isReusingRoleDraftNode =
           requestedCardKey === "role" && Boolean(reusableRoleDraftNodeId);
-        const useBrainstormBatchLoading =
-          requestedCardKey === "brainstorm" && !shouldReuseSourceDraftNode;
+        // 统一脑洞/梗概多卡的占位与布局逻辑：
+        // 脑洞不再走专用 batch placeholder 流程，直接复用梗概当前的
+        // loadingCard + task_num 补占位 + 横向排布逻辑。
+        const useBrainstormBatchLoading = false;
         if (useBrainstormBatchLoading) {
           // Reset cross-request batch state to avoid replacing previous brainstorm cards.
           stopBrainstormProgress();
@@ -4909,6 +5124,95 @@ function InsCanvasInner({
 
           return createdNodeId;
         };
+        const createContextLinkedSingleCardsBatch = (
+          key: "brainstorm" | "summary" | "info",
+          sourceId: string,
+          cards: Array<{
+            title?: string;
+            filePath?: string;
+            content?: string;
+            image?: string;
+            fromApi?: boolean;
+            isStreaming?: boolean;
+            allowTitleEdit?: boolean;
+            allowImageUpload?: boolean;
+            autoEdit?: boolean;
+            skipAutoStream?: boolean;
+          }>
+        ) => {
+          const normalizedSourceId = getTextValue(sourceId);
+          if (!normalizedSourceId || !cards.length) return [] as string[];
+
+          const sourceNode = nodesRef.current.find((node) => node.id === normalizedSourceId);
+          if (!sourceNode) return [] as string[];
+
+          const nextNodes = [...nodesRef.current];
+          const nextEdges = [...(edgesRef.current as CustomEdge[])];
+          const createdIds: string[] = [];
+
+          cards.forEach((card) => {
+            const isInfoCard = key === "info";
+            const nodeId = getNextCanvasNodeId(isInfoCard ? "settingCard" : "summaryCard");
+            const position = getLinkedCardPosition(
+              normalizedSourceId,
+              nextNodes,
+              nextEdges,
+              isInfoCard ? "info" : "attribute"
+            );
+
+            const nextNode: CustomNode = {
+              id: nodeId,
+              type: isInfoCard ? "settingCard" : "summaryCard",
+              position,
+              sourcePosition: isInfoCard ? Position.Right : Position.Bottom,
+              targetPosition: isInfoCard ? Position.Left : Position.Top,
+              draggable: hasIdea,
+              data: {
+                label: isInfoCard ? "信息" : key === "brainstorm" ? "脑洞" : "梗概",
+                title: card.title ?? "",
+                filePath: card.filePath ?? "",
+                content: card.content ?? "",
+                image: card.image ?? "",
+                fromApi: card.fromApi,
+                isStreaming: card.isStreaming ?? false,
+                expandable: isInfoCard ? true : undefined,
+                allowTitleEdit: card.allowTitleEdit,
+                allowImageUpload: card.allowImageUpload,
+                autoEdit: card.autoEdit,
+                inspirationWord: sourceNode.data?.inspirationWord,
+                inspirationTheme: sourceNode.data?.inspirationTheme,
+                shortSummary: sourceNode.data?.shortSummary,
+                storySetting: sourceNode.data?.storySetting,
+                inspirationDrawId: sourceNode.data?.inspirationDrawId ?? inspirationDrawId,
+                skipAutoStream: card.skipAutoStream ?? false,
+              } as any,
+            };
+
+            const nextEdge = createDirectedCanvasEdge(
+              normalizedSourceId,
+              nodeId,
+              isInfoCard
+                ? {
+                  sourceHandle: "source-right",
+                  targetHandle: "target-left",
+                }
+                : undefined
+            );
+
+            nextNodes.push(nextNode);
+            nextEdges.push(nextEdge);
+            createdIds.push(nodeId);
+          });
+
+          setCanvasReady(true);
+          nodesRef.current = nextNodes;
+          edgesRef.current = nextEdges;
+          setNodes(nextNodes);
+          setEdges(nextEdges);
+          scheduleCanvasAutoSave();
+
+          return createdIds;
+        };
         const createManualLoadingCard = () => {
           if (!shouldCreateLoadingCard) return "";
 
@@ -5009,6 +5313,210 @@ function InsCanvasInner({
           }
           removeLoadingCard(nodeId);
         };
+        const extraLoadingCardIdsByKey = new Map<CanvasCardKey, string[]>();
+        const registerExtraLoadingCardIds = (key: CanvasCardKey, nodeIds: string[]) => {
+          if (!nodeIds.length) return;
+          const existingIds = extraLoadingCardIdsByKey.get(key) ?? [];
+          const dedupedIds = nodeIds.filter((nodeId) => nodeId && !existingIds.includes(nodeId));
+          if (!dedupedIds.length) return;
+          extraLoadingCardIdsByKey.set(key, [...existingIds, ...dedupedIds]);
+        };
+        const removeExtraLoadingCardId = (key: CanvasCardKey, nodeId: string) => {
+          if (!nodeId) return;
+          const existingIds = extraLoadingCardIdsByKey.get(key) ?? [];
+          if (!existingIds.length) return;
+          const nextIds = existingIds.filter((id) => id !== nodeId);
+          if (nextIds.length > 0) {
+            extraLoadingCardIdsByKey.set(key, nextIds);
+          } else {
+            extraLoadingCardIdsByKey.delete(key);
+          }
+        };
+        const getUnboundPlaceholderNodes = (key?: CanvasCardKey) => {
+          const boundNodeIds = new Set<string>([
+            ...Array.from(streamedNodeIdsByCallId.values()),
+            ...Array.from(streamedNodeIdsByFilePath.values()),
+          ]);
+          const currentNodes = nodesRef.current;
+          const isPlaceholderNode = (node: CustomNode, targetKey: CanvasCardKey) => {
+            if (!node || boundNodeIds.has(node.id) || node.id === loadingCardId) return false;
+            const nodeData = (node.data ?? {}) as any;
+            const isPendingPlaceholder =
+              Boolean(nodeData.fromApi) &&
+              (Boolean(nodeData.isStreaming) || Boolean(nodeData.pendingGenerate));
+            if (!isPendingPlaceholder) return false;
+            if (targetKey === "role") {
+              return (
+                node.type === "settingCard" &&
+                getTextValue(nodeData.label) === "角色" &&
+                !isRelationshipWriteFile(getTextValue(nodeData.filePath))
+              );
+            }
+            if (targetKey === "outline") {
+              return node.type === "outlineCard";
+            }
+            if (targetKey === "summary") {
+              return node.type === "summaryCard" && getTextValue(nodeData.label) === "故事梗概";
+            }
+            if (targetKey === "brainstorm") {
+              return node.type === "summaryCard" && getTextValue(nodeData.label) === "脑洞";
+            }
+            return node.type === "settingCard" && getTextValue(nodeData.label) === "信息";
+          };
+          const keys: CanvasCardKey[] = key
+            ? [key]
+            : ["role", "outline", "summary", "brainstorm", "info"];
+          return currentNodes.filter((node) =>
+            keys.some((targetKey) => isPlaceholderNode(node, targetKey))
+          );
+        };
+        const isStableWriteFilePath = (filePath: string) => {
+          const normalizedPath = getTextValue(filePath);
+          if (!normalizedPath || normalizedPath === "/" || normalizedPath.endsWith("/")) {
+            return false;
+          }
+          const fileName = normalizedPath.split("/").pop() ?? "";
+          return /\.[a-z0-9]+$/i.test(fileName);
+        };
+        const findExistingUnboundPlaceholderNodeId = (key: CanvasCardKey) => {
+          const unboundPlaceholderNode = getUnboundPlaceholderNodes(key)[0];
+          return unboundPlaceholderNode?.id ?? "";
+        };
+        const consumeExtraLoadingCardId = (key: CanvasCardKey) => {
+          const existingIds = extraLoadingCardIdsByKey.get(key) ?? [];
+          while (existingIds.length > 0) {
+            const nextNodeId = existingIds.shift() ?? "";
+            if (!nextNodeId) continue;
+            if (!nodesRef.current.some((node) => node.id === nextNodeId)) continue;
+            if (existingIds.length > 0) {
+              extraLoadingCardIdsByKey.set(key, [...existingIds]);
+            } else {
+              extraLoadingCardIdsByKey.delete(key);
+            }
+            return nextNodeId;
+          }
+          extraLoadingCardIdsByKey.delete(key);
+          const fallbackNodeId = findExistingUnboundPlaceholderNodeId(key);
+          if (fallbackNodeId) {
+            removeExtraLoadingCardId(key, fallbackNodeId);
+          }
+          return fallbackNodeId;
+        };
+        const cleanupExtraLoadingCards = () => {
+          Array.from(extraLoadingCardIdsByKey.values())
+            .flat()
+            .forEach((nodeId) => {
+              cleanupLoadingCard(nodeId);
+            });
+          extraLoadingCardIdsByKey.clear();
+        };
+        const createAdditionalManualLoadingCards = (key: CanvasCardKey, count: number) => {
+          if (count <= 0) return [] as string[];
+          if (key === "brainstorm" && useBrainstormBatchLoading) {
+            const placeholderFiles = Array.from({ length: count }, (_, index) => ({
+              filePath: `brainstorm-placeholder-${Date.now()}-${index + 1}.md`,
+              content: "",
+            }));
+            const nextPlaceholderIds = startBrainstormPlaceholderBatch(
+              placeholderFiles,
+              brainstormBatchIdsRef.current.length > 0 || nodesRef.current.length > 0
+                ? "append"
+                : "replace"
+            );
+            return nextPlaceholderIds.slice(-count);
+          }
+
+          const commonOptions = {
+            title: "",
+            content: "",
+            image: "",
+            fromApi: true,
+            isStreaming: true,
+            skipAutoStream: true,
+          };
+
+          if (key === "role") {
+            if (useContextLinkedCreation && effectiveSourceNodeId) {
+              return appendRoleCardsToGroup(
+                effectiveSourceNodeId,
+                Array.from({ length: count }, () => ({ ...commonOptions }))
+              ).roleNodeIds;
+            }
+            return Array.from({ length: count }, () => createStandaloneGroupedCardByKey("role", commonOptions))
+              .filter(Boolean);
+          }
+
+          if (key === "outline") {
+            if (useContextLinkedCreation && effectiveSourceNodeId) {
+              return appendOutlineCardsToGroup(
+                effectiveSourceNodeId,
+                Array.from({ length: count }, () => ({ ...commonOptions }))
+              ).outlineNodeIds;
+            }
+            return Array.from({ length: count }, () => createStandaloneGroupedCardByKey("outline", commonOptions))
+              .filter(Boolean);
+          }
+
+          if ((key === "summary" || key === "brainstorm") && useContextLinkedCreation && effectiveSourceNodeId) {
+            return createContextLinkedSingleCardsBatch(key, effectiveSourceNodeId, Array.from({ length: count }, () => ({
+              ...commonOptions,
+              allowTitleEdit: true,
+              allowImageUpload: true,
+              autoEdit: true,
+            })));
+          }
+
+          if (key === "info" && useContextLinkedCreation && effectiveSourceNodeId) {
+            return createContextLinkedSingleCardsBatch(key, effectiveSourceNodeId, Array.from({ length: count }, () => ({
+              ...commonOptions,
+              allowTitleEdit: true,
+              allowImageUpload: false,
+              autoEdit: true,
+            })));
+          }
+
+          const cardWidth = getDraftCardSize(key).width;
+          const anchorNode =
+            key === requestedCardKey && loadingCardId
+              ? nodesRef.current.find((node) => node.id === loadingCardId) ?? null
+              : null;
+          const positions = getStandaloneBatchRowPositions(
+            nodesRef.current,
+            cardWidth,
+            count,
+            anchorNode
+          );
+
+          return Array.from({ length: count }, (_, index) =>
+            createCardByKey(key, {
+              ...commonOptions,
+              allowTitleEdit: true,
+              allowImageUpload: true,
+              autoEdit: true,
+              position: positions[index],
+            })
+          ).filter(Boolean);
+        };
+        const ensureTaskPlaceholderCount = (key: CanvasCardKey, taskNum: number) => {
+          if (taskNum <= 0) return;
+          if (key === "brainstorm" && useBrainstormBatchLoading) {
+            createAdditionalManualLoadingCards(key, taskNum);
+            return;
+          }
+          const reservedCount = (extraLoadingCardIdsByKey.get(key) ?? []).length;
+          const baseCount =
+            key === requestedCardKey && loadingCardId
+              ? 1
+              : 0;
+          const missingCount = taskNum - baseCount - reservedCount;
+          if (missingCount <= 0) return;
+          const createdIds = createAdditionalManualLoadingCards(key, missingCount);
+          if (!createdIds.length) return;
+          registerExtraLoadingCardIds(key, createdIds);
+          rememberLatestGeneratedNode(createdIds[createdIds.length - 1] ?? "");
+          connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, createdIds);
+          startLoadingProgressForNodes(createdIds);
+        };
         if (loadingCardId) {
           if (shouldReuseSourceDraftNode || (isReusingRoleDraftNode && loadingCardId === reusableRoleDraftNodeId)) {
             updateLoadingCard(loadingCardId, requestedCardKey, {
@@ -5024,14 +5532,8 @@ function InsCanvasInner({
               allowTitleEdit: true,
               allowImageUpload: requestedCardKey !== "outline" && requestedCardKey !== "info",
               autoEdit: true,
-              isBlankDraft: false,
-              isBlankBrainstormDraft: false,
-              brainstormAiMode: false,
-              pendingGenerate: true,
-              highlighted: false,
-              skipAutoStream: true,
-            });
-          }
+            }) ?? "";
+          };
           rememberLatestGeneratedNode(loadingCardId);
           connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [loadingCardId]);
           startLoadingProgressForNodes([loadingCardId]);
@@ -5262,6 +5764,40 @@ function InsCanvasInner({
           });
           return existingNode?.id ?? "";
         };
+        const rememberStreamNodeBinding = (item: CanvasWriteFileCall, nodeId: string) => {
+          if (!nodeId) return;
+          const filePath = getTextValue(item.filePath);
+          const callId = getTextValue(item.callId);
+          if (isStableWriteFilePath(filePath)) {
+            streamedNodeIdsByFilePath.set(filePath, nodeId);
+          }
+          if (callId) {
+            streamedNodeIdsByCallId.set(callId, nodeId);
+          }
+        };
+        const consumeBrainstormPlaceholderNodeId = () => {
+          const boundNodeIds = new Set<string>([
+            ...Array.from(streamedNodeIdsByCallId.values()),
+            ...Array.from(streamedNodeIdsByFilePath.values()),
+          ]);
+          const candidateStates = brainstormBatchIdsRef.current.map((nodeId) => {
+            const node = nodesRef.current.find((item) => item.id === nodeId);
+            return {
+              nodeId,
+              isBound: boundNodeIds.has(nodeId),
+              existsInNodesRef: Boolean(node),
+            };
+          });
+          const nextNodeId = (
+            candidateStates.find(
+              (item) =>
+                item.nodeId &&
+                !item.isBound &&
+                item.existsInNodesRef
+            )?.nodeId ?? ""
+          );
+          return nextNodeId;
+        };
         const shouldConsumeLoadingCardForKey = (key: CanvasCardKey) =>
           Boolean(loadingCardId) && !loadingCardConsumed && key === requestedCardKey;
         const bindWriteFileToLoadingCard = (
@@ -5274,16 +5810,32 @@ function InsCanvasInner({
           if (!filePath) return "";
           loadingCardConsumed = true;
           streamPendingNodeIds.add(loadingCardId);
-          streamedNodeIdsByFilePath.set(filePath, loadingCardId);
+          rememberStreamNodeBinding(item, loadingCardId);
 
           if (!isFinalWrite) {
             startLoadingProgressForNodes([loadingCardId]);
           }
           return loadingCardId;
         };
-        const ensureStreamNodeId = (filePath: string, key: CanvasCardKey) => {
-          const existingNodeId = streamedNodeIdsByFilePath.get(filePath) || "";
+        const shouldConsumeReservedPlaceholderForWriteFile = (filePath: string) =>
+          !isRelationshipWriteFile(filePath) && !isRelationshipInfoWriteFile(filePath);
+        const ensureStreamNodeId = (item: CanvasWriteFileCall, key: CanvasCardKey) => {
+          const filePath = getTextValue(item.filePath);
+          const callId = getTextValue(item.callId);
+          const finalizeResolvedNodeId = (resolvedNodeId: string, stage: string) => {
+            if (!resolvedNodeId) return "";
+            rememberStreamNodeBinding(item, resolvedNodeId);
+            streamPendingNodeIds.add(resolvedNodeId);
+            rememberLatestGeneratedNode(resolvedNodeId);
+            connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [resolvedNodeId]);
+            return resolvedNodeId;
+          };
+          const existingNodeId =
+            (callId ? streamedNodeIdsByCallId.get(callId) || "" : "") ||
+            (isStableWriteFilePath(filePath) ? streamedNodeIdsByFilePath.get(filePath) || "" : "") ||
+            "";
           if (existingNodeId) {
+            rememberStreamNodeBinding(item, existingNodeId);
             streamPendingNodeIds.add(existingNodeId);
             return existingNodeId;
           }
@@ -5294,6 +5846,20 @@ function InsCanvasInner({
           if (shouldConsumeLoadingCardForKey(key)) {
             nextNodeId = loadingCardId;
             loadingCardConsumed = true;
+          }
+
+          if (!nextNodeId && shouldConsumeReservedPlaceholderForWriteFile(filePath)) {
+            nextNodeId = consumeExtraLoadingCardId(key);
+            if (nextNodeId) {
+              return finalizeResolvedNodeId(nextNodeId, "reserved-placeholder");
+            }
+          }
+
+          if (!nextNodeId && key === "brainstorm" && useBrainstormBatchLoading) {
+            nextNodeId = consumeBrainstormPlaceholderNodeId();
+            if (nextNodeId) {
+              return finalizeResolvedNodeId(nextNodeId, "brainstorm-batch-placeholder");
+            }
           }
 
           if (!nextNodeId && useContextLinkedCreation && effectiveSourceNodeId) {
@@ -5417,32 +5983,9 @@ function InsCanvasInner({
           }
 
           if (nextNodeId) {
-            streamedNodeIdsByFilePath.set(filePath, nextNodeId);
-            streamPendingNodeIds.add(nextNodeId);
-            rememberLatestGeneratedNode(nextNodeId);
-            connectReferenceNodesToTargets(selectedDialogReferenceEdgeSourceIds, [nextNodeId]);
-            if (key === "summary" || key === "outline") {
-              logCanvasStreamDebug("ensureStreamNodeId resolved", {
-                requestedCardKey,
-                filePath,
-                key,
-                nextNodeId,
-                useContextLinkedCreation,
-                effectiveSourceNodeId,
-                loadingCardId,
-              });
-            }
-          } else if (key === "summary" || key === "outline") {
-            logCanvasStreamDebug("ensureStreamNodeId unresolved", {
-              requestedCardKey,
-              filePath,
-              key,
-              useContextLinkedCreation,
-              effectiveSourceNodeId,
-              loadingCardId,
-            });
+            return finalizeResolvedNodeId(nextNodeId, "create-or-context");
           }
-          return nextNodeId;
+          return "";
         };
         const updateWriteFilePlaceholderCard = (
           nodeId: string,
@@ -5480,7 +6023,36 @@ function InsCanvasInner({
           if (!nodeId) return;
           const filePath = getTextValue(item.filePath);
           const fallbackTitle = getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片");
+          rememberStreamNodeBinding(item, nodeId);
           finishLoadingProgressForNode(nodeId);
+          updateLoadingCard(nodeId, key, {
+            title: extractWriteFileTitle(filePath, fallbackTitle),
+            filePath,
+            content: getTextValue(item.content),
+            image: extractMarkdownImage(item.content),
+            fromApi: true,
+            isStreaming: false,
+            allowTitleEdit: true,
+            allowImageUpload: key !== "outline" && key !== "info",
+            autoEdit: true,
+            isBlankDraft: false,
+            isBlankBrainstormDraft: false,
+            brainstormAiMode: false,
+            pendingGenerate: false,
+            highlighted: false,
+            skipAutoStream: true,
+          });
+        };
+        const applyPartialWriteFileSnapshotToNode = (
+          nodeId: string,
+          key: CanvasCardKey,
+          item: CanvasWriteFileCall
+        ) => {
+          if (!nodeId) return;
+          const filePath = getTextValue(item.filePath);
+          const fallbackTitle = getWriteFileFallbackTitle(filePath, trimmedIdea || "卡片");
+          rememberStreamNodeBinding(item, nodeId);
+          startLoadingProgressForNodes([nodeId]);
           updateLoadingCard(nodeId, key, {
             title: extractWriteFileTitle(filePath, fallbackTitle),
             filePath,
@@ -5513,28 +6085,27 @@ function InsCanvasInner({
           item: CanvasWriteFileCall,
           isFinalWrite: boolean
         ) => {
-          if (useBrainstormBatchLoading) return;
           const filePath = getTextValue(item.filePath);
           if (!filePath) return;
-          if (shouldSkipWriteFileCardCreation(filePath)) return;
+          if (!isFinalWrite && !isStableWriteFilePath(filePath)) {
+            return;
+          }
+          if (shouldSkipWriteFileCardCreation(filePath)) {
+            return;
+          }
           const key = resolveWriteFileCardKey(filePath);
           const boundLoadingNodeId = bindWriteFileToLoadingCard(item, key, isFinalWrite);
-          const nodeId = boundLoadingNodeId || ensureStreamNodeId(filePath, key);
-          if (key === "summary" || key === "outline") {
-            logCanvasStreamDebug("syncWriteFileCard", {
-              requestedCardKey,
-              filePath,
-              key,
-              isFinalWrite,
-              loadingCardId,
-              boundLoadingNodeId,
-              nodeId,
-            });
-          }
+          const nodeId = boundLoadingNodeId || ensureStreamNodeId(item, key);
           if (!nodeId) return;
           streamPendingNodeIds.add(nodeId);
-          if (boundLoadingNodeId) return;
-          updateWriteFilePlaceholderCard(nodeId, key);
+          if (isFinalWrite) {
+            applyWriteFileResultToNode(nodeId, key, item);
+            return;
+          }
+          if (!boundLoadingNodeId) {
+            updateWriteFilePlaceholderCard(nodeId, key);
+          }
+          applyPartialWriteFileSnapshotToNode(nodeId, key, item);
         };
         const replaceLoadingCardWithFinalFile = (
           placeholderNodeId: string,
@@ -5639,6 +6210,17 @@ function InsCanvasInner({
             const isFinalWrite = streamData?.event === "updates";
             const isPartialWrite = streamData?.event === "messages/partial";
             if (!isFinalWrite && !isPartialWrite) return;
+            const currentTaskPanelLabel = getCurrentTaskPanelLabelFromStream(streamData?.data);
+            if (currentTaskPanelLabel) {
+              setReqPanelTaskLabel(currentTaskPanelLabel);
+            }
+            const currentTaskPlaceholderConfig = getCurrentTaskPlaceholderConfigFromStream(streamData?.data);
+            if (currentTaskPlaceholderConfig) {
+              ensureTaskPlaceholderCount(
+                currentTaskPlaceholderConfig.key,
+                currentTaskPlaceholderConfig.taskNum
+              );
+            }
             if (isPartialWrite) {
               const changed = collectPartialPanelMessagesById(
                 streamData?.data,
@@ -5651,6 +6233,23 @@ function InsCanvasInner({
                   partialPanelContentById
                 );
                 syncReqPanelTextRefs(detail, body, footer);
+              }
+              const partialWriteFiles = extractPartialWriteToolFiles(streamData?.data);
+              if (partialWriteFiles.length) {
+                partialWriteFiles.forEach((item) => {
+                  const normalizedPath = getTextValue(item.filePath);
+                  if (!normalizedPath) return;
+                  if (shouldSkipWriteFileCardCreation(normalizedPath)) return;
+                  const normalizedItem: PartialCanvasWriteFileCall = {
+                    filePath: normalizedPath,
+                    content: getTextValue(item.content),
+                    callId: getTextValue(item.callId),
+                  };
+                  if (isStableWriteFilePath(normalizedPath)) {
+                    collectedWriteFilesByPath.set(normalizedPath, normalizedItem);
+                  }
+                  syncWriteFileCard(normalizedItem, false);
+                });
               }
               return;
             }
@@ -5715,6 +6314,13 @@ function InsCanvasInner({
             );
             if (useBrainstormBatchLoading) {
               if (!effectiveFiles.length) return;
+              if (streamedNodeIdsByFilePath.size > 0 || streamedNodeIdsByCallId.size > 0) {
+                // updates 事件可能按文件逐个到达；这里仅做已绑定节点的增量回填，
+                // 不能提前清空 batch ids，否则后续文件会失去剩余占位卡并重新建卡。
+                applyCollectedWriteFilesToStreamNodes();
+                finalizePendingStreamNodes();
+                return;
+              }
               startBrainstormPlaceholderBatch(
                 effectiveFiles,
                 brainstormBatchIdsRef.current.length > 0 || nodesRef.current.length > 0 ? "append" : "replace"
@@ -5767,6 +6373,9 @@ function InsCanvasInner({
             setSmartSuggestionsActive(false);
             setIsLoading(false);
             stopLoadingProgress();
+            if (loadingCardId) cleanupLoadingCard(loadingCardId);
+            cleanupExtraLoadingCards();
+            if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
             return;
           }
 
@@ -5789,6 +6398,7 @@ function InsCanvasInner({
             updateBrainstormPlaceholderBatch(effectiveFiles, trimmedIdea || "脑洞", true);
             finalizePendingStreamNodes();
             brainstormBatchIdsRef.current = [];
+            cleanupExtraLoadingCards();
             setIsLoading(false);
             return;
           }
@@ -5800,6 +6410,7 @@ function InsCanvasInner({
             if (loadingCardId && !loadingCardConsumed) {
               cleanupLoadingCard(loadingCardId);
             }
+            cleanupExtraLoadingCards();
             finalizePendingStreamNodes();
             setIsLoading(false);
             return;
@@ -5979,6 +6590,36 @@ function InsCanvasInner({
                 outline: "outline",
                 info: "info",
               }[cardOutputType] as CanvasCardKey);
+            const createStandaloneSingleCardsInRow = (
+              files: CanvasWriteFileCall[],
+              anchorNodeId?: string
+            ) => {
+              if (!files.length) return;
+              const anchorNode = anchorNodeId
+                ? nodesRef.current.find((node) => node.id === anchorNodeId) ?? null
+                : null;
+              const positions = getStandaloneBatchRowPositions(
+                nodesRef.current,
+                getDraftCardSize(targetCardKey).width,
+                files.length,
+                anchorNode
+              );
+
+              files.forEach((item, index) => {
+                createCardByKey(targetCardKey, {
+                  title: extractWriteFileTitle(item.filePath, trimmedIdea),
+                  filePath: item.filePath,
+                  content: item.content,
+                  image: extractMarkdownImage(item.content),
+                  fromApi: true,
+                  isStreaming: false,
+                  allowTitleEdit: true,
+                  allowImageUpload: targetCardKey !== "info",
+                  autoEdit: true,
+                  position: positions[index],
+                });
+              });
+            };
             if (loadingCardId) {
               updateLoadingCard(loadingCardId, targetCardKey, {
                 title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
@@ -5998,6 +6639,29 @@ function InsCanvasInner({
                     isStreaming: false,
                   }))
                 );
+              } else if (
+                useContextLinkedCreation &&
+                effectiveSourceNodeId &&
+                targetCardKey !== "outline" &&
+                effectiveFiles.length > 1
+              ) {
+                createContextLinkedSingleCardsBatch(
+                  targetCardKey as "brainstorm" | "summary" | "info",
+                  effectiveSourceNodeId,
+                  effectiveFiles.slice(1).map((item) => ({
+                    title: extractWriteFileTitle(item.filePath, trimmedIdea),
+                    filePath: item.filePath,
+                    content: item.content,
+                    image: extractMarkdownImage(item.content),
+                    fromApi: true,
+                    isStreaming: false,
+                    allowTitleEdit: true,
+                    allowImageUpload: targetCardKey !== "info",
+                    autoEdit: true,
+                  }))
+                );
+              } else if (!useContextLinkedCreation && targetCardKey !== "outline" && effectiveFiles.length > 1) {
+                createStandaloneSingleCardsInRow(effectiveFiles.slice(1), loadingCardId);
               }
             } else if (useContextLinkedCreation && effectiveSourceNodeId) {
               if (targetCardKey === "brainstorm") {
@@ -6047,22 +6711,46 @@ function InsCanvasInner({
                   image: extractMarkdownImage(primaryFile.content),
                 });
               }
+              if (targetCardKey !== "outline" && effectiveFiles.length > 1) {
+                createContextLinkedSingleCardsBatch(
+                  targetCardKey as "brainstorm" | "summary" | "info",
+                  effectiveSourceNodeId,
+                  effectiveFiles.slice(1).map((item) => ({
+                    title: extractWriteFileTitle(item.filePath, trimmedIdea),
+                    filePath: item.filePath,
+                    content: item.content,
+                    image: extractMarkdownImage(item.content),
+                    fromApi: true,
+                    isStreaming: false,
+                    allowTitleEdit: true,
+                    allowImageUpload: targetCardKey !== "info",
+                    autoEdit: true,
+                  }))
+                );
+              }
             } else {
-              createCardByKey(targetCardKey, {
-                title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
-                filePath: primaryFile.filePath,
-                content: primaryFile.content,
-                image: extractMarkdownImage(primaryFile.content),
-              });
+              if (targetCardKey !== "outline" && effectiveFiles.length > 1) {
+                createStandaloneSingleCardsInRow(effectiveFiles);
+              } else {
+                createCardByKey(targetCardKey, {
+                  title: extractWriteFileTitle(primaryFile.filePath, trimmedIdea),
+                  filePath: primaryFile.filePath,
+                  content: primaryFile.content,
+                  image: extractMarkdownImage(primaryFile.content),
+                });
+              }
             }
+            cleanupExtraLoadingCards();
+            finalizePendingStreamNodes();
           }
-          finalizePendingStreamNodes();
         } else if (hasChoiceList) {
           if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
+          cleanupExtraLoadingCards();
           setReqPanelStatus("success");
         } else {
           if (loadingCardId) cleanupLoadingCard(loadingCardId);
           if (useBrainstormBatchLoading) clearBrainstormPlaceholderBatch();
+          cleanupExtraLoadingCards();
           setReqPanelStatus("error");
           setReqPanelDetail("");
           msg("warning", "返回数据格式不正确，请重试");
@@ -6520,6 +7208,7 @@ function InsCanvasInner({
       addInfoCardFromExternalFile,
       focusFileByPath,
       syncFileContentByPath,
+      syncFilePathByRename,
       openHistory,
       flushPersistence: flushCanvasPersistence,
       stopCurrentRequest,
@@ -6527,7 +7216,7 @@ function InsCanvasInner({
       inspirationDrawId,
       isLoading,
     }),
-    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
+    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, syncFilePathByRename, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
   );
 
   const onCanvasReadyRef = useRef(onCanvasReady);
@@ -6559,8 +7248,10 @@ function InsCanvasInner({
         if (version.content) {
           const data = JSON.parse(version.content);
           if (data.nodes && data.edges) {
+            const normalizedEdges = normalizeCanvasEdges(data.edges);
             setNodes(data.nodes);
-            setEdges(data.edges);
+            edgesRef.current = normalizedEdges;
+            setEdges(normalizedEdges);
             setInspirationDrawId(String(version?.inspirationDrawId ?? ""));
             msg("success", "版本恢复成功");
             setTimeout(autoLayout, 100);
@@ -7366,7 +8057,7 @@ function InsCanvasInner({
             <h1 className="z-10 mt-3 text-center text-[26px] font-semibold text-[#4f4f4f]">
               {isLoading
                 ? `脑洞喵正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
-                : "与脑洞喵一起脑洞大开地创作"}
+                : "与爆文猫一起脑洞大开地创作"}
             </h1>
             <div className="mt-4 flex gap-2">
               <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => navigate("/workspace/creation-community/course")}>
@@ -7395,7 +8086,7 @@ function InsCanvasInner({
                 setZoomPercent(Math.round((viewport.zoom || 1) * 100));
               }}
               defaultEdgeOptions={{
-                type: "bezier",
+                type: "default",
                 style: {
                   // 基础连线样式：细一点、浅灰色、圆角
                   stroke: "#EFAF00",

@@ -25,20 +25,22 @@ interface WorkType {
 const WORK_TYPES: WorkType[] = [
   {
     id: "short-story",
-    label: "短篇",
-    description: "全智能工作台,专业首选",
+    label: "小说",
     isQuick: false,
   },
   {
     id: "short-story-quick",
-    label: "短篇(快捷)",
-    description: "快捷流程创作,成篇速通",
+    label: "小说(快捷)",
     isQuick: true,
   },
   {
+    id: "short-play",
+    label: "剧本",
+    isQuick: false,
+  },
+  {
     id: "short-play-quick",
-    label: "短剧(快捷)",
-    description: "小说转剧本,从拆书到完集",
+    label: "剧本(快捷)",
     isQuick: true,
   },
 ]
@@ -114,6 +116,21 @@ export const AddNewWorkPopover = (
     }
   }, [navigate])
 
+  const addNewShortPlayWork = useCallback(async () => {
+    try {
+      setLoading(true)
+      const req = await createWorkReq("script_editor")
+      if (!req?.id) return
+      navigate(`/editor/${req.id}`, {
+        state: { editorBizType: "short-play" },
+      })
+    } catch {
+      toast.error("创建作品失败，请重试")
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
+
   const addNewQuickWork = useCallback(async () => {
     try {
       setLoading(true)
@@ -152,6 +169,11 @@ export const AddNewWorkPopover = (
     1000,
     { leading: true, trailing: false }
   )
+  const debouncedAddNewShortPlayWork = useDebouncedCallback(
+    () => requireLogin(addNewShortPlayWork),
+    1000,
+    { leading: true, trailing: false }
+  )
   const debouncedAddNewScript = useDebouncedCallback(
     () => requireLogin(addNewScript),
     1000,
@@ -177,6 +199,14 @@ export const AddNewWorkPopover = (
           }
           debouncedAddNewQuickWork()
           break
+        case "short-play":
+          if (isSidebar){
+            trackEvent('Story Creation', 'Click', 'Script New from Sidebar')
+          } else {
+            trackEvent('Story Creation', 'Click', 'Script New from Workspace')
+          }
+          debouncedAddNewShortPlayWork()
+          break
         case "short-play-quick":
           if (isSidebar){
             trackEvent('Story Creation', 'Click', 'Script New from Sidebar')
@@ -196,7 +226,7 @@ export const AddNewWorkPopover = (
       }
       setOpen(false)
     },
-    [debouncedAddNewQuickWork, debouncedAddNewScript, debouncedAddNewWork, isSidebar]
+    [debouncedAddNewQuickWork, debouncedAddNewScript, debouncedAddNewShortPlayWork, debouncedAddNewWork, isSidebar]
   )
 
   const triggerButton = children ?? (
@@ -247,9 +277,9 @@ export const AddNewWorkPopover = (
                     &#xe736;
                   </span>
                 </div>
-                <div className="mt-1 hidden leading-[1.4] text-xs text-[#757575] group-hover:block">
+                {/* <div className="mt-1 hidden leading-[1.4] text-xs text-[#757575] group-hover:block">
                   {workType.description}
-                </div>
+                </div> */}
               </button>
             ))}
           </div>
