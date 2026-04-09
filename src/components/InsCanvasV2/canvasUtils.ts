@@ -1,6 +1,7 @@
 import { AUTO_CARD_FIELD_LABELS, OUTLINE_GROUP_LAYOUT, ROLE_GROUP_LAYOUT } from "./constant";
 import type {
   CanvasCardKey,
+  PartialCanvasWriteFileCall,
   CanvasWriteFileCall,
   CustomNode,
   ReplySegments,
@@ -85,6 +86,8 @@ export const getFirstTextValue = (...values: unknown[]) => {
   return "";
 };
 
+export const isTaskWriteFile = (filePath: string) => /(^|\/)task\.json$/i.test(filePath);
+
 export const extractUpdatesMessageContentWithoutReadFile = (value: unknown): string => {
   if (!value) return "";
   if (Array.isArray(value)) {
@@ -124,14 +127,14 @@ export const extractUpdatesMessageContentWithoutReadFile = (value: unknown): str
     const updatedFilePath = text.match(/^Updated file\s+(.+)$/)?.[1]?.trim() || "";
     if (
       updatedFilePath &&
-      isTaskControlWriteFile(
-        updatedFilePath,
-        toolFiles && typeof toolFiles === "object" ? getTextValue(toolFiles[updatedFilePath]) : ""
+      (
+        updatedFilePath === "/choices.json" ||
+        /(^|\/)relationship\.json$/i.test(updatedFilePath) ||
+        isTaskWriteFile(updatedFilePath)
       )
     ) {
       continue;
     }
-    if (updatedFilePath && /(^|\/)relationship\.json$/i.test(updatedFilePath)) continue;
     if (text) return text;
   }
 
@@ -360,7 +363,7 @@ export const extractDisplayToolFileContent = (value: unknown): string => {
         (key) =>
           key !== "/choices.json" &&
           !/(^|\/)relationship\.json$/i.test(key) &&
-          !isTaskControlWriteFile(key, getTextValue(toolFiles[key]))
+          !isTaskWriteFile(key)
       );
       if (dynamicFileKey) {
         const dynamicFileContent = getTextValue(toolFiles[dynamicFileKey]);
@@ -381,7 +384,7 @@ export const extractDisplayToolFileContent = (value: unknown): string => {
           !filePath ||
           filePath === "/choices.json" ||
           /(^|\/)relationship\.json$/i.test(filePath) ||
-          isTaskControlWriteFile(filePath, getTextValue(toolCall?.args?.content))
+          isTaskWriteFile(filePath)
         ) continue;
         const content = getTextValue(toolCall?.args?.content);
         if (content) return content;
@@ -477,7 +480,7 @@ export const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] =>
       Object.entries(toolFiles).forEach(([filePath, fileContent]) => {
         const normalizedPath = getTextValue(filePath);
         if (!normalizedPath) return;
-        if (isTaskControlWriteFile(normalizedPath, getTextValue(fileContent))) return;
+        if (isTaskWriteFile(normalizedPath)) return;
         const normalizedCallId = callIdByPath.get(normalizedPath);
         const previous = result.get(normalizedPath);
         if (previous) {
@@ -500,6 +503,76 @@ export const extractUpdateToolFiles = (value: unknown): CanvasWriteFileCall[] =>
           content: getTextValue(fileContent),
           callId: normalizedCallId,
         });
+      });
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(value);
+  return Array.from(result.values());
+};
+
+export const extractPartialWriteToolFiles = (value: unknown): PartialCanvasWriteFileCall[] => {
+  const result = new Map<string, PartialCanvasWriteFileCall>();
+
+  const visit = (current: unknown) => {
+    if (!current) return;
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (typeof current !== "object") return;
+
+    const record = current as {
+      tool_calls?: Array<{
+        id?: unknown;
+        name?: unknown;
+        args?: { file_path?: unknown; content?: unknown };
+      }>;
+      tool_call_chunks?: Array<{
+        id?: unknown;
+        name?: unknown;
+        args?: unknown;
+      }>;
+    } & Record<string, unknown>;
+
+    if (Array.isArray(record.tool_calls)) {
+      record.tool_calls.forEach((toolCall) => {
+        if (getTextValue(toolCall?.name) !== "write_file") return;
+        const callId = getTextValue(toolCall?.id);
+        const filePath = getTextValue(toolCall?.args?.file_path);
+        if (!callId || !filePath || isTaskWriteFile(filePath)) return;
+        result.set(callId, {
+          callId,
+          filePath,
+          content: getTextValue(toolCall?.args?.content),
+        });
+      });
+    }
+
+    if (Array.isArray(record.tool_call_chunks)) {
+      record.tool_call_chunks.forEach((chunk) => {
+        if (getTextValue(chunk?.name) !== "write_file") return;
+        const callId = getTextValue(chunk?.id);
+        if (!callId || result.has(callId)) return;
+        const rawArgs = getTextValue(chunk?.args);
+        if (!rawArgs) return;
+        try {
+          const parsedArgs = JSON.parse(rawArgs) as {
+            file_path?: unknown;
+            content?: unknown;
+          };
+          const filePath = getTextValue(parsedArgs.file_path);
+          if (!filePath || isTaskWriteFile(filePath)) return;
+          result.set(callId, {
+            callId,
+            filePath,
+            content: getTextValue(parsedArgs.content),
+          });
+        } catch {
+          // tool_call_chunks 可能仍是不完整 JSON，忽略即可
+        }
       });
     }
 
@@ -556,24 +629,6 @@ export const getLatestWriteFiles = (
   return Array.from(filesByPath.values());
 };
 
-export const isTaskControlWriteFile = (filePath: string, content: string) => {
-  if (!/(^|\/)task\.json$/i.test(getTextValue(filePath))) return false;
-  const normalizedContent = getTextValue(content).trim();
-  if (!normalizedContent) return false;
-  try {
-    const parsed = JSON.parse(normalizedContent) as {
-      next_task_type?: unknown;
-      task_type?: unknown;
-    };
-    return (
-      getTextValue(parsed?.next_task_type) === "brain-storm-card" ||
-      getTextValue(parsed?.task_type) === "brain-storm-card"
-    );
-  } catch {
-    return false;
-  }
-};
-
 export const extractWriteFileTitle = (filePath: string, fallback: string) => {
   const fileName = getTextValue(filePath)
     .split("/")
@@ -596,11 +651,12 @@ export const inferCardKeyFromWriteFilePath = (filePath: string): CanvasCardKey =
 };
 
 export const isRelationshipWriteFile = (filePath: string) =>
-  /(^|\/)relationship\.json$/i.test(filePath) || /(^|\/)角色关系\.md$/i.test(filePath);
+  /(^|\/)relationship\.json$/i.test(filePath) ||
+  /(^|\/)角色关系(?:-[^/]+)?\.md$/i.test(filePath);
 
 export const shouldSkipWriteFileCardCreation = (filePath: string) =>
   /(^|\/)relationship\.json$/i.test(filePath) ||
-  /(^|\/)task\.json$/i.test(filePath) ||
+  isTaskWriteFile(filePath) ||
   Boolean(normalizeReplyFilePath(filePath));
 
 export const isRelationshipInfoWriteFile = (filePath: string) =>
@@ -723,6 +779,45 @@ const getUniqueName = (name: string, bucket: Map<string, number>) => {
   return count === 0 ? name : `${name}${count + 1}`;
 };
 
+const normalizeExplicitCanvasFilePath = (rawPath: unknown) => {
+  const normalized = getTextValue(rawPath).replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized.endsWith("/")) return "";
+  if (!/\.md$/i.test(normalized)) return "";
+  return normalized;
+};
+
+const ensureCanvasDirectoryEntries = (
+  result: Record<string, string>,
+  filePath: string
+) => {
+  const segments = filePath.split("/").filter(Boolean);
+  if (segments.length <= 1) return;
+  for (let i = 1; i < segments.length; i += 1) {
+    const dirPath = `${segments.slice(0, i).join("/")}/`;
+    if (!(dirPath in result)) result[dirPath] = "";
+  }
+};
+
+const ensureUniqueCanvasFilePath = (preferredPath: string, usedPaths: Set<string>) => {
+  if (!usedPaths.has(preferredPath)) return preferredPath;
+
+  const slashIndex = preferredPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? `${preferredPath.slice(0, slashIndex + 1)}` : "";
+  const fileName = slashIndex >= 0 ? preferredPath.slice(slashIndex + 1) : preferredPath;
+  const baseName = fileName.replace(/\.md$/i, "");
+  const ext = fileName.toLowerCase().endsWith(".md") ? ".md" : "";
+
+  let seq = 2;
+  let candidate = `${directory}${baseName}${seq}${ext}`;
+  while (usedPaths.has(candidate)) {
+    seq += 1;
+    candidate = `${directory}${baseName}${seq}${ext}`;
+  }
+  return candidate;
+};
+
+type CanvasSyncPathEntry = { nodeId: string; filePath: string };
+
 const getCanvasGroupId = (node: CustomNode) =>
   getFirstTextValue(
     node.parentId,
@@ -740,17 +835,25 @@ const getGroupedChildren = (nodes: CustomNode[], groupId: string) =>
     })
     .sort(sortCanvasNodes);
 
-export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
-  if (!Array.isArray(nodes) || nodes.length === 0) return {};
-  const result: Record<string, string> = {};
+const buildCanvasSyncPathEntries = (nodes: CustomNode[]): CanvasSyncPathEntry[] => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return [];
+  const entries: CanvasSyncPathEntry[] = [];
   const fileNameCountByDirectory = new Map<string, Map<string, number>>();
+  const usedFilePaths = new Set<string>();
 
-  const ensureDirectory = (directoryName: string) => {
-    result[`${directoryName}/`] = "";
+  const ensureDirectoryBucket = (directoryName: string) => {
     if (!fileNameCountByDirectory.has(directoryName)) {
       fileNameCountByDirectory.set(directoryName, new Map<string, number>());
     }
     return fileNameCountByDirectory.get(directoryName)!;
+  };
+
+  const appendSyncEntry = (node: CustomNode, fallbackFilePath: string) => {
+    const explicitFilePath = normalizeExplicitCanvasFilePath((node.data as any)?.filePath);
+    const preferredPath = explicitFilePath || fallbackFilePath;
+    const nextFilePath = ensureUniqueCanvasFilePath(preferredPath, usedFilePaths);
+    usedFilePaths.add(nextFilePath);
+    entries.push({ nodeId: node.id, filePath: nextFilePath });
   };
 
   const topLevelNodes = nodes
@@ -763,10 +866,10 @@ export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string
       if (!syncableChildren.length) return;
 
       const directoryName = getCanvasDirectoryName(node.data?.label);
-      const childNameCount = ensureDirectory(directoryName);
+      const childNameCount = ensureDirectoryBucket(directoryName);
       syncableChildren.forEach((child, childIndex) => {
         const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
-        result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(child);
+        appendSyncEntry(child, `${directoryName}/${fileBase}.md`);
       });
       return;
     }
@@ -774,50 +877,33 @@ export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string
     if (!shouldSyncCanvasNode(node)) return;
 
     const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
-    const fileNameCount = ensureDirectory(directoryName);
+    const fileNameCount = ensureDirectoryBucket(directoryName);
     const fileBase = getUniqueName(getCanvasNodeBaseName(node, index), fileNameCount);
-    result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(node);
+    appendSyncEntry(node, `${directoryName}/${fileBase}.md`);
   });
 
+  return entries;
+};
+
+export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return {};
+  const result: Record<string, string> = {};
+  const entries = buildCanvasSyncPathEntries(nodes);
+  const nodeById = new Map(nodes.map((node) => [node.id, node] as const));
+  entries.forEach(({ nodeId, filePath }) => {
+    const node = nodeById.get(nodeId);
+    if (!node) return;
+    ensureCanvasDirectoryEntries(result, filePath);
+    result[filePath] = buildCanvasNodeMarkdown(node);
+  });
   return result;
 };
 
 export const buildCanvasSyncFileNodeIdMap = (nodes: CustomNode[]): Record<string, string> => {
   if (!Array.isArray(nodes) || nodes.length === 0) return {};
   const result: Record<string, string> = {};
-  const fileNameCountByDirectory = new Map<string, Map<string, number>>();
-
-  const ensureDirectory = (directoryName: string) => {
-    if (!fileNameCountByDirectory.has(directoryName)) {
-      fileNameCountByDirectory.set(directoryName, new Map<string, number>());
-    }
-    return fileNameCountByDirectory.get(directoryName)!;
-  };
-
-  const topLevelNodes = nodes
-    .filter((node) => !isGroupedCanvasChild(node))
-    .sort(sortCanvasNodes);
-
-  topLevelNodes.forEach((node, index) => {
-    if (node.type === "roleGroup") {
-      const syncableChildren = getGroupedChildren(nodes, node.id).filter(shouldSyncCanvasNode);
-      if (!syncableChildren.length) return;
-
-      const directoryName = getCanvasDirectoryName(node.data?.label);
-      const childNameCount = ensureDirectory(directoryName);
-      syncableChildren.forEach((child, childIndex) => {
-        const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
-        result[`${directoryName}/${fileBase}.md`] = child.id;
-      });
-      return;
-    }
-
-    if (!shouldSyncCanvasNode(node)) return;
-
-    const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
-    const fileNameCount = ensureDirectory(directoryName);
-    const fileBase = getUniqueName(getCanvasNodeBaseName(node, index), fileNameCount);
-    result[`${directoryName}/${fileBase}.md`] = node.id;
+  buildCanvasSyncPathEntries(nodes).forEach(({ nodeId, filePath }) => {
+    result[filePath] = nodeId;
   });
 
   return result;

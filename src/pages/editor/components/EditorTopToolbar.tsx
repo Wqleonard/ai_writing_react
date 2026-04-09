@@ -29,6 +29,7 @@ export interface EditorTopToolbarProps {
   onUpdateTitle?: (newTitle: string) => void
   updatedTime?: number | string
   className?: string
+  hidePromptActions?: boolean
 }
 
 export const EditorTopToolbar = ({
@@ -38,6 +39,7 @@ export const EditorTopToolbar = ({
   onUpdateTitle,
   updatedTime,
   className,
+  hidePromptActions = false,
 }: EditorTopToolbarProps) => {
   const saveTimeText =
     updatedTime !== null
@@ -97,42 +99,44 @@ export const EditorTopToolbar = ({
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        {PROMPT_ITEMS.map(({ label, icon, categoryId }) => (
-          <EditorToolbarPromptPopover
-            key={categoryId}
-            label={label}
-            icon={icon}
-            categoryId={categoryId}
-            onUse={handlePromptUse}
-            onMore={handlePromptMore}
-          />
-        ))}
+      {hidePromptActions ? <div /> : (
+        <div className="flex items-center gap-3">
+          {PROMPT_ITEMS.map(({ label, icon, categoryId }) => (
+            <EditorToolbarPromptPopover
+              key={categoryId}
+              label={label}
+              icon={icon}
+              categoryId={categoryId}
+              onUse={handlePromptUse}
+              onMore={handlePromptMore}
+            />
+          ))}
 
-        <div
-          className="text-sm inline-flex translate-y-0.5 cursor-pointer items-center border-b border-transparent pb-0.5 text-[#606266] hover:border-black hover:text-black"
-          onClick={handleBookAnalysisClick}
-        >
-          <IconFont unicode="\ue622" className="mr-1" />
-          <span className="reference-btn-label">拆书仿写</span>
-        </div>
+          <div
+            className="text-sm inline-flex translate-y-0.5 cursor-pointer items-center border-b border-transparent pb-0.5 text-[#606266] hover:border-black hover:text-black"
+            onClick={handleBookAnalysisClick}
+          >
+            <IconFont unicode="\ue622" className="mr-1" />
+            <span className="reference-btn-label">拆书仿写</span>
+          </div>
 
-        <div
-          className="text-sm inline-flex translate-y-0.5 cursor-pointer items-center border-b border-transparent pb-0.5 text-[#606266] hover:border-black hover:text-black"
-          onClick={handleWritingStyleClick}
-        >
-          <IconFont unicode="\ue630" className="mr-1" />
-          <span className="reference-btn-label">文风提炼</span>
-        </div>
+          <div
+            className="text-sm inline-flex translate-y-0.5 cursor-pointer items-center border-b border-transparent pb-0.5 text-[#606266] hover:border-black hover:text-black"
+            onClick={handleWritingStyleClick}
+          >
+            <IconFont unicode="\ue630" className="mr-1" />
+            <span className="reference-btn-label">文风提炼</span>
+          </div>
 
-        <div
-          className="text-sm flex cursor-pointer items-center rounded-lg bg-(--theme-color) px-3 h-6 leading-6 custom-btn text-white"
-          onClick={onHelpWriteClick}
-        >
-          <IconFont unicode="\ue63c" className="mr-1" />
-          <span>带你写</span>
+          <div
+            className="text-sm flex cursor-pointer items-center rounded-lg bg-(--theme-color) px-3 h-6 leading-6 custom-btn text-white"
+            onClick={onHelpWriteClick}
+          >
+            <IconFont unicode="\ue63c" className="mr-1" />
+            <span>带你写</span>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="top-toolbar-right flex items-center gap-1">
         <WorkspaceHeader />

@@ -150,6 +150,10 @@ type WorkVersion = {
   updatedTime?: string;
 };
 
+type EditorBizType = "short-story" | "short-play";
+type SubmitMode = "chat" | "agent";
+type ChatType = "script";
+
 type EditorInitialParams = {
   message?: string;
   autoSubmitInitialMessage?: boolean;
@@ -163,16 +167,21 @@ type EditorInitialParams = {
   selectedTexts?: import("@/stores/chatStore").SelectedText[];
   selectedTools?: import("@/stores/chatInputStore/types").AgentTalkToolValue[];
   isShowAnswerTip?: boolean;
+  editorBizType?: EditorBizType;
 };
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
 const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
+const EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX = "editorBizTypeByWorkId:";
 
 type RankingListTransmissionParams = {
   content?: string;
   message?: string;
   disableAutoSubmit?: boolean;
 };
+
+const normalizeEditorBizType = (value: unknown): EditorBizType =>
+  value === "short-play" ? "short-play" : "short-story";
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
   if (!input) return null;
@@ -382,9 +391,30 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
+  const stateEditorBizType = (location.state as EditorInitialParams | null)?.editorBizType;
+  const hasExplicitStateEditorBizType =
+    stateEditorBizType === "short-story" || stateEditorBizType === "short-play";
+  const [cachedEditorBizType, setCachedEditorBizType] = useState<EditorBizType>("short-story");
   useEffect(() => {
-    clearEditorReloadTarget();
-  }, [location.key, location.pathname, location.state, workId]);
+    if (!workId || typeof window === "undefined") return;
+    if (hasExplicitStateEditorBizType) {
+      const normalizedFromState = normalizeEditorBizType(stateEditorBizType);
+      setCachedEditorBizType(normalizedFromState);
+      sessionStorage.setItem(
+        `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`,
+        normalizedFromState
+      );
+      return;
+    }
+    const cached = sessionStorage.getItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`);
+    if (!cached) return;
+    setCachedEditorBizType(normalizeEditorBizType(cached));
+  }, [hasExplicitStateEditorBizType, stateEditorBizType, workId]);
+  const editorBizType = hasExplicitStateEditorBizType
+    ? normalizeEditorBizType(stateEditorBizType)
+    : cachedEditorBizType;
+  const isShortPlayEditor = editorBizType === "short-play";
+  const showStepWorkflow = !isShortPlayEditor;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
   // chatheader 相关
@@ -523,6 +553,15 @@ const MarkdownEditorPage = () => {
         if (fromEditInfo) {
           targetFileId = sanitizeIncomingFilePath(fromEditInfo);
         }
+      }
+
+      // 与 Vue 链路对齐：当流式 payload 同时给出 files 且能解析出目标 fileId 时，
+      // 自动请求定位该文件（树未刷新时先放入 pending，待 treeData 更新后再落地跳转）。
+      const hasResolvedTargetInFiles =
+        !!targetFileId &&
+        Object.prototype.hasOwnProperty.call(normalizedIncomingFiles, targetFileId);
+      if (hasResolvedTargetInFiles) {
+        pendingFileNameClickRef.current = targetFileId;
       }
 
       const hasOldPendingEdits =
@@ -859,7 +898,8 @@ const MarkdownEditorPage = () => {
         reload?: boolean;
         command?: string;
         addUserMessage?: boolean;
-        submitMode?: "chat" | "agent";
+        submitMode?: SubmitMode;
+        chatType?: ChatType;
         commandOnly?: boolean;
       }
     ) => {
@@ -917,12 +957,15 @@ const MarkdownEditorPage = () => {
               remoteAddress: file.putFilePath,
             }))
             : undefined;
-        const submitMode = options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const submitMode =
+          options?.submitMode ?? (isAnswerOnly ? "chat" : "agent");
+        const chatType = options?.chatType ?? (isShortPlayEditor ? "script" : undefined);
         langGraphStream.submit(
           message,
           sessionId,
           workId,
           submitMode,
+          chatType,
           selectedTools,
           attachments,
           options?.reload,
@@ -943,6 +986,7 @@ const MarkdownEditorPage = () => {
       chatCurrentSession,
       createNewSession,
       isAnswerOnly,
+      isShortPlayEditor,
       langGraphStream,
       modelLLM,
       clearSelectedFiles,
@@ -992,6 +1036,7 @@ const MarkdownEditorPage = () => {
     saveEditorData,
     setServerData,
     setServerDataFile,
+    addServerDataPath,
     setCurrentContent,
     setWorkInfo,
     renameServerDataPath,
@@ -1008,6 +1053,7 @@ const MarkdownEditorPage = () => {
       saveEditorData: s.saveEditorData,
       setServerData: s.setServerData,
       setServerDataFile: s.setServerDataFile,
+      addServerDataPath: s.addServerDataPath,
       setCurrentContent: s.setCurrentContent,
       setWorkInfo: s.setWorkInfo,
       renameServerDataPath: s.renameServerDataPath,
@@ -1113,7 +1159,6 @@ const MarkdownEditorPage = () => {
     (canvasFiles: Record<string, string>) => {
       const latestState = useEditorStore.getState();
       const currentServerData = latestState.serverData;
-      const editingId = latestState.currentEditingId || DEFAULT_EDITING_FILE_KEY;
       const incomingCanvasKeys = Object.keys(canvasFiles);
       const beforeCanvasKeys = lastCanvasSyncedKeysRef.current;
       const isHydratingFromSnapshot = canvasSnapshotHydratingRef.current;
@@ -1148,6 +1193,18 @@ const MarkdownEditorPage = () => {
         nextCanvasTrackedKeys = incomingCanvasKeys;
       }
 
+      const latestTreeNodeIds = new Set<string>();
+      const collectTreeNodeIds = (nodes: FileTreeNode[]) => {
+        nodes.forEach((node) => {
+          latestTreeNodeIds.add(node.id);
+          if (node.children?.length) collectTreeNodeIds(node.children);
+        });
+      };
+      collectTreeNodeIds(latestState.treeData ?? []);
+      const missingInServerBeforeSync = Array.from(latestTreeNodeIds).filter((id) => {
+        if (!id) return false;
+        return !(id in currentServerData) && !(`${id}/` in currentServerData);
+      });
       lastCanvasSyncedKeysRef.current = nextCanvasTrackedKeys;
       canvasTaggedFilePathSetRef.current = new Set(
         nextCanvasTrackedKeys
@@ -1445,7 +1502,13 @@ const MarkdownEditorPage = () => {
               typeof initialParams.isAnswerOnly === "boolean"
                 ? (initialParams.isAnswerOnly ? "chat" : "agent")
                 : undefined;
-            sendChatText(msg, { addUserMessage: true, submitMode: initialSubmitMode });
+            const initialChatType =
+              initialParams.editorBizType === "short-play" ? "script" : undefined;
+            sendChatText(msg, {
+              addUserMessage: true,
+              submitMode: initialSubmitMode,
+              chatType: initialChatType,
+            });
             setPendingInitialMessage("");
           }, 0);
         }
@@ -1456,7 +1519,8 @@ const MarkdownEditorPage = () => {
     } else {
       setShouldAutoSubmitInitialMessage(false);
     }
-  }, [location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+  }, [isShortPlayEditor, location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+
 
   const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
     if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
@@ -2391,6 +2455,7 @@ const MarkdownEditorPage = () => {
 
   // stepWorkFlow 相关逻辑
   useEffect(() => {
+    if (!showStepWorkflow) return;
     const { template, showTake2 } = location.state ?? {};
     if (!template && !showTake2) return;
 
@@ -2422,7 +2487,7 @@ const MarkdownEditorPage = () => {
     return () => {
       cancelAnimationFrame(rafId);
     };
-  }, [location]);
+  }, [location, showStepWorkflow]);
 
   const currentLabel = currentEditingNode?.label ?? "";
 
@@ -2645,8 +2710,50 @@ const MarkdownEditorPage = () => {
   const handleCanvasFileContentChange = useCallback((filePath: string, content: string) => {
     const normalizedPath = normalizeCanvasFilePath(filePath);
     if (!normalizedPath) return;
-    setServerDataFile(normalizedPath, content);
-  }, [currentEditingId, normalizeCanvasFilePath, setServerDataFile]);
+
+    const nextContent = String(content ?? "");
+    const tree = treeDataRef.current;
+    const candidatePaths = Array.from(new Set([
+      normalizedPath,
+      normalizedPath.replace(/^角色卡\//, "[角色卡]/"),
+      normalizedPath.replace(/^脑洞卡\//, "[脑洞卡]/"),
+      normalizedPath.replace(/^梗概卡\//, "[梗概卡]/"),
+      normalizedPath.replace(/^设定卡\//, "[设定卡]/"),
+      normalizedPath.replace(/^大纲卡\//, "[大纲卡]/"),
+      normalizedPath.replace(/^\[角色卡\]\//, "角色卡/"),
+      normalizedPath.replace(/^\[脑洞卡\]\//, "脑洞卡/"),
+      normalizedPath.replace(/^\[梗概卡\]\//, "梗概卡/"),
+      normalizedPath.replace(/^\[设定卡\]\//, "设定卡/"),
+      normalizedPath.replace(/^\[大纲卡\]\//, "大纲卡/"),
+    ]));
+    const targetNode =
+      candidatePaths
+        .map((candidate) => resolveFileNodeByPath(tree, candidate))
+        .find(Boolean) ?? null;
+    const targetNodeId = targetNode?.id ? normalizeCanvasFilePath(String(targetNode.id)) : "";
+
+    // 首次从卡片编辑保存时，tree 中可能还没有该文件节点；
+    // 用 addServerDataPath 先建路径，避免“第一次不回写编辑区，第二次才正常”。
+    if (!targetNodeId) {
+      addServerDataPath(normalizedPath, nextContent);
+    } else {
+      // 1) 先写入画布事件原始路径，保证 serverData 与画布同步
+      setServerDataFile(normalizedPath, nextContent);
+    }
+    // 2) 再写入 tree 实际命中的节点路径，避免“路径别名”导致主编辑区不刷新
+    if (targetNodeId && targetNodeId !== normalizedPath) {
+      setServerDataFile(targetNodeId, nextContent);
+    }
+
+    const currentEditingPath = normalizeCanvasFilePath(currentEditingId || "");
+    if (!currentEditingPath) return;
+    if (
+      currentEditingPath === normalizedPath ||
+      (targetNodeId && currentEditingPath === targetNodeId)
+    ) {
+      setCurrentContent(nextContent);
+    }
+  }, [addServerDataPath, currentEditingId, normalizeCanvasFilePath, setCurrentContent, setServerDataFile]);
 
   // 与 Vue handleKnowledgeBaseUpdate 对齐：合并知识库文件、定位文件，并在 blank 阶段升级为 final
   const handleKnowledgeBaseUpdate = useCallback(
@@ -2703,13 +2810,6 @@ const MarkdownEditorPage = () => {
       normalizedCandidates
         .map((candidate) => resolveFileNodeByPath(tree, candidate))
         .find(Boolean) ?? null;
-    const fileName = normalized.split("/").pop()?.trim() ?? "";
-    const flattenTreeIds = (nodes: TreeNodeLike[]): string[] =>
-      nodes.flatMap((node) => [
-        String(node.id ?? ""),
-        ...flattenTreeIds(Array.isArray(node.children) ? (node.children as TreeNodeLike[]) : []),
-      ]);
-    const flatTreeIds = flattenTreeIds(tree).filter(Boolean);
 
     if (!targetNode) {
       // 流式生成中，目标文件/目录可能还没写入树；先记下来，等 treeData 更新后再自动跳转
@@ -2720,13 +2820,29 @@ const MarkdownEditorPage = () => {
     }
     // 与 Vue 行为一致：只定位到左侧目录并切换当前编辑文件，不在这里改写 serverData
     useEditorStore.getState().setCurrentEditingId(targetNode.id, targetNode as any);
-    requestCanvasFocusByFilePath(targetNode.id);
+    const normalizedTargetPath = normalizeCanvasFilePath(normalized);
+    const normalizedNodePath = normalizeCanvasFilePath(String(targetNode.id ?? ""));
+    const shouldOpenCanvasPreview =
+      canvasTaggedFilePathSetRef.current.has(normalizedTargetPath) ||
+      canvasTaggedFilePathSetRef.current.has(normalizedNodePath) ||
+      isLikelyCanvasGeneratedPath(normalizedTargetPath) ||
+      isLikelyCanvasGeneratedPath(normalizedNodePath);
+    if (shouldOpenCanvasPreview) {
+      requestCanvasFocusByFilePath(targetNode.id);
+    }
     pendingFileNameClickRef.current = "";
-  }, [requestCanvasFocusByFilePath]);
+  }, [isLikelyCanvasGeneratedPath, normalizeCanvasFilePath, requestCanvasFocusByFilePath]);
 
   const handleFileNameClick = useCallback((rawFileName: string) => {
     openCanvasFileByPath(rawFileName, true);
   }, [openCanvasFileByPath]);
+
+  const handleTreePathRenameForCanvas = useCallback((oldPath: string, newPath: string) => {
+    const normalizedOldPath = sanitizeIncomingFilePath(oldPath);
+    const normalizedNewPath = sanitizeIncomingFilePath(newPath);
+    if (!normalizedOldPath || !normalizedNewPath) return;
+    insCanvasRef.current?.syncFilePathByRename(normalizedOldPath, normalizedNewPath);
+  }, [sanitizeIncomingFilePath]);
 
   useEffect(() => {
     const pending = pendingFileNameClickRef.current;
@@ -3025,6 +3141,7 @@ const MarkdownEditorPage = () => {
         onUpdateTitle={handleTitleUpdate}
         onHelpWriteClick={helpWriteClick}
         updatedTime={workInfo.updatedTime}
+        hidePromptActions={isShortPlayEditor}
       />
       <div
         ref={resizeContainerRef}
@@ -3036,7 +3153,11 @@ const MarkdownEditorPage = () => {
           className="box-border shrink-0 h-full rounded-[20px] border border-(--border-color) overflow-hidden bg-(--bg-primary) p-2"
           style={{ width: `${leftPanelWidthRem}rem` }}
         >
-          <EditorTreeSidebar className="h-full" onFileSelect={handleTreeFileSelect}/>
+          <EditorTreeSidebar
+            className="h-full"
+            onFileSelect={handleTreeFileSelect}
+            onPathRenamed={handleTreePathRenameForCanvas}
+          />
         </div>
 
         <EditorResizeHandle
@@ -3325,7 +3446,7 @@ const MarkdownEditorPage = () => {
                             />
                           </div>
                         </div>
-                        <StepWorkflow ref={stepWorkflowRef}/>
+                        {showStepWorkflow ? <StepWorkflow ref={stepWorkflowRef} /> : null}
                       </div>
                     </div>
                   </div>
@@ -3515,7 +3636,7 @@ const MarkdownEditorPage = () => {
                   onAnswerOnlyChange={setIsAnswerOnly}
                   slots={chatSlots}
                 >
-                  <ProChatPanel/>
+                  <ProChatPanel creationType={isShortPlayEditor ? "script" : "novel"} />
                 </ProChatContainer>
                 <AssociationSelectorDialog
                   open={showAssociationSelector}

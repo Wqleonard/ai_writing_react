@@ -470,10 +470,23 @@ export default function EditableFlowCard({
     }
   };
 
-  const getFinalContent = () =>
-    editDirtyRef.current
-      ? (editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent))
-      : String(data.content ?? "");
+  const getFinalContent = () => {
+    const editorMarkdown = String(editorRef.current?.getMarkdown?.() ?? "").trim();
+    const editingCache = String(editingContentRef.current || "").trim();
+    const currentDataContent = String(data.content ?? "");
+    // 首次进入编辑时，某些场景 onChange 可能未触发（dirty=false），
+    // 保存时优先读取编辑器实例的最新内容，避免首保存丢失。
+    if (editorMarkdown && editorMarkdown !== currentDataContent.trim()) {
+      return editorRef.current?.getMarkdown?.() ?? editorMarkdown;
+    }
+    if (editingCache && editingCache !== currentDataContent.trim()) {
+      return editingContentRef.current;
+    }
+    if (editDirtyRef.current) {
+      return editorRef.current?.getMarkdown() ?? (editingContentRef.current || editContent);
+    }
+    return currentDataContent;
+  };
 
   const getFinalTitle = () => {
     const finalTitleMarkdown =

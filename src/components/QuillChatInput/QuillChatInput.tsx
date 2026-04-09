@@ -22,6 +22,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip
 import { Button } from "@/components/ui/Button"
 import { useChatInputStore } from "@/stores/chatInputStore"
 import { useModels } from "@/hooks/useModels"
+import type { QuickChatCreationType } from "@/hooks/useModels"
 import { useLLM } from "@/hooks/useLLM"
 import { useLoginStore } from "@/stores/loginStore"
 import WritingStylePopup from "@/components/WritingStylePopup"
@@ -54,6 +55,7 @@ export interface QuillChatInputProps {
   hideAssociationFeature?: boolean
   onOpenAssociationSelector?: () => void
   className?: string
+  creationType?: QuickChatCreationType
 }
 
 const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
@@ -75,6 +77,7 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     hideAssociationFeature = false,
     onOpenAssociationSelector,
     className,
+    creationType = "novel",
   } = props
 
   const { userInfo } = useLoginStore()
@@ -101,7 +104,8 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
   const requestedWritingStyleId = useChatInputStore((s) => s.requestedWritingStyleId)
   const clearWritingStylePopoverRequest = useChatInputStore((s) => s.clearWritingStylePopoverRequest)
 
-  const { quickChatInputChannels } = useModels()
+  const { quickChatInputChannels } = useModels(creationType)
+  const workNoun = creationType === "script" ? "剧本" : "小说"
   const {
     modelsLLM,
     modelLLM,
@@ -346,10 +350,10 @@ const QuillChatInput: React.FC<QuillChatInputProps> = (props) => {
     (word: { name: string }) => {
       // 与工具标签回填互斥：点击梗词时先退出工具模式，再回填普通输入内容
       closeRichTextMode()
-      onChange(`请为我生成一篇主题为${word.name}的小说`)
+      onChange(`请为我生成一篇主题为${word.name}的${workNoun}`)
       if (isAnswerOnly) setShowAnswerTip(true)
     },
-    [closeRichTextMode, onChange, isAnswerOnly, setShowAnswerTip]
+    [closeRichTextMode, onChange, isAnswerOnly, setShowAnswerTip, workNoun]
   )
 
   const {

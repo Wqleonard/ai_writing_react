@@ -13,6 +13,10 @@ const DEFAULT_MODELS_LLM = [
   { id: "deepseek_v3.2", name: "DeepSeek-V3.2" },
   { id: "doubao_seed_1.8", name: "豆包-1.8" },
   { id: "glm_4.7", name: "GLM-4.7" },
+  { id: 'gpt_5.4', name: 'GPT 5.4' },
+  { id: 'gemini-3.1-flash-lite', name: 'gemini-3.1-flash-lite' },
+  { id: 'gemini-2.5-flash-lite', name: 'gemini-2.5-flash-lite' },
+  { id: 'gemini-3.1-pro', name: 'gemini-3.1-pro' }
 ];
 
 const initialState: LLMState = {
