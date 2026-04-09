@@ -1,8 +1,8 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5101523 */
-  src: url('iconfont.woff2?t=1774358514632') format('woff2'),
-       url('iconfont.woff?t=1774358514632') format('woff'),
-       url('iconfont.ttf?t=1774358514632') format('truetype');
+  src: url('iconfont.woff2?t=1775734346154') format('woff2'),
+       url('iconfont.woff?t=1775734346154') format('woff'),
+       url('iconfont.ttf?t=1775734346154') format('truetype');
 }
 
 .iconfont {
@@ -10,6 +10,14 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-IconToolBox:before {
+  content: "\e656";
+}
+
+.icon-IconLessonCat:before {
+  content: "\e657";
 }
 
 .icon-warning:before {
