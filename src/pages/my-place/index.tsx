@@ -56,6 +56,7 @@ const convertWorkItemToMyWorkData = (item: WorkItem): MyWorkData => ({
   sessions: [],
   workType: item.workType as MyWorkData['workType'],
   deleteChecked: false,
+  wordNum: item.wordNum,
 })
 
 export default function MyPlacePage() {

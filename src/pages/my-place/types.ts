@@ -10,6 +10,7 @@ export interface WorkItem {
   createdTime: string
   updatedTime: string
   workType: WorkType
+  wordNum?: number
 }
 
 export interface MyWorkData {
@@ -23,6 +24,7 @@ export interface MyWorkData {
   sessions: any[]
   workType: WorkType
   deleteChecked?: boolean
+  wordNum?: number
 }
 
 export interface PageInfo {

@@ -30,6 +30,13 @@ const getDisplayTitle = (data: MyWorkData) => {
   return data.title || '未命名作品'
 }
 
+const formatWordNum = (num?: number): string => {
+  if (num === undefined || num === null) return ''
+  if (num >= 100000000) return `${(num / 100000000).toFixed(1)}亿字`
+  if (num >= 10000) return `${(num / 10000).toFixed(1)}万字`
+  return `${num}字`
+}
+
 export const MyWorks = ({
   data,
   batchDelete,
@@ -145,12 +152,17 @@ export const MyWorks = ({
       <div className="line-clamp-2 mt-1 text-sm leading-tight text-(--text-secondary)">
         {data.description || '文章暂无简介'}
       </div>
-      <div className="mt-auto flex justify-end">
-        <div className="text-right text-xs text-(--text-tertiary)">
+      <div className="mt-auto flex items-center justify-between">
+        <div className="text-xs text-(--text-tertiary)">
           {data?.updatedTime
             ? dayjs.utc(data.updatedTime).local().format('MM-DD HH:mm')
             : ''}
         </div>
+        {data.wordNum !== undefined && data.wordNum !== null ? (
+          <div className="text-xs text-(--text-tertiary)">
+            {formatWordNum(data.wordNum)}
+          </div>
+        ) : null}
       </div>
       {workTypeLabel ? (
         <div
