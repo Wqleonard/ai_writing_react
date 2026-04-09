@@ -55,4 +55,5 @@ export const ORDER_CODE_VALUE: Record<string, string> = {
   CANVAS_CREATE_SMART: '画布创作-智能',
   INSPIRATION_IMAGE: '画布创作-灵感卡片',
   INSPIRATION_INTRODUCTION_DETAIL: '画布创作-卡片详情',
+  SCRIPT_CHAT: '对话',
 }

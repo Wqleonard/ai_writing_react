@@ -121,11 +121,36 @@ const normalizeServerContent = (content: string): string => {
   return compact.length === 0 ? "" : content;
 };
 
+const normalizeServerDataKey = (rawKey: string): string => {
+  const trimmed = String(rawKey ?? "").trim();
+  if (!trimmed) return "";
+  const unified = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
+  const withoutLeading = unified.replace(/^\/+/, "");
+  if (!withoutLeading) return "";
+  if (!withoutLeading.endsWith("/")) return withoutLeading;
+  const withoutTrailing = withoutLeading.replace(/\/+$/, "");
+  return withoutTrailing ? `${withoutTrailing}/` : "";
+};
+
 const normalizeServerData = (data: ServerData): ServerData => {
   const next: ServerData = {};
   Object.keys(data ?? {}).forEach((key) => {
+    const normalizedKey = normalizeServerDataKey(key);
+    if (!normalizedKey) return;
     const value = data[key];
-    next[key] = typeof value === "string" ? normalizeServerContent(value) : "";
+    const normalizedValue =
+      typeof value === "string" ? normalizeServerContent(value) : "";
+    if (!(normalizedKey in next)) {
+      next[normalizedKey] = normalizedValue;
+      return;
+    }
+    const prevValue = next[normalizedKey] ?? "";
+    if (!prevValue && normalizedValue) {
+      next[normalizedKey] = normalizedValue;
+      return;
+    }
+    if (prevValue && !normalizedValue) return;
+    next[normalizedKey] = normalizedValue;
   });
   return next;
 };
@@ -144,10 +169,8 @@ const normalizeWorkId = (value: unknown): string => {
 };
 
 const normalizeTreeNodeId = (rawId: string): string => {
-  const trimmed = String(rawId ?? "").trim();
-  if (!trimmed) return "";
-  // Tree node ids are normalized as "/"-joined paths in this app.
-  const unified = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
+  const unified = normalizeServerDataKey(rawId);
+  if (!unified) return "";
   // Tree node ids for directories typically do NOT include trailing "/".
   return unified.endsWith("/") ? unified.slice(0, -1) : unified;
 };
@@ -407,7 +430,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         setServerData: (data) =>
           set((state) => {
             const normalized = normalizeServerData(data);
-            const fileKey = state.currentEditingId || DEFAULT_EDITING_FILE_KEY;
+            const fileKey = normalizeTreeNodeId(
+              state.currentEditingId || DEFAULT_EDITING_FILE_KEY,
+            );
             return {
               serverData: normalized,
               treeData: serverDataToTree(normalized),
@@ -417,20 +442,22 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setServerDataFile: (path, content) =>
           set((state) => {
+            const normalizedPath = normalizeServerDataKey(path);
+            if (!normalizedPath) return state;
             const normalizedContent = normalizeServerContent(content);
             const nextServerData = {
               ...state.serverData,
-              [path]: normalizedContent,
+              [normalizedPath]: normalizedContent,
             };
             return {
               serverData: nextServerData,
               treeData: updateTreeNodeContent(
                 state.treeData,
-                path,
+                normalizeTreeNodeId(normalizedPath),
                 normalizedContent,
               ),
               currentContent:
-                path === state.currentEditingId
+                normalizedPath === normalizeTreeNodeId(state.currentEditingId)
                   ? normalizedContent
                   : state.currentContent,
             };
@@ -510,15 +537,20 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         addServerDataPath: (path, content = "") =>
           set((state) => {
+            const normalizedPath = normalizeServerDataKey(path);
+            if (!normalizedPath) return state;
             const normalizedContent = normalizeServerContent(content);
             return {
-              serverData: { ...state.serverData, [path]: normalizedContent },
+              serverData: {
+                ...state.serverData,
+                [normalizedPath]: normalizedContent,
+              },
               treeData: serverDataToTree({
                 ...state.serverData,
-                [path]: normalizedContent,
+                [normalizedPath]: normalizedContent,
               }),
               currentContent:
-                path === state.currentEditingId
+                normalizedPath === normalizeTreeNodeId(state.currentEditingId)
                   ? normalizedContent
                   : state.currentContent,
             };
@@ -526,35 +558,48 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         deleteServerDataPath: (path) =>
           set((state) => {
-            const prefix = path.endsWith("/") ? path : path + "/";
+            const normalizedPath = normalizeTreeNodeId(path);
+            if (!normalizedPath) return state;
+            const prefix = `${normalizedPath}/`;
             const next: ServerData = {};
             Object.keys(state.serverData).forEach((k) => {
-              if (k !== path && k !== path + "/" && !k.startsWith(prefix))
+              if (
+                k !== normalizedPath &&
+                k !== `${normalizedPath}/` &&
+                !k.startsWith(prefix)
+              ) {
                 next[k] = state.serverData[k];
+              }
             });
             const nextNewNodeIdMap: Record<string, boolean> = {};
             Object.keys(state.newNodeIdMap).forEach((nodeId) => {
-              if (nodeId !== path && !nodeId.startsWith(prefix)) {
+              if (nodeId !== normalizedPath && !nodeId.startsWith(prefix)) {
                 nextNewNodeIdMap[nodeId] = true;
               }
             });
+            const normalizedCurrentEditingId = normalizeTreeNodeId(
+              state.currentEditingId,
+            );
             return {
               serverData: next,
               treeData: serverDataToTree(next),
               newNodeIdMap: nextNewNodeIdMap,
-              currentContent: next[state.currentEditingId] ?? "",
+              currentContent: next[normalizedCurrentEditingId] ?? "",
             };
           }),
 
         renameServerDataPath: (oldPath, newPath) =>
           set((state) => {
+            const normalizedOldPath = normalizeTreeNodeId(oldPath);
+            const normalizedNewPath = normalizeTreeNodeId(newPath);
+            if (!normalizedOldPath || !normalizedNewPath) return state;
             const next = { ...state.serverData };
-            const oldPrefix = oldPath.endsWith("/") ? oldPath : oldPath + "/";
-            const newPrefix = newPath.endsWith("/") ? newPath : newPath + "/";
+            const oldPrefix = `${normalizedOldPath}/`;
+            const newPrefix = `${normalizedNewPath}/`;
             Object.keys(state.serverData).forEach((k) => {
-              if (k === oldPath) {
+              if (k === normalizedOldPath) {
                 delete next[k];
-                next[newPath] = state.serverData[k];
+                next[normalizedNewPath] = state.serverData[k];
               } else if (k.startsWith(oldPrefix)) {
                 const suffix = k.slice(oldPrefix.length);
                 delete next[k];
@@ -562,15 +607,20 @@ export const useEditorStore = create<EditorState & EditorActions>()(
               }
             });
             let currentEditingId = state.currentEditingId;
-            if (state.currentEditingId === oldPath) currentEditingId = newPath;
-            else if (state.currentEditingId.startsWith(oldPrefix))
+            const normalizedCurrentEditingId = normalizeTreeNodeId(
+              state.currentEditingId,
+            );
+            if (normalizedCurrentEditingId === normalizedOldPath) {
+              currentEditingId = normalizedNewPath;
+            } else if (normalizedCurrentEditingId.startsWith(oldPrefix)) {
               currentEditingId =
-                newPrefix + state.currentEditingId.slice(oldPrefix.length);
+                newPrefix + normalizedCurrentEditingId.slice(oldPrefix.length);
+            }
             const newNodeIdMap = Object.keys(state.newNodeIdMap).reduce<
               Record<string, boolean>
             >((acc, nodeId) => {
-              if (nodeId === oldPath) {
-                acc[newPath] = true;
+              if (nodeId === normalizedOldPath) {
+                acc[normalizedNewPath] = true;
                 return acc;
               }
               if (nodeId.startsWith(oldPrefix)) {
@@ -593,18 +643,23 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
         setCurrentEditingId: (id, node) => {
           set((state) => {
-            if(id == ''){
+            const normalizedId = normalizeTreeNodeId(id);
+            if (normalizedId === "") {
               return {
-                currentEditingId: '',
+                currentEditingId: "",
                 currentEditingNode: null,
-                currentContent: '',
+                currentContent: "",
               };
             }
-            const nextCurrentEditingNode = node ?? findNodeById(state.treeData, id);
+            const nextCurrentEditingNode =
+              node ?? findNodeById(state.treeData, normalizedId);
             return {
-              currentEditingId: id,
+              currentEditingId: normalizedId,
               currentEditingNode: nextCurrentEditingNode,
-              currentContent: nextCurrentEditingNode?.content ?? "",
+              currentContent:
+                state.serverData[normalizedId] ??
+                nextCurrentEditingNode?.content ??
+                "",
             };
           });
         },
@@ -619,7 +674,6 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           initEditorDataInFlightWorkId = workId;
           initEditorDataInFlight = (async () => {
             set({ workId });
-            console.log("initEditorData", workId);
             const { useChatStore } = await import("@/stores/chatStore");
             useChatStore.getState().setWorkId(workId);
             try {

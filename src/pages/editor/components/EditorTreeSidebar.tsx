@@ -570,11 +570,13 @@ const TreeNodeRow = React.memo((
 export interface EditorTreeSidebarProps {
   className?: string
   onFileSelect?: (node: FileTreeNode) => void
+  onPathRenamed?: (oldPath: string, newPath: string) => void
 }
 
 export const EditorTreeSidebar = ({
   className,
   onFileSelect,
+  onPathRenamed,
 }: EditorTreeSidebarProps) => {
   const workInfo = useEditorStore((s) => s.workInfo)
   const workId = useEditorStore((s) => s.workId)
@@ -586,6 +588,9 @@ export const EditorTreeSidebar = ({
   const setCurrentEditingId = useEditorStore((s) => s.setCurrentEditingId)
   const setWorkInfo = useEditorStore((s) => s.setWorkInfo)
   const setTreeData = useEditorStore((s) => s.setTreeData)
+  const addServerDataPath = useEditorStore((s) => s.addServerDataPath)
+  const deleteServerDataPath = useEditorStore((s) => s.deleteServerDataPath)
+  const renameServerDataPath = useEditorStore((s) => s.renameServerDataPath)
   const saveEditorData = useEditorStore((s) => s.saveEditorData)
   const updateWorkInfo = useEditorStore((s) => s.updateWorkInfo)
 
@@ -965,12 +970,13 @@ export const EditorTreeSidebar = ({
 
       targetNode.children.push(nextNode)
       setTreeData([...nextTreeData])
+      addServerDataPath(newNodeId, "")
       void saveEditorData("1")
       markNewNodeId(newNodeId)
       setCurrentEditingId(newNodeId)
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData, treeData]
+    [addServerDataPath, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData, treeData]
   )
 
   const handleAddFolderUnder = useCallback(
@@ -1014,11 +1020,12 @@ export const EditorTreeSidebar = ({
 
       targetNode.children.push(nextNode)
       setTreeData([...nextTreeData])
+      addServerDataPath(`${newNodeId}/`, "")
       void saveEditorData("1")
       markNewNodeId(newNodeId)
       setExpandedIds((prev) => new Set(prev).add(parent.id))
     },
-    [markNewNodeId, saveEditorData, setTreeData, treeData]
+    [addServerDataPath, markNewNodeId, saveEditorData, setTreeData, treeData]
   )
 
   const handleRename = useCallback(() => {
@@ -1056,6 +1063,8 @@ export const EditorTreeSidebar = ({
     const nextPathId = newPath.replace(/\/$/, "")
     const renamedTree = renameNodeById(treeData, oldPath, nextPathId.split("/").filter(Boolean), newName)
     setTreeData(renamedTree)
+    renameServerDataPath(oldPath, nextPathId)
+    onPathRenamed?.(oldPath, nextPathId)
     void saveEditorData("1")
     if (renameTarget.isDirectory) {
       setExpandedIds((prev) => {
@@ -1084,7 +1093,7 @@ export const EditorTreeSidebar = ({
     setRenameOpen(false)
     setRenameTarget(null)
     setRenameValue("")
-  }, [renameTarget, renameValue, getSiblings, saveEditorData, setTreeData, treeData, currentEditingId, setCurrentEditingId])
+  }, [renameTarget, renameValue, getSiblings, renameServerDataPath, saveEditorData, setTreeData, treeData, currentEditingId, setCurrentEditingId, onPathRenamed])
 
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) {
@@ -1092,6 +1101,7 @@ export const EditorTreeSidebar = ({
       return
     }
     setTreeData(removeNodeById(treeData, deleteTarget.id))
+    deleteServerDataPath(deleteTarget.id)
     void saveEditorData("1")
     const prefix = deleteTarget.id + (deleteTarget.isDirectory ? "/" : "")
     if (
@@ -1103,7 +1113,7 @@ export const EditorTreeSidebar = ({
     setDeleteOpen(false)
     setDeleteTarget(null)
     toast.success("已删除")
-  }, [deleteTarget, currentEditingId, saveEditorData, setCurrentEditingId, setTreeData, treeData])
+  }, [deleteServerDataPath, deleteTarget, currentEditingId, saveEditorData, setCurrentEditingId, setTreeData, treeData])
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -1134,10 +1144,11 @@ export const EditorTreeSidebar = ({
 
     nextTreeData.push(nextNode)
     setTreeData([...nextTreeData])
+    addServerDataPath(newNodeId, "")
     void saveEditorData("1")
     markNewNodeId(newNodeId)
     setCurrentEditingId(newNodeId)
-  }, [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData])
+  }, [addServerDataPath, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData, treeData])
 
   const addFolderAtRoot = useCallback(() => {
     trackEvent('Directory', 'Add', 'Folder')
@@ -1159,10 +1170,11 @@ export const EditorTreeSidebar = ({
 
     nextTreeData.push(nextNode)
     setTreeData([...nextTreeData])
+    addServerDataPath(`${newNodeId}/`, "")
     void saveEditorData("1")
     markNewNodeId(newNodeId)
     setExpandedIds((prev) => new Set(prev))
-  }, [treeData, markNewNodeId, saveEditorData, setTreeData])
+  }, [addServerDataPath, markNewNodeId, saveEditorData, setTreeData, treeData])
 
   const triggerImportLocalFile = useCallback(() => {
     importFileInputRef.current?.click()
@@ -1181,6 +1193,7 @@ export const EditorTreeSidebar = ({
       const siblings = nextTreeData
 
       let firstImportedId: string | null = null
+      const importedEntries: Array<{ path: string; content: string }> = []
       for (const file of files) {
         const lower = file.name.toLowerCase()
         if (!lower.endsWith(".md") && !lower.endsWith(".txt")) {
@@ -1204,10 +1217,12 @@ export const EditorTreeSidebar = ({
           children: [],
         }
         siblings.push(nextNode)
+        importedEntries.push({ path: newNodeId, content })
         if (!firstImportedId) firstImportedId = newNodeId
       }
 
       setTreeData([...nextTreeData])
+      importedEntries.forEach((entry) => addServerDataPath(entry.path, entry.content))
       void saveEditorData("1")
       if (firstImportedId) {
         markNewNodeId(firstImportedId)
@@ -1215,7 +1230,7 @@ export const EditorTreeSidebar = ({
         toast.success("已导入文件")
       }
     },
-    [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData]
+    [addServerDataPath, treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setTreeData]
   )
 
   const importLocalFolderAtRoot = useCallback(
@@ -1248,6 +1263,9 @@ export const EditorTreeSidebar = ({
       const dirMap = new Map<string, FileTreeNode>()
       dirMap.set(rootId, rootNode)
       const newIds: string[] = [rootId]
+      const importedEntries: Array<{ path: string; content: string }> = [
+        { path: `${rootId}/`, content: "" },
+      ]
 
       const ensureDir = (parent: FileTreeNode, name: string) => {
         const id = `${parent.id}/${name}`
@@ -1265,6 +1283,7 @@ export const EditorTreeSidebar = ({
         }
         parent.children.push(next)
         dirMap.set(id, next)
+        importedEntries.push({ path: `${id}/`, content: "" })
         return next
       }
 
@@ -1299,14 +1318,15 @@ export const EditorTreeSidebar = ({
           children: [],
         }
         parent.children.push(node)
+        importedEntries.push({ path: fileId, content })
         newIds.push(fileId)
         if (!firstImportedFileId) firstImportedFileId = fileId
       }
 
       nextTreeData.push(rootNode)
       setTreeData([...nextTreeData])
+      importedEntries.forEach((entry) => addServerDataPath(entry.path, entry.content))
       void saveEditorData("1")
-      console.log(newIds, 'newIds---->')
       newIds.forEach((id) => markNewNodeId(id))
       setExpandedIds((prev) => {
         const next = new Set(prev)
@@ -1316,7 +1336,7 @@ export const EditorTreeSidebar = ({
       if (firstImportedFileId) setCurrentEditingId(firstImportedFileId)
       toast.success("已导入文件夹")
     },
-    [treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setExpandedIds, setTreeData]
+    [addServerDataPath, treeData, markNewNodeId, saveEditorData, setCurrentEditingId, setExpandedIds, setTreeData]
   )
 
   const resetDragState = useCallback(() => {
@@ -1436,6 +1456,10 @@ export const EditorTreeSidebar = ({
 
       const moved = moveNode(treeData, draggedId, node.id, dropPosition)
       setTreeData(moved.next)
+      if (moved.movedOldId !== moved.movedNewId) {
+        renameServerDataPath(moved.movedOldId, moved.movedNewId)
+        onPathRenamed?.(moved.movedOldId, moved.movedNewId)
+      }
       void saveEditorData("1")
 
       if (moved.movedOldId !== moved.movedNewId) {
@@ -1461,13 +1485,14 @@ export const EditorTreeSidebar = ({
       dragState.draggedId,
       currentEditingId,
       resetDragState,
+      renameServerDataPath,
+      onPathRenamed,
       saveEditorData,
       setCurrentEditingId,
       setTreeData,
       treeData,
     ]
   )
-
   return (
     <div
       className={clsx(

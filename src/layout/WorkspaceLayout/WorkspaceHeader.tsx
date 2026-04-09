@@ -84,9 +84,9 @@ export function WorkspaceHeader() {
     }
   }, [isLoggedIn])
 
-  const handleLogoutMenuClick = useCallback(() => {
+  const handleLogoutMenuClick = useCallback(async () => {
     setUserMenuOpen(false)
-    logout()
+    await logout()
     toast.success('退出登录成功')
   }, [logout])
 

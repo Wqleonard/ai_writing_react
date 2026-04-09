@@ -779,6 +779,45 @@ const getUniqueName = (name: string, bucket: Map<string, number>) => {
   return count === 0 ? name : `${name}${count + 1}`;
 };
 
+const normalizeExplicitCanvasFilePath = (rawPath: unknown) => {
+  const normalized = getTextValue(rawPath).replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized.endsWith("/")) return "";
+  if (!/\.md$/i.test(normalized)) return "";
+  return normalized;
+};
+
+const ensureCanvasDirectoryEntries = (
+  result: Record<string, string>,
+  filePath: string
+) => {
+  const segments = filePath.split("/").filter(Boolean);
+  if (segments.length <= 1) return;
+  for (let i = 1; i < segments.length; i += 1) {
+    const dirPath = `${segments.slice(0, i).join("/")}/`;
+    if (!(dirPath in result)) result[dirPath] = "";
+  }
+};
+
+const ensureUniqueCanvasFilePath = (preferredPath: string, usedPaths: Set<string>) => {
+  if (!usedPaths.has(preferredPath)) return preferredPath;
+
+  const slashIndex = preferredPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? `${preferredPath.slice(0, slashIndex + 1)}` : "";
+  const fileName = slashIndex >= 0 ? preferredPath.slice(slashIndex + 1) : preferredPath;
+  const baseName = fileName.replace(/\.md$/i, "");
+  const ext = fileName.toLowerCase().endsWith(".md") ? ".md" : "";
+
+  let seq = 2;
+  let candidate = `${directory}${baseName}${seq}${ext}`;
+  while (usedPaths.has(candidate)) {
+    seq += 1;
+    candidate = `${directory}${baseName}${seq}${ext}`;
+  }
+  return candidate;
+};
+
+type CanvasSyncPathEntry = { nodeId: string; filePath: string };
+
 const getCanvasGroupId = (node: CustomNode) =>
   getFirstTextValue(
     node.parentId,
@@ -796,17 +835,25 @@ const getGroupedChildren = (nodes: CustomNode[], groupId: string) =>
     })
     .sort(sortCanvasNodes);
 
-export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
-  if (!Array.isArray(nodes) || nodes.length === 0) return {};
-  const result: Record<string, string> = {};
+const buildCanvasSyncPathEntries = (nodes: CustomNode[]): CanvasSyncPathEntry[] => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return [];
+  const entries: CanvasSyncPathEntry[] = [];
   const fileNameCountByDirectory = new Map<string, Map<string, number>>();
+  const usedFilePaths = new Set<string>();
 
-  const ensureDirectory = (directoryName: string) => {
-    result[`${directoryName}/`] = "";
+  const ensureDirectoryBucket = (directoryName: string) => {
     if (!fileNameCountByDirectory.has(directoryName)) {
       fileNameCountByDirectory.set(directoryName, new Map<string, number>());
     }
     return fileNameCountByDirectory.get(directoryName)!;
+  };
+
+  const appendSyncEntry = (node: CustomNode, fallbackFilePath: string) => {
+    const explicitFilePath = normalizeExplicitCanvasFilePath((node.data as any)?.filePath);
+    const preferredPath = explicitFilePath || fallbackFilePath;
+    const nextFilePath = ensureUniqueCanvasFilePath(preferredPath, usedFilePaths);
+    usedFilePaths.add(nextFilePath);
+    entries.push({ nodeId: node.id, filePath: nextFilePath });
   };
 
   const topLevelNodes = nodes
@@ -819,10 +866,10 @@ export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string
       if (!syncableChildren.length) return;
 
       const directoryName = getCanvasDirectoryName(node.data?.label);
-      const childNameCount = ensureDirectory(directoryName);
+      const childNameCount = ensureDirectoryBucket(directoryName);
       syncableChildren.forEach((child, childIndex) => {
         const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
-        result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(child);
+        appendSyncEntry(child, `${directoryName}/${fileBase}.md`);
       });
       return;
     }
@@ -830,50 +877,33 @@ export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string
     if (!shouldSyncCanvasNode(node)) return;
 
     const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
-    const fileNameCount = ensureDirectory(directoryName);
+    const fileNameCount = ensureDirectoryBucket(directoryName);
     const fileBase = getUniqueName(getCanvasNodeBaseName(node, index), fileNameCount);
-    result[`${directoryName}/${fileBase}.md`] = buildCanvasNodeMarkdown(node);
+    appendSyncEntry(node, `${directoryName}/${fileBase}.md`);
   });
 
+  return entries;
+};
+
+export const buildCanvasSyncFiles = (nodes: CustomNode[]): Record<string, string> => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return {};
+  const result: Record<string, string> = {};
+  const entries = buildCanvasSyncPathEntries(nodes);
+  const nodeById = new Map(nodes.map((node) => [node.id, node] as const));
+  entries.forEach(({ nodeId, filePath }) => {
+    const node = nodeById.get(nodeId);
+    if (!node) return;
+    ensureCanvasDirectoryEntries(result, filePath);
+    result[filePath] = buildCanvasNodeMarkdown(node);
+  });
   return result;
 };
 
 export const buildCanvasSyncFileNodeIdMap = (nodes: CustomNode[]): Record<string, string> => {
   if (!Array.isArray(nodes) || nodes.length === 0) return {};
   const result: Record<string, string> = {};
-  const fileNameCountByDirectory = new Map<string, Map<string, number>>();
-
-  const ensureDirectory = (directoryName: string) => {
-    if (!fileNameCountByDirectory.has(directoryName)) {
-      fileNameCountByDirectory.set(directoryName, new Map<string, number>());
-    }
-    return fileNameCountByDirectory.get(directoryName)!;
-  };
-
-  const topLevelNodes = nodes
-    .filter((node) => !isGroupedCanvasChild(node))
-    .sort(sortCanvasNodes);
-
-  topLevelNodes.forEach((node, index) => {
-    if (node.type === "roleGroup") {
-      const syncableChildren = getGroupedChildren(nodes, node.id).filter(shouldSyncCanvasNode);
-      if (!syncableChildren.length) return;
-
-      const directoryName = getCanvasDirectoryName(node.data?.label);
-      const childNameCount = ensureDirectory(directoryName);
-      syncableChildren.forEach((child, childIndex) => {
-        const fileBase = getUniqueName(getCanvasNodeBaseName(child, childIndex), childNameCount);
-        result[`${directoryName}/${fileBase}.md`] = child.id;
-      });
-      return;
-    }
-
-    if (!shouldSyncCanvasNode(node)) return;
-
-    const directoryName = getCanvasDirectoryName(node.data?.label ?? node.type);
-    const fileNameCount = ensureDirectory(directoryName);
-    const fileBase = getUniqueName(getCanvasNodeBaseName(node, index), fileNameCount);
-    result[`${directoryName}/${fileBase}.md`] = node.id;
+  buildCanvasSyncPathEntries(nodes).forEach(({ nodeId, filePath }) => {
+    result[filePath] = nodeId;
   });
 
   return result;

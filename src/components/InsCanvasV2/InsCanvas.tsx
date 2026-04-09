@@ -52,7 +52,6 @@ import type {
   CustomNode,
   CustomEdge,
   DialogReferenceCard,
-  InspirationItem,
   InsCanvasApi,
   InsCanvasInnerProps,
   InsCanvasProps,
@@ -74,6 +73,8 @@ import {
   OUTLINE_GROUP_LAYOUT,
   OUTPUT_TYPE_OPTIONS,
   ROLE_GROUP_LAYOUT,
+  TASK_TYPE_CARD_KEY_MAP,
+  TASK_TYPE_LABEL_MAP,
 } from "./constant";
 import {
   buildCanvasNodeFilePath,
@@ -94,8 +95,6 @@ import {
   formatOutlineMarkdown,
   formatRecordMarkdown,
   getCanvasNodeLayoutSize as getCanvasNodeLayoutSizeFromUtils,
-  getCanvasDirectoryName,
-  getCanvasNodeBaseName,
   getFirstTextValue,
   getLatestWriteFiles,
   getPanelTextsFromMessageMap,
@@ -103,11 +102,7 @@ import {
   inferCardKeyFromWriteFilePath,
   isRelationshipWriteFile,
   isRelationshipInfoWriteFile,
-  normalizeReplyFilePath,
   parseChoicesSuggestionItems,
-  sanitizeCanvasEntryName,
-  shouldSyncCanvasNode,
-  sortCanvasNodes,
   shouldSkipWriteFileCardCreation,
   splitAutoUpdatesContent,
 } from "./canvasUtils";
@@ -116,22 +111,6 @@ import { generateInspirationDrawIdReq, saveInspirationCanvasReq } from "@/api/wo
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUp, MapPin, Pause, X } from "lucide-react";
-
-const TASK_TYPE_LABEL_MAP: Record<string, string> = {
-  "brain-storm-card": "脑洞",
-  "info-card": "信息",
-  "story-setting-card": "梗概",
-  "role-setting-card": "角色",
-  "outline-card": "大纲",
-};
-
-const TASK_TYPE_CARD_KEY_MAP: Record<string, CanvasCardKey> = {
-  "brain-storm-card": "brainstorm",
-  "info-card": "info",
-  "story-setting-card": "summary",
-  "role-setting-card": "role",
-  "outline-card": "outline",
-};
 
 const getTaskTypeLabel = (taskType: unknown) => {
   const normalizedTaskType = getTextValue(taskType);
@@ -1115,9 +1094,19 @@ const createDirectedCanvasEdge = (
   target,
   sourceHandle: options?.sourceHandle,
   targetHandle: options?.targetHandle,
-  type: "bezier",
+  type: "default",
   animated: false,
 });
+
+const normalizeCanvasEdges = (input: CustomEdge[] = []): CustomEdge[] =>
+  input.map((edge) =>
+    getTextValue(edge?.type).toLowerCase() === "bezier"
+      ? {
+        ...edge,
+        type: "default",
+      }
+      : edge
+  );
 
 const withVerticalPorts = (node: CustomNode): CustomNode => {
   if (isInfoCanvasNode(node)) {
@@ -1158,11 +1147,15 @@ function InsCanvasInner({
 }: InsCanvasInnerProps) {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const normalizedInitialEdges = useMemo(
+    () => normalizeCanvasEdges(initialEdges),
+    [initialEdges]
+  );
   const [nodes, setNodes] = useNodesState<CustomNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>(normalizedInitialEdges);
   // autoLayout 会被 setTimeout 调用；用 ref 避免闭包拿到旧 nodes/edges 导致把新数据覆盖回去
   const nodesRef = useRef<CustomNode[]>(initialNodes);
-  const edgesRef = useRef<CustomEdge[]>(initialEdges);
+  const edgesRef = useRef<CustomEdge[]>(normalizedInitialEdges);
   const canvasAutoSaveTimerRef = useRef<number | null>(null);
   const ensureDrawIdPromiseRef = useRef<Promise<string> | null>(null);
   const canvasAutoSaveSuppressedRef = useRef(false);
@@ -2212,14 +2205,58 @@ function InsCanvasInner({
         if (!isMatched) return node;
 
         const nextContent = String(content ?? "");
-        if (String(node.data?.content ?? "") === nextContent) return node;
+        // 命中 sync-path（由 tree/currentEditingId 驱动）时，优先将节点 filePath 对齐到该路径。
+        // 这样在重命名/拖拽后，卡片保存不会继续回写旧路径，避免出现重复文件。
+        const nextNodeFilePath = isMatchedBySyncPath
+          ? normalizedPath
+          : nodeFilePath;
+        const shouldUpdateContent = String(node.data?.content ?? "") !== nextContent;
+        const shouldUpdateFilePath =
+          Boolean(nextNodeFilePath) &&
+          getTextValue((node.data as any)?.filePath).trim() !== nextNodeFilePath;
+        if (!shouldUpdateContent && !shouldUpdateFilePath) return node;
 
         didUpdate = true;
         return {
           ...node,
           data: {
             ...node.data,
-            content: nextContent,
+            ...(shouldUpdateContent ? { content: nextContent } : {}),
+            ...(shouldUpdateFilePath ? { filePath: nextNodeFilePath } : {}),
+          },
+        };
+      })
+    );
+
+    return didUpdate;
+  }, [normalizeCanvasFilePath, setNodes]);
+
+  const syncFilePathByRename = useCallback((oldPath: string, newPath: string) => {
+    const normalizedOldPath = normalizeCanvasFilePath(oldPath);
+    const normalizedNewPath = normalizeCanvasFilePath(newPath);
+    if (!normalizedOldPath || !normalizedNewPath) return false;
+
+    let didUpdate = false;
+    setNodes((prev) =>
+      prev.map((node) => {
+        const nodeFilePath = normalizeCanvasFilePath((node.data as any)?.filePath);
+        if (!nodeFilePath) return node;
+
+        const isExactMatch = nodeFilePath === normalizedOldPath;
+        const isDirectorySubPathMatch = nodeFilePath.startsWith(`${normalizedOldPath}/`);
+        if (!isExactMatch && !isDirectorySubPathMatch) return node;
+
+        const nextNodeFilePath = isExactMatch
+          ? normalizedNewPath
+          : `${normalizedNewPath}/${nodeFilePath.slice(normalizedOldPath.length + 1)}`;
+        if (!nextNodeFilePath || nextNodeFilePath === nodeFilePath) return node;
+
+        didUpdate = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            filePath: nextNodeFilePath,
           },
         };
       })
@@ -2504,6 +2541,16 @@ function InsCanvasInner({
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  useEffect(() => {
+    const hasLegacyBezierEdge = edges.some(
+      (edge) => getTextValue(edge?.type).toLowerCase() === "bezier"
+    );
+    if (!hasLegacyBezierEdge) return;
+    const normalizedEdges = normalizeCanvasEdges(edges);
+    edgesRef.current = normalizedEdges;
+    setEdges(normalizedEdges);
+  }, [edges, setEdges]);
 
   useEffect(() => {
     hasIdeaRef.current = hasIdea;
@@ -2795,7 +2842,7 @@ function InsCanvasInner({
           id: `e${sourceNodeId}-${nid}`,
           source: sourceNodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -2889,7 +2936,7 @@ function InsCanvasInner({
           id: `e${nodeId}-${nid}`,
           source: nodeId,
           target: nid,
-          type: "bezier",
+          type: "default",
           animated: true,
         });
       }
@@ -3433,7 +3480,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: groupSourceId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3572,7 +3619,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -3967,7 +4014,7 @@ function InsCanvasInner({
             id: groupEdgeId,
             source: sourceNodeId,
             target: groupId,
-            type: "bezier",
+            type: "default",
             animated: true,
           });
         }
@@ -7161,6 +7208,7 @@ function InsCanvasInner({
       addInfoCardFromExternalFile,
       focusFileByPath,
       syncFileContentByPath,
+      syncFilePathByRename,
       openHistory,
       flushPersistence: flushCanvasPersistence,
       stopCurrentRequest,
@@ -7168,7 +7216,7 @@ function InsCanvasInner({
       inspirationDrawId,
       isLoading,
     }),
-    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
+    [addNewCanvas, addInfoCardFromExternalFile, focusFileByPath, syncFileContentByPath, syncFilePathByRename, openHistory, flushCanvasPersistence, stopCurrentRequest, handleSaveCanvas, inspirationDrawId, isLoading]
   );
 
   const onCanvasReadyRef = useRef(onCanvasReady);
@@ -7200,8 +7248,10 @@ function InsCanvasInner({
         if (version.content) {
           const data = JSON.parse(version.content);
           if (data.nodes && data.edges) {
+            const normalizedEdges = normalizeCanvasEdges(data.edges);
             setNodes(data.nodes);
-            setEdges(data.edges);
+            edgesRef.current = normalizedEdges;
+            setEdges(normalizedEdges);
             setInspirationDrawId(String(version?.inspirationDrawId ?? ""));
             msg("success", "版本恢复成功");
             setTimeout(autoLayout, 100);
@@ -8007,7 +8057,7 @@ function InsCanvasInner({
             <h1 className="z-10 mt-3 text-center text-[26px] font-semibold text-[#4f4f4f]">
               {isLoading
                 ? `脑洞喵正在生成${ideaContent ? ideaContent + "选题" : "随机选题"}...`
-                : "与脑洞喵一起脑洞大开地创作"}
+                : "与爆文猫一起脑洞大开地创作"}
             </h1>
             <div className="mt-4 flex gap-2">
               <Button className="rounded-full bg-white text-[#4B5563] shadow-[0px_1px_1px_0px_rgba(0,0,0,0.06)] hover:bg-[#f5f5f5]" onClick={() => navigate("/workspace/creation-community/course")}>
@@ -8036,7 +8086,7 @@ function InsCanvasInner({
                 setZoomPercent(Math.round((viewport.zoom || 1) * 100));
               }}
               defaultEdgeOptions={{
-                type: "bezier",
+                type: "default",
                 style: {
                   // 基础连线样式：细一点、浅灰色、圆角
                   stroke: "#EFAF00",
