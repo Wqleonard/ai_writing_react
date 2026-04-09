@@ -1341,6 +1341,7 @@ export const EditorTreeSidebar = ({
 
   const resetDragState = useCallback(() => {
     setActiveCanvasDragFileId("")
+    setActiveCanvasDragFileId("")
     setDragState({
       draggedId: null,
       draggedParentId: null,
