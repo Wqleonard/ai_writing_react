@@ -1327,7 +1327,6 @@ export const EditorTreeSidebar = ({
       setTreeData([...nextTreeData])
       importedEntries.forEach((entry) => addServerDataPath(entry.path, entry.content))
       void saveEditorData("1")
-      console.log(newIds, 'newIds---->')
       newIds.forEach((id) => markNewNodeId(id))
       setExpandedIds((prev) => {
         const next = new Set(prev)
@@ -1494,7 +1493,6 @@ export const EditorTreeSidebar = ({
       treeData,
     ]
   )
-
   return (
     <div
       className={clsx(
