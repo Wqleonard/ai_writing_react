@@ -95,7 +95,7 @@ function getFirstLineContent(content: string, forKnowledge = false): string {
     .trim();
   if (forKnowledge) return firstLine;
   if (!firstLine) {
-    firstLine = content.replace(/[#*_~`\[\]()]/g, "").substring(0, 50).trim();
+    firstLine = content.replace(/[#*_~`()]|\[|\]/g, "").substring(0, 50).trim();
   }
   if (firstLine.length > 80) firstLine = firstLine.substring(0, 80) + "...";
   return firstLine || "内容预览";
