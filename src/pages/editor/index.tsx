@@ -2761,10 +2761,11 @@ const MarkdownEditorPage = () => {
       const keys = Object.keys(knowledgeBase ?? {});
       if (keys.length === 0) return;
 
-      const files = ensureCanvasTreeSkeleton({
+      const merged = {
         ...useEditorStore.getState().serverData,
         ...knowledgeBase,
-      });
+      };
+      const files = isShortPlayEditor ? merged : ensureCanvasTreeSkeleton(merged);
       setServerData(files);
 
       const fileId =
@@ -2783,7 +2784,7 @@ const MarkdownEditorPage = () => {
 
       toast.success("已发送到知识库");
     },
-    [setServerData, setServerDataFile, workId, setWorkInfo]
+    [setServerData, setServerDataFile, workId, setWorkInfo, isShortPlayEditor]
   );
 
   const openCanvasFileByPath = useCallback((rawFileName: string, allowPending = false) => {
