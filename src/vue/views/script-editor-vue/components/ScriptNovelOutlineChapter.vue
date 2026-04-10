@@ -79,7 +79,7 @@ const ALLOWED_EXTENSIONS = [".txt"];
 const CREDIT_COST_THRESHOLD = 1000;
 const calcCreditCost = (sizeBytes: number) => {
   const sizeMB = sizeBytes / (1024 * 1024);
-  return Math.ceil(sizeMB * 8 + 6);
+  return Math.ceil(sizeMB * 300);
 };
 
 // 积分确认弹层
