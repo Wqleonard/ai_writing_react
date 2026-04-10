@@ -385,7 +385,7 @@ export const WritingStyleDialog = ({
                     }
                   }}
                   accept={[".txt"]}
-                  sizeLimit={SIZE_LIMIT}
+                  // sizeLimit={SIZE_LIMIT}
                 />
               </div>
             </div>

@@ -222,7 +222,7 @@ export const BookAnalysisDialog = ({
                   value={uploadedFile}
                   onChange={setUploadedFile}
                   accept={[".txt", ".pdf"]}
-                  sizeLimit={SIZE_LIMIT}
+                  // sizeLimit={SIZE_LIMIT}
                 />
               </div>
             </div>

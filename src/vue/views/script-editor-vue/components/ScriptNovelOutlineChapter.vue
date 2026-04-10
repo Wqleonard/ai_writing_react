@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from "vue";
-import { ElButton, ElMessage, ElSlider } from "element-plus";
+import { ElButton, ElMessage, ElSlider, ElDialog } from "element-plus";
 import { uploadFileReq } from "@/api/files.ts";
 import scriptEmptyUploadIcon from "@/assets/images/quick_creation/script_empty_upload.svg";
 // 导入 JSZip 用于解析 docx 文件
@@ -72,27 +72,48 @@ const fileNameWithoutExtension = computed(() => {
 // AbortController 用于取消流式请求
 const plotStreamAbortController = ref<AbortController | null>(null);
 
-// 文件大小限制：10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
 // 支持的文件类型
 const ALLOWED_EXTENSIONS = [".txt"];
 
+// 积分消耗计算
+const CREDIT_COST_THRESHOLD = 1000;
+const calcCreditCost = (sizeBytes: number) => {
+  const sizeMB = sizeBytes / (1024 * 1024);
+  return Math.ceil(sizeMB * 8 + 6);
+};
+
+// 积分确认弹层
+const creditConfirmVisible = ref(false);
+const creditCostEstimate = ref(0);
+const resolveCreditConfirm = ref<((ok: boolean) => void) | null>(null);
+
+const showCreditConfirm = (): Promise<boolean> => {
+  creditCostEstimate.value = calcCreditCost(uploadedFile.value!.size);
+  creditConfirmVisible.value = true;
+  return new Promise((resolve) => {
+    resolveCreditConfirm.value = resolve;
+  });
+};
+
+const handleCreditConfirm = () => {
+  creditConfirmVisible.value = false;
+  resolveCreditConfirm.value?.(true);
+  resolveCreditConfirm.value = null;
+};
+
+const handleCreditCancel = () => {
+  creditConfirmVisible.value = false;
+  resolveCreditConfirm.value?.(false);
+  resolveCreditConfirm.value = null;
+};
+
 // 验证文件
 const validateFile = (file: File): boolean => {
-  // 验证文件类型
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(extension)) {
     ElMessage.error("仅支持 .txt格式");
     return false;
   }
-
-  // 验证文件大小
-  if (file.size > MAX_FILE_SIZE) {
-    ElMessage.error("文件大小不能超过10MB");
-    return false;
-  }
-
   return true;
 };
 
@@ -510,6 +531,13 @@ const handleConfirm = async () => {
     return;
   }
 
+  // 积分消耗检查
+  const creditCost = calcCreditCost(uploadedFile.value.size);
+  if (creditCost > CREDIT_COST_THRESHOLD) {
+    const ok = await showCreditConfirm();
+    if (!ok) return;
+  }
+
   // 如果已有正在进行的请求，先取消
   if (plotStreamAbortController.value) {
     plotStreamAbortController.value.abort();
@@ -658,7 +686,7 @@ onUnmounted(() => {
             <span>拖拽文件到此或点击</span>
             <span class="upload-link" :class="{ 'upload-link-disabled': uploadStatus === 'skipped' }">上传</span>
           </div>
-          <div class="upload-hint">仅支持 .txt格式,文件大小限制10MB</div>
+          <div class="upload-hint">仅支持 .txt格式</div>
         </template>
 
         <!-- hover状态 -->
@@ -670,7 +698,7 @@ onUnmounted(() => {
             <span>拖拽文件到此或点击</span>
             <span class="upload-link">上传</span>
           </div>
-          <div class="upload-hint">仅支持 .txt 和 .docx 格式,文件大小限制10MB</div>
+          <div class="upload-hint">仅支持 .txt 和 .docx 格式</div>
         </template>
 
         <!-- 上传中状态 -->
@@ -794,6 +822,28 @@ onUnmounted(() => {
         </el-button>
       </div>
     </div>
+
+    <!-- 积分消耗确认弹层 -->
+    <el-dialog
+      v-model="creditConfirmVisible"
+      title="积分消耗提示"
+      width="420px"
+      :align-center="true"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+      append-to-body
+    >
+      <div class="credit-confirm-message">
+        本次拆书预计消耗约 <span class="credit-cost-value">{{ creditCostEstimate }}</span> 积分，是否继续？
+      </div>
+      <template #footer>
+        <div class="credit-confirm-footer">
+          <el-button @click="handleCreditCancel">取消</el-button>
+          <el-button type="primary" @click="handleCreditConfirm">确认提交</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1585,6 +1635,66 @@ onUnmounted(() => {
       transform: translateY(-2px);
       box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.15);
     }
+  }
+}
+</style>
+
+<style lang="less">
+.credit-confirm-dialog {
+  border-radius: 16px !important;
+
+  .el-dialog__header {
+    padding: 24px 24px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #464646;
+  }
+
+  .el-dialog__body {
+    padding: 16px 24px 8px;
+  }
+
+  .el-dialog__footer {
+    padding: 8px 24px 24px;
+  }
+}
+
+.credit-confirm-message {
+  font-size: 16px;
+  color: #464646;
+  line-height: 1.6;
+
+  .credit-cost-value {
+    font-weight: 700;
+    background: linear-gradient(90deg, rgba(239, 175, 0, 1) 0%, rgba(255, 149, 0, 1) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+.credit-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+
+  .credit-cancel-btn {
+    height: 40px;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    color: #999;
+    border-color: #d9d9d9;
+  }
+
+  .credit-confirm-btn {
+    height: 40px;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    background: linear-gradient(90deg, rgba(239, 175, 0, 1) 0%, rgba(255, 149, 0, 1) 100%);
+    border: none;
+    color: #fff;
   }
 }
 </style>

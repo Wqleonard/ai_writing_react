@@ -33,8 +33,13 @@ import { Iconfont } from "@/components/Iconfont";
 import { useLoginStore } from '@/stores/loginStore'
 import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import Empty from '@/components/ui/Empty'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
 
-const SIZE_LIMIT = 8 * 1024 * 1024 // 8MB
+const CREDIT_COST_THRESHOLD = 1000
+const calcCreditCost = (sizeBytes: number) => {
+  const sizeMB = sizeBytes / (1024 * 1024)
+  return Math.ceil(sizeMB * 8 + 6)
+}
 const TEMPLATE_PAGE_SIZE = 20
 
 const BookAnalysisPage = () => {
@@ -56,6 +61,7 @@ const BookAnalysisPage = () => {
   const historyIdRef = useRef('')
   const markdownContentRef = useRef('')
   const isPostStreamRef = useRef(false)
+  const { confirm, confirmDialog } = useConfirmDialog()
 
   useEffect(() => {
     historyIdRef.current = historyId
@@ -248,6 +254,19 @@ const BookAnalysisPage = () => {
     const response = uploadedFile.response as any
     const filePath = response?.putFilePath
     const fileName = response?.fileName
+
+    const fileSize = uploadedFile.size ?? 0
+    const creditCost = calcCreditCost(fileSize)
+    if (creditCost > CREDIT_COST_THRESHOLD) {
+      const ok = await confirm({
+        title: '积分消耗提示',
+        message: `本次拆书预计消耗约 ${creditCost} 积分，是否继续？`,
+        confirmText: '确认提交',
+        cancelText: '取消',
+      })
+      if (!ok) return
+    }
+
     setShowUpload(false)
     try {
       const hid: any = await addBookAnalysisHistory(uploadedFile.name || '')
@@ -273,7 +292,7 @@ const BookAnalysisPage = () => {
       setLoading(false)
       setIsPostStream(false)
     }
-  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd])
+  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd, confirm])
 
   const handleReupload = useCallback(() => {
     setShowUpload(true)
@@ -418,7 +437,6 @@ const BookAnalysisPage = () => {
               onChange={setUploadedFile}
               onChangeFile={handleFileChange}
               accept={['.txt', '.pdf']}
-              sizeLimit={SIZE_LIMIT}
             />
             <Button
               className="start-btn mt-7 h-10 w-30 text-white"
@@ -500,6 +518,7 @@ const BookAnalysisPage = () => {
             </div>
           </div>
         </ScrollArea>
+        {confirmDialog}
       </div>
     )
   }
@@ -553,6 +572,7 @@ const BookAnalysisPage = () => {
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

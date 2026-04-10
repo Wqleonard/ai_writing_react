@@ -12,7 +12,7 @@ export interface UploadProps {
   onChange: (file: UploadFile | null) => void
   onChangeFile?: (file: UploadFile | null) => void
   accept?: string[]
-  sizeLimit?: number
+  sizeLimit?: number // 不传则不限制文件大小
   className?: string
   disabled?: boolean
 }
@@ -31,7 +31,7 @@ export const Upload = ({
   onChange,
   onChangeFile,
   accept = defaultAccept,
-  sizeLimit = 8 * 1024 * 1024,
+  sizeLimit,
   className,
   disabled = false,
 }: UploadProps) => {
@@ -46,7 +46,7 @@ export const Upload = ({
         const list = accept.map((e) => e.replace(/^\./, ''))
         return `仅支持 ${list.join('、')} 格式`
       }
-      if (file.size > sizeLimit) {
+      if (sizeLimit && file.size > sizeLimit) {
         const mb = (sizeLimit / (1024 * 1024)).toFixed(0)
         return `文件大小不超过 ${mb}MB`
       }
@@ -123,14 +123,14 @@ export const Upload = ({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: acceptMime,
-    maxSize: sizeLimit,
+    ...(sizeLimit ? { maxSize: sizeLimit } : {}),
     maxFiles: 1,
     disabled,
     noClick: false,
     noKeyboard: false,
   })
 
-  const acceptText = `仅支持 ${accept.map((e) => e.replace(/^\./, '')).join('、')} 文件格式, 文件大小限制 ${(sizeLimit / (1024 * 1024)).toFixed(0)}MB`
+  const acceptText = `仅支持 ${accept.map((e) => e.replace(/^\./, '')).join('、')} 文件格式${sizeLimit ? `, 文件大小限制 ${(sizeLimit / (1024 * 1024)).toFixed(0)}MB` : ''}`
 
   const handleRemove = useCallback(
     (e: React.MouseEvent) => {
