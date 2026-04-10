@@ -33,6 +33,7 @@ import { useDualTabChat } from "@/hooks/useDualTabChat";
 import { useLangGraphStream, type EditFileArgsType } from "@/hooks/useLangGraphStream";
 import { resetLLMState, useLLM } from "@/hooks/useLLM";
 import useMarkdownEditor, { type HighlightMarkerInfo } from "@/hooks/useMarkdownEditor";
+import { clearEditorReloadTarget } from "@/utils/editorNavigationFallback";
 import type {
   AgentCustomMessageItem,
   ChatMessage,
@@ -296,6 +297,11 @@ const findRangeIgnoringWhitespace = (source: string, target: string) => {
 const normalizeFilePath = (value: string) =>
   (value || "").replace(/^\.?\//, "").trim();
 
+const shouldIgnoreServerWritePath = (value: string) => {
+  const normalized = sanitizeIncomingFilePath(value);
+  return /(^|\/)BaoWenAgent(\/|$)/.test(normalized);
+};
+
 const ensureCanvasTreeSkeleton = (files: Record<string, string>): Record<string, string> => {
   const normalized: Record<string, string> = { ...files };
   const hasMainDir = Object.keys(normalized).some(
@@ -528,17 +534,22 @@ const MarkdownEditorPage = () => {
         Record<string, string>
       >((acc, [rawKey, value]) => {
         const key = sanitizeIncomingFilePath(String(rawKey ?? ""));
-        if (!key) return acc;
+        if (!key || shouldIgnoreServerWritePath(key)) return acc;
         acc[key] = String(value ?? "");
         return acc;
       }, {});
 
       let targetFileId = sanitizeIncomingFilePath(fileId || "");
+      if (targetFileId && shouldIgnoreServerWritePath(targetFileId)) {
+        targetFileId = "";
+      }
       if (!targetFileId && currentEditingId && files[currentEditingId] !== undefined) {
         targetFileId = currentEditingId;
       }
       if (!targetFileId && Array.isArray(editInfoList) && editInfoList.length > 0) {
-        const fromEditInfo = editInfoList.find((item) => item?.file_path)?.file_path;
+        const fromEditInfo = editInfoList.find(
+          (item) => item?.file_path && !shouldIgnoreServerWritePath(item.file_path),
+        )?.file_path;
         if (fromEditInfo) {
           targetFileId = sanitizeIncomingFilePath(fromEditInfo);
         }
@@ -562,7 +573,9 @@ const MarkdownEditorPage = () => {
       const pendingEditPaths = new Set<string>();
       if (Array.isArray(editInfoList)) {
         editInfoList.forEach((item) => {
-          if (item?.file_path) pendingEditPaths.add(normalizeFilePath(item.file_path));
+          if (item?.file_path && !shouldIgnoreServerWritePath(item.file_path)) {
+            pendingEditPaths.add(normalizeFilePath(item.file_path));
+          }
         });
       }
       // 与 Vue 行为对齐：即使本次没有新的 editInfoList，只要该文件仍有 pending，
@@ -603,6 +616,7 @@ const MarkdownEditorPage = () => {
         const grouped = editInfoList.reduce<Record<string, EditFileArgsType[]>>((acc, item) => {
           const path = normalizeFilePath(item.file_path ?? "");
           if (!path) return acc;
+          if (shouldIgnoreServerWritePath(path)) return acc;
           if (targetFileId && path !== targetFileId) return acc;
           if (!acc[path]) acc[path] = [];
           acc[path].push(item);
@@ -1506,6 +1520,7 @@ const MarkdownEditorPage = () => {
       setShouldAutoSubmitInitialMessage(false);
     }
   }, [isShortPlayEditor, location.key, location.state, setModelLLM, setSelectedWritingStyle, initializeChatInputFromParams, workId, sendChatText]);
+
 
   const hasExplicitPendingHilt = useCallback((message?: ChatMessage | null): boolean => {
     if (!message || !Array.isArray(message.customMessage) || message.customMessage.length === 0) {
