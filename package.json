@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "preview:dev": "vite preview --outDir distReactDev --port 4173",
     "preview:prd": "vite preview --outDir dist --port 4173",
-    "postinstall": "patch -p1 -i patches/@certible+use-matomo+1.1.0.patch 2>/dev/null || true"
+    "postinstall": "node -e \"const fs=require('fs');const cp=require('child_process');const patchPath='patches/@certible+use-matomo+1.1.0.patch';if(!fs.existsSync(patchPath))process.exit(0);const result=cp.spawnSync('patch',['-p1','-i',patchPath],{stdio:'inherit',shell:process.platform==='win32'});if(result.error&&result.error.code==='ENOENT')process.exit(0);process.exit(0);\""
   },
   "dependencies": {
     "@certible/use-matomo": "^1.1.0",
