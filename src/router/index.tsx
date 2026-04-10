@@ -52,6 +52,7 @@ const BookAnalysisPage = lazy(() => import("@/pages/ai-expert/book-analysis"));
 const WritingStylesPage = lazy(
   () => import("@/pages/ai-expert/writing-styles"),
 );
+const SkillMarketPage = lazy(() => import("@/pages/skill-market"));
 const MyPlacePage = lazy(() => import("@/pages/my-place"));
 const QuickEditorVueHostPage = lazy(
   () => import("@/pages/quick-editor-vue-host"),
@@ -159,6 +160,11 @@ const routes: RouteObject[] = [
             path: "ai-expert/writing-styles",
             element: <WritingStylesPage />,
             handle: { title: "文风提炼" },
+          },
+          {
+            path: "skill-market",
+            element: <SkillMarketPage />,
+            handle: { title: "技能市场" },
           },
         ],
       },

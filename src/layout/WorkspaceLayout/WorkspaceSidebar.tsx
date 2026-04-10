@@ -43,7 +43,7 @@ const menuData: MenuItem[] = [
     icon: '\ue608',
   },
   {
-    title: 'AI专家',
+    title: '写作工具',
     route: '/workspace/ai-expert',
     routeName: 'ai-expert',
     icon: '\ue606',
@@ -61,16 +61,28 @@ const menuData: MenuItem[] = [
     ],
   },
   {
-    title: '灵感工坊',
-    route: '/workspace/creation-community',
-    routeName: 'creation-community',
-    icon: '\ue609',
-    children: [
-      { title: '课程', route: '/workspace/creation-community/course', routeName: 'course' },
-      { title: '分享', route: '/workspace/creation-community/share', routeName: 'share' },
-      { title: '提示词', route: '/workspace/creation-community/prompt', routeName: 'prompt' },
-    ],
+    title: '技能市场',
+    route: '/workspace/skill-market',
+    routeName: 'skill-market',
+    icon: '\ue656',
   },
+  {
+    title: '课程',
+    route: '/workspace/creation-community/course',
+    routeName: 'course',
+    icon: '\ue657',
+  },
+  // {
+  //   title: '灵感工坊',
+  //   route: '/workspace/creation-community',
+  //   routeName: 'creation-community',
+  //   icon: '\ue609',
+  //   children: [
+  //     { title: '课程', route: '/workspace/creation-community/course', routeName: 'course' },
+  //     { title: '分享', route: '/workspace/creation-community/share', routeName: 'share' },
+  //     { title: '提示词', route: '/workspace/creation-community/prompt', routeName: 'prompt' },
+  //   ],
+  // },
 ]
 
 function getActiveRoute(pathname: string): string {
