@@ -174,6 +174,15 @@ const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
 const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
 const EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX = "editorBizTypeByWorkId:";
 
+const logEditorBizDebug = (
+  event: string,
+  payload: Record<string, unknown>,
+) => {
+  const canLog = import.meta.env.DEV || import.meta.env.MODE === "dev";
+  if (!canLog) return;
+  console.log(`[editor-biz-debug] ${event}`, payload);
+};
+
 type RankingListTransmissionParams = {
   content?: string;
   message?: string;
@@ -182,6 +191,16 @@ type RankingListTransmissionParams = {
 
 const normalizeEditorBizType = (value: unknown): EditorBizType =>
   value === "short-play" ? "short-play" : "short-story";
+
+const readCachedEditorBizType = (workId?: string): EditorBizType | null => {
+  if (!workId || typeof window === "undefined") return null;
+  try {
+    const cached = sessionStorage.getItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`);
+    return cached ? normalizeEditorBizType(cached) : null;
+  } catch {
+    return null;
+  }
+};
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
   if (!input) return null;
@@ -394,26 +413,51 @@ const MarkdownEditorPage = () => {
   const stateEditorBizType = (location.state as EditorInitialParams | null)?.editorBizType;
   const hasExplicitStateEditorBizType =
     stateEditorBizType === "short-story" || stateEditorBizType === "short-play";
-  const [cachedEditorBizType, setCachedEditorBizType] = useState<EditorBizType>("short-story");
+  const cachedEditorBizType = readCachedEditorBizType(workId);
+  useEffect(() => {
+    logEditorBizDebug("location-state-read", {
+      workId,
+      pathname: location.pathname,
+      locationKey: location.key,
+      state: location.state ?? null,
+      stateEditorBizType: stateEditorBizType ?? null,
+      hasExplicitStateEditorBizType,
+    });
+  }, [hasExplicitStateEditorBizType, location.key, location.pathname, location.state, stateEditorBizType, workId]);
   useEffect(() => {
     if (!workId || typeof window === "undefined") return;
     if (hasExplicitStateEditorBizType) {
       const normalizedFromState = normalizeEditorBizType(stateEditorBizType);
-      setCachedEditorBizType(normalizedFromState);
       sessionStorage.setItem(
         `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`,
         normalizedFromState
       );
+      logEditorBizDebug("cache-write-from-location-state", {
+        workId,
+        normalizedFromState,
+      });
       return;
     }
-    const cached = sessionStorage.getItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`);
-    if (!cached) return;
-    setCachedEditorBizType(normalizeEditorBizType(cached));
+    const cached = readCachedEditorBizType(workId);
+    logEditorBizDebug("cache-read-for-work", {
+      workId,
+      cacheKey: `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`,
+      cachedRaw: cached ?? null,
+    });
   }, [hasExplicitStateEditorBizType, stateEditorBizType, workId]);
   const editorBizType = hasExplicitStateEditorBizType
     ? normalizeEditorBizType(stateEditorBizType)
-    : cachedEditorBizType;
+    : (cachedEditorBizType ?? "short-story");
   const isShortPlayEditor = editorBizType === "short-play";
+  useEffect(() => {
+    logEditorBizDebug("resolved-editor-biz-type", {
+      workId,
+      stateEditorBizType: stateEditorBizType ?? null,
+      cachedEditorBizType: cachedEditorBizType ?? null,
+      editorBizType,
+      isShortPlayEditor,
+    });
+  }, [cachedEditorBizType, editorBizType, isShortPlayEditor, stateEditorBizType, workId]);
   const showStepWorkflow = !isShortPlayEditor;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);

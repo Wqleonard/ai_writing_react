@@ -11,6 +11,12 @@ import visualizer from "rollup-plugin-visualizer";
 export default defineConfig(({ mode }) => {
   // 显式加载环境变量（兼容自定义 mode：dev/qa/prd）
   const env = loadEnv(mode, process.cwd(), '')
+  const isDevBuildMode = mode === 'dev'
+  const baseTerserOptions = terser as TerserOptions
+  const baseCompressOptions =
+    typeof baseTerserOptions.compress === 'object' && baseTerserOptions.compress
+      ? baseTerserOptions.compress
+      : {}
 
   if (!env.VITE_API_BASE_URL) {
     // 仅启动时提示一次，便于排查“读不到 env”
@@ -59,8 +65,20 @@ export default defineConfig(({ mode }) => {
       __VITE_MODE__: JSON.stringify(mode),
     },
     build: {
+      sourcemap: mode === 'dev',
       minify: 'terser',
-      terserOptions: terser as TerserOptions,
+      terserOptions: (
+        isDevBuildMode
+          ? {
+            ...baseTerserOptions,
+            compress: {
+              ...baseCompressOptions,
+              drop_console: false,
+              drop_debugger: false,
+            },
+          }
+          : baseTerserOptions
+      ) as TerserOptions,
       rollupOptions: {
         output: {
           manualChunks(id) {

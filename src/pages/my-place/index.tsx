@@ -43,6 +43,13 @@ import { ExportUtils } from "@/utils/exportUtils.ts";
 import type { FileTreeNode } from "@/stores/editorStore";
 import { useOptionsStore } from "@/stores/optionsStore";
 
+const EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX = "editorBizTypeByWorkId:"
+const logMyPlaceJumpDebug = (event: string, payload: Record<string, unknown>) => {
+  const canLog = import.meta.env.DEV || import.meta.env.MODE === "dev"
+  if (!canLog) return
+  console.log(`[my-place-jump-debug] ${event}`, payload)
+}
+
 const PAGE_SIZE = 20
 
 const convertWorkItemToMyWorkData = (item: WorkItem): MyWorkData => ({
@@ -237,7 +244,10 @@ export default function MyPlacePage() {
         toast.error('作品ID不存在，无法跳转')
         return
       }
+      const rawWorkType = String((data as { workType?: unknown }).workType ?? '')
+      const isShortPlayEditorWork = rawWorkType === 'script_editor'
       let path = `/editor/${data.id}`
+      let locationState: Record<string, unknown> | null = null
       if (data.workType == 'editor'){
         path = `/editor/${data.id}`
       } else if (data.workType == 'doc'){
@@ -245,9 +255,32 @@ export default function MyPlacePage() {
       } else if (data.workType == 'script'){
         path = `/script-editor/${data.id}`
       }
+      if (isShortPlayEditorWork) {
+        path = `/editor/${data.id}`
+        locationState = { editorBizType: 'short-play' }
+        try {
+          sessionStorage.setItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${data.id}`, 'short-play')
+        } catch {
+          // ignore storage failures
+        }
+      }
+      const cacheKey = `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${data.id}`
+      const cachedBizType =
+        typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+      logMyPlaceJumpDebug('before-navigate', {
+        workId: data.id,
+        workType: rawWorkType,
+        path,
+        locationStateWillPass: locationState,
+        cachedBizType,
+      })
       setLoading(true)
       try {
-        navigate(path)
+        if (locationState) {
+          navigate(path, { state: locationState })
+        } else {
+          navigate(path)
+        }
       } catch {
         toast.error('跳转失败，请重试')
       } finally {
