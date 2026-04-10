@@ -1,10 +1,15 @@
 import { useSyncExternalStore, useCallback } from "react";
 
+export type WritingMode = "通用写作模式" | "小说写作模式" | "剧本写作模式";
+
+export const WRITING_MODES: WritingMode[] = ["通用写作模式", "小说写作模式", "剧本写作模式"];
+
 interface LLMState {
   modelsLLM: { id: string; name: string }[];
   modelLLM: string;
   selectedWritingStyle: string;
   writingStyles: { id: string; name: string }[];
+  writingMode: WritingMode;
 }
 
 const DEFAULT_MODELS_LLM = [
@@ -24,6 +29,7 @@ const initialState: LLMState = {
   modelLLM: "kimi_k2",
   selectedWritingStyle: "1",
   writingStyles: [],
+  writingMode: "通用写作模式",
 };
 
 let state: LLMState = { ...initialState };
@@ -68,13 +74,20 @@ export function useLLM() {
     []
   );
 
+  const setWritingMode = useCallback((mode: WritingMode) => {
+    state = { ...state, writingMode: mode };
+    emit();
+  }, []);
+
   return {
     modelsLLM: snapshot.modelsLLM,
     modelLLM: snapshot.modelLLM,
     selectedWritingStyle: snapshot.selectedWritingStyle,
     writingStyles: snapshot.writingStyles,
+    writingMode: snapshot.writingMode,
     setModelLLM,
     setSelectedWritingStyle,
     setWritingStyles,
+    setWritingMode,
   };
 }

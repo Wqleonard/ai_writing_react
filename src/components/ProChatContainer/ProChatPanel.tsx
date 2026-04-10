@@ -127,7 +127,7 @@ export const ProChatPanel = ({ creationType = "novel" }: ProChatPanelProps) => {
 
   const defaultEmptyState = (
     <div className="flex-1 w-full flex items-center justify-center min-h-full">
-      <div className="flex flex-col items-center max-w-[600px] w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex flex-col items-center max-w-[760px] w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="mt-[5.75rem] mb-[4.25rem]">
           <div className="relative overflow-visible flex flex-col items-center justify-center gap-2">
             <div className="flex items-center justify-center gap-2">
@@ -140,7 +140,7 @@ export const ProChatPanel = ({ creationType = "novel" }: ProChatPanelProps) => {
         </div>
         {slots?.todos}
         <div
-          className="relative w-[95%] max-w-[500px] rounded-[10px] transition-opacity duration-200"
+          className="relative w-[95%] max-w-[700px] rounded-[10px] transition-opacity duration-200"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
         >

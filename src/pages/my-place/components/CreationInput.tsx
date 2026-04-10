@@ -1,8 +1,9 @@
 import * as React from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useLLM } from '@/hooks/useLLM'
+import { useLLM, WRITING_MODES } from '@/hooks/useLLM'
+import type { WritingMode } from '@/hooks/useLLM'
 import { useProChatContainer } from '@/components/ProChatContainer'
-import { ChevronDown, FileText, Link, Loader2, Trash2, Upload, X } from 'lucide-react'
+import { FileText, Link, Loader2, Trash2, Upload, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { QuickChatInputChannel } from '../types'
 import { Button } from '@/components/ui/Button'
@@ -170,7 +171,7 @@ export const CreationInput = (props: CreationInputProps) => {
 
   const [toolPopoverOpen, setToolPopoverOpen] = useState(false)
   const [filePopoverOpen, setFilePopoverOpen] = useState(false)
-  const [modelPopoverOpen, setModelPopoverOpen] = useState(false)
+  const [modeModelPopoverOpen, setModeModelPopoverOpen] = useState(false)
   // “仅回答提示气泡”由 chatInputStore 的 isShowAnswerTip 控制
 
   const openToolPopover = useCallback(() => {
@@ -189,6 +190,8 @@ export const CreationInput = (props: CreationInputProps) => {
     modelsLLM,
     writingStyles,
     setWritingStyles,
+    writingMode,
+    setWritingMode,
   } = useLLM()
 
   const {
@@ -976,6 +979,82 @@ export const CreationInput = (props: CreationInputProps) => {
               </Popover>
             </div>
             <div className="control-right flex h-full items-center gap-3">
+              {/* 模式+模型选择器（合并长按钮） */}
+              <Popover open={modeModelPopoverOpen} onOpenChange={setModeModelPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center h-7 rounded-full border border-[var(--border-color,#e5e5e5)] bg-white cursor-pointer select-none overflow-hidden text-xs hover:border-[var(--theme-color)] transition-colors"
+                  >
+                    <span className="pl-3 pr-2 py-1 whitespace-nowrap text-[var(--theme-color)]">{writingMode}</span>
+                    <span className="w-px h-4 bg-[var(--border-color,#e5e5e5)] shrink-0" />
+                    <span className="pl-2 pr-3 py-1 max-w-[100px] truncate text-[#333333]">{currentModelName}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="top"
+                  sideOffset={8}
+                  className="w-auto p-3 border border-[var(--border-color,#e5e5e5)] bg-[var(--bg-primary-overlay,white)] shadow-md rounded-xl"
+                >
+                  <div className="flex gap-4">
+                    {/* 左列：模式 */}
+                    <div className="flex flex-col gap-1 min-w-[100px]">
+                      <div className="text-xs text-[#909399] mb-1 px-1">模式</div>
+                      {WRITING_MODES.map((mode) => {
+                        const isSelected = mode === writingMode
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={clsx(
+                              "w-full text-left text-sm px-3 py-1.5 rounded-full cursor-pointer transition-colors whitespace-nowrap",
+                              isSelected
+                                ? "bg-white text-[var(--theme-color)] font-medium shadow-sm"
+                                : "text-[var(--text-primary,#303133)] hover:bg-[var(--bg-hover,#f5f5f5)]"
+                            )}
+                            onClick={() => {
+                              setWritingMode(mode as WritingMode)
+                              setModeModelPopoverOpen(false)
+                            }}
+                          >
+                            {mode}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* 右列：模型（两列展示） */}
+                    <div className="flex flex-col gap-1 min-w-[200px]">
+                      <div className="text-xs text-[#909399] mb-1 px-1">模型</div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {modelsLLM.map((m) => {
+                          const isSelected = m.id === modelLLM
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className={clsx(
+                                "text-left text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap",
+                                isSelected
+                                  ? "bg-[#fef9ec] text-[var(--theme-color)] font-medium"
+                                  : "text-[var(--text-primary,#303133)] hover:bg-[var(--bg-hover,#f5f5f5)]"
+                              )}
+                              onClick={() => {
+                                setModelLLM(m.id)
+                                setModeModelPopoverOpen(false)
+                              }}
+                            >
+                              {m.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
               {/* 文风选择器 */}
               <div className="answer-only-wrap relative quill-chat-input" style={{ width: 'auto' }}>
                 {writingStyleTipOpen && (
@@ -994,52 +1073,6 @@ export const CreationInput = (props: CreationInputProps) => {
                   />
                 </div>
               </div>
-
-              {/* 模型选择器 */}
-              <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <button type="button" className="simple-select-trigger inline-flex items-center gap-1 cursor-pointer select-none">
-                    <span className="text-xs text-[#333333]">{currentModelName}</span>
-                    <ChevronDown
-                      className={clsx(
-                        "trigger-arrow h-3.5 w-3.5 text-[#909399] transition-transform duration-300",
-                        modelPopoverOpen && "rotate-180"
-                      )}
-                    />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="end"
-                  side="top"
-                  sideOffset={8}
-                  className="simple-select-popover w-[200px] p-1 border-0 bg-(--bg-primary-overlay,white) shadow-md"
-                >
-                  <div className="simple-select-content flex flex-col max-h-[220px]">
-                    <div className="select-options overflow-y-auto flex-1 min-h-0 max-h-[180px]">
-                      {modelsLLM.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          className={clsx(
-                            "select-option w-full h-9 rounded-lg overflow-hidden flex items-center justify-between px-3 cursor-pointer transition-colors",
-                            m.id === modelLLM
-                              ? "is-selected bg-(--bg-editor-save) text-white"
-                              : "hover:bg-(--bg-hover,#f5f5f5)"
-                          )}
-                          onClick={() => {
-                            setModelLLM(m.id)
-                            setModelPopoverOpen(false)
-                          }}
-                        >
-                          <span className={clsx("option-label text-sm", m.id === modelLLM ? "text-white" : "text-(--text-primary,#303133)")}>
-                            {m.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
 
               {/* 仅回答（checkbox 始终展示；tip 仅在触发后展示） */}
               <div className="quill-chat-input" style={{ width: 'auto' }}>

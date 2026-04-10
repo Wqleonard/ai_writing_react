@@ -117,8 +117,8 @@ const LEFT_MIN_REM = pxToRem(200);
 const LEFT_MAX_REM = pxToRem(500);
 const LEFT_DEFAULT_REM = pxToRem(280);
 
-const RIGHT_DEFAULT_REM = 32.5;
-const RIGHT_MIN_REM = pxToRem(280);
+const RIGHT_DEFAULT_REM = 35;
+const RIGHT_MIN_REM = pxToRem(315);
 /** 中间主编辑区最小宽度（按需求允许被挤压到 0） */
 const CENTER_EDITOR_MIN_REM = 0;
 /** 中间区域内「修改详情」面板固定宽度（rem） */
@@ -150,7 +150,6 @@ type WorkVersion = {
   updatedTime?: string;
 };
 
-type EditorBizType = "short-story" | "short-play";
 type SubmitMode = "chat" | "agent";
 type ChatType = "script";
 
@@ -167,12 +166,11 @@ type EditorInitialParams = {
   selectedTexts?: import("@/stores/chatStore").SelectedText[];
   selectedTools?: import("@/stores/chatInputStore/types").AgentTalkToolValue[];
   isShowAnswerTip?: boolean;
-  editorBizType?: EditorBizType;
+  editorBizType?: string;
 };
 
 const EDITOR_INITIAL_PARAMS_KEY = "editorInitialParams";
 const RANKING_LIST_TRANSMISSION_KEY = "rankingListTransmission";
-const EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX = "editorBizTypeByWorkId:";
 
 type RankingListTransmissionParams = {
   content?: string;
@@ -180,8 +178,6 @@ type RankingListTransmissionParams = {
   disableAutoSubmit?: boolean;
 };
 
-const normalizeEditorBizType = (value: unknown): EditorBizType =>
-  value === "short-play" ? "short-play" : "short-story";
 
 const parseStepTemplate = (input: EditorInitialParams["template"]): StepTemplate | null => {
   if (!input) return null;
@@ -391,30 +387,8 @@ const MarkdownEditorPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { workId } = useParams<{ workId: string }>();
-  const stateEditorBizType = (location.state as EditorInitialParams | null)?.editorBizType;
-  const hasExplicitStateEditorBizType =
-    stateEditorBizType === "short-story" || stateEditorBizType === "short-play";
-  const [cachedEditorBizType, setCachedEditorBizType] = useState<EditorBizType>("short-story");
-  useEffect(() => {
-    if (!workId || typeof window === "undefined") return;
-    if (hasExplicitStateEditorBizType) {
-      const normalizedFromState = normalizeEditorBizType(stateEditorBizType);
-      setCachedEditorBizType(normalizedFromState);
-      sessionStorage.setItem(
-        `${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`,
-        normalizedFromState
-      );
-      return;
-    }
-    const cached = sessionStorage.getItem(`${EDITOR_BIZ_TYPE_CACHE_KEY_PREFIX}${workId}`);
-    if (!cached) return;
-    setCachedEditorBizType(normalizeEditorBizType(cached));
-  }, [hasExplicitStateEditorBizType, stateEditorBizType, workId]);
-  const editorBizType = hasExplicitStateEditorBizType
-    ? normalizeEditorBizType(stateEditorBizType)
-    : cachedEditorBizType;
-  const isShortPlayEditor = editorBizType === "short-play";
-  const showStepWorkflow = !isShortPlayEditor;
+  const isShortPlayEditor = false;
+  const showStepWorkflow = true;
   const stepWorkflowRef = useRef<StepWorkflowRef>(null);
   const [pendingStepTemplate, setPendingStepTemplate] = useState<StepTemplate | null>(null);
   // chatheader 相关
@@ -1502,8 +1476,7 @@ const MarkdownEditorPage = () => {
               typeof initialParams.isAnswerOnly === "boolean"
                 ? (initialParams.isAnswerOnly ? "chat" : "agent")
                 : undefined;
-            const initialChatType =
-              initialParams.editorBizType === "short-play" ? "script" : undefined;
+            const initialChatType = undefined;
             sendChatText(msg, {
               addUserMessage: true,
               submitMode: initialSubmitMode,
