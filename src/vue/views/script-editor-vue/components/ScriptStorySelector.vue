@@ -417,19 +417,11 @@ onMounted(() => {
         <template v-if="loading">
           <div v-for="i in 5" :key="i" class="field-item skeleton-field">
             <div class="field-icon-skeleton">
-              <el-skeleton :rows="0" animated>
-                <template #template>
-                  <el-skeleton-item variant="rect" style="width: 50px; height: 50px; border-radius: 5px" />
-                </template>
-              </el-skeleton>
+              <div class="script-story-skeleton-item skeleton-icon"></div>
             </div>
             <div class="field-content-skeleton">
-              <el-skeleton :rows="1" animated>
-                <template #template>
-                  <el-skeleton-item variant="text" style="width: 100px; height: 24px; margin-bottom: 5px" />
-                  <el-skeleton-item variant="rect" style="width: 100%; height: 24px; border-radius: 5px" />
-                </template>
-              </el-skeleton>
+              <div class="script-story-skeleton-item skeleton-title"></div>
+              <div class="script-story-skeleton-item skeleton-line"></div>
             </div>
           </div>
         </template>
@@ -802,8 +794,62 @@ onMounted(() => {
       .field-content-skeleton {
         flex: 1;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 5px;
+      }
+
+      .script-story-skeleton-item {
+        position: relative;
+        overflow: hidden;
+        background: #e8e8e8 !important;
+        opacity: 1 !important;
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -150%;
+          width: 60%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.75) 50%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          animation: script-skeleton-shimmer 1.3s ease-in-out infinite;
+        }
+      }
+
+      .skeleton-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 5px;
+      }
+
+      .skeleton-title {
+        width: 100px;
+        height: 24px;
+        border-radius: 4px;
+      }
+
+      .skeleton-line {
+        width: 100%;
+        height: 24px;
+        border-radius: 5px;
       }
     }
+  }
+}
+
+@keyframes script-skeleton-shimmer {
+  0% {
+    left: -70%;
+  }
+  100% {
+    left: 120%;
   }
 }
 

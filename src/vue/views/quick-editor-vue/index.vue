@@ -11,7 +11,7 @@ import { useEditorStore } from "@/vue/stores/editor.ts";
 import TITLE_LOGO from "@/vue/assets/images/logo.webp";
 import { storeToRefs } from "pinia";
 import { updateWorkInfoReq, updateWorkVersionReq } from "@/api/works";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import type { DocOutlineStorageData, DocChapterStorageData } from "@/utils/interfaces";
 
 // 故事标签图标（3个状态）
@@ -1398,8 +1398,23 @@ const hasNextDirectoryContent = (currentDir: string): boolean => {
 };
 
 // 回退到当前步骤（清除当前目录之后的所有内容）
-const handleRevertToCurrentStep = async (currentDir: string) => {
+const handleRevertToCurrentStep = async (currentDir: string, fromError = false) => {
   console.log("[QuickEditor] handleRevertToCurrentStep, currentDir:", currentDir);
+  if (!fromError) {
+    try {
+      await ElMessageBox.confirm("回退后，该步骤后续内容将被清空不可找回", "是否回退到该步骤？", {
+        confirmButtonText: "确认",
+        cancelButtonText: "取消",
+        type: "warning",
+        customClass: "revert-confirm-dialog",
+      });
+    } catch (e) {
+      // 用户取消
+      console.log("[QuickEditor] User cancelled revert");
+      return;
+    }
+  }
+
 
   const currentIndex = directories.value.indexOf(currentDir);
   if (currentIndex === -1) {
@@ -1469,7 +1484,7 @@ const handleErrorAndRevert = (targetDir: string) => {
 
   // 等待滚动完成后触发回退
   setTimeout(() => {
-    handleRevertToCurrentStep(targetDir);
+    handleRevertToCurrentStep(targetDir, true);
   }, 800); // 等待滚动动画完成（600ms滚动锁 + 200ms余量）
 };
 
@@ -2950,42 +2965,69 @@ onUnmounted(() => {
 <style lang="less">
 // 全局样式：回退确认弹窗
 .revert-confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border-radius: 8px;
+  padding: 24px;
+
+  .el-message-box__header {
+    padding: 0;
+  }
+
   .el-message-box__title {
     font-size: 18px;
-    font-weight: 500;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .el-message-box__content {
+    padding: 0;
+    margin-top: 16px;
   }
 
   .el-message-box__message {
     font-size: 14px;
-    text-align: center;
+    text-align: left;
+    line-height: 1.5;
   }
 
   .el-message-box__message p {
     margin: 0;
-    color: var(--bg-editor-save);
-    line-height: 1.6;
+    color: var(--text-secondary);
   }
 
   .el-message-box__btns .el-button--primary {
-    background-color: var(--bg-editor-save);
-    border-color: var(--bg-editor-save);
+    background-color: var(--theme-color);
+    border-color: var(--theme-color);
+    color: #fff;
 
     &:hover {
-      background-color: var(--bg-editor-save);
-      border-color: var(--bg-editor-save);
-      opacity: 0.8;
+      background-color: var(--theme-color);
+      border-color: var(--theme-color);
+      opacity: 0.9;
     }
   }
 
   .el-message-box__btns {
     display: flex;
-    justify-content: center;
-    gap: 12px;
-    padding-top: 20px;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0;
+    margin-top: 16px;
   }
 
   .el-message-box__btns .el-button {
-    min-width: 80px;
+    min-width: 64px;
+    height: 36px;
+    margin-left: 0;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .el-message-box__btns .el-button:not(.el-button--primary) {
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-color);
   }
 }
 </style>

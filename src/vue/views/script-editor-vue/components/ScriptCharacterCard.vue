@@ -118,15 +118,13 @@ const handleAddNote = async (e: MouseEvent) => {
   <!-- 角色卡片 -->
   <div v-else class="quick-character-card" @click="handleClick"
     @mouseenter="isCardHovered = true" @mouseleave="isCardHovered = false">
-    <!-- 骨架图加载状态 -->
-    <el-skeleton v-if="props.loading || !props.data?.name" class="character-card-skeleton" animated>
-      <template #template>
-        <el-skeleton-item variant="rect" style="height: 42px;" />
-        <el-skeleton-item variant="rect" style="height: 28px;" />
-        <el-skeleton-item variant="rect" style="height: 90px;" />
-        <el-skeleton-item variant="rect" style="height: 40px;" />
-      </template>
-    </el-skeleton>
+    <!-- 骨架图加载状态（纯CSS，避免 el-skeleton-item 在部分场景未渲染） -->
+    <div v-if="props.loading || !props.data?.name" class="character-card-skeleton">
+      <div class="script-character-skeleton-item skeleton-line-name"></div>
+      <div class="script-character-skeleton-item skeleton-line-tags"></div>
+      <div class="script-character-skeleton-item skeleton-line-desc"></div>
+      <div class="script-character-skeleton-item skeleton-line-footer"></div>
+    </div>
 
     <!-- 内容区域：设计稿 413-19008 四行布局 -->
     <template v-else>
@@ -526,17 +524,59 @@ const handleAddNote = async (e: MouseEvent) => {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  align-items: center;
-  // padding: clamp(18px, 1.8vw, 26px); // 与卡片padding保持一致
+  align-items: stretch;
   box-sizing: border-box;
   position: relative;
   z-index: 1;
 
-  :deep(.el-skeleton__item) {
-    background: linear-gradient(90deg, #f2f2f2 25%, #e6e6e6 50%, #f2f2f2 75%);
-    background-size: 400% 100%;
+  .script-character-skeleton-item {
+    position: relative;
+    overflow: hidden;
+    background: #e8e8e8 !important;
     border-radius: 4px;
-    width: 100%;
+    width: 100% !important;
+    opacity: 1 !important;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -150%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.75) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      animation: script-skeleton-shimmer 1.3s ease-in-out infinite;
+    }
+  }
+
+  .skeleton-line-name {
+    height: 42px;
+  }
+
+  .skeleton-line-tags {
+    height: 28px;
+  }
+
+  .skeleton-line-desc {
+    height: 90px;
+  }
+
+  .skeleton-line-footer {
+    height: 40px;
+  }
+}
+
+@keyframes script-skeleton-shimmer {
+  0% {
+    left: -70%;
+  }
+  100% {
+    left: 120%;
   }
 }
 </style>
