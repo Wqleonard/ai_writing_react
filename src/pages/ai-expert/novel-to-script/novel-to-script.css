@@ -1,0 +1,12 @@
+.novel-to-script-auto-scroll.show-border::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 0;
+  bottom: 0;
+  border: 2px solid #efaf00;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}

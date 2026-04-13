@@ -58,6 +58,11 @@ const menuData: MenuItem[] = [
         route: '/workspace/ai-expert/writing-styles',
         routeName: 'writing-styles',
       },
+      {
+        title: '小说转剧本',
+        route: '/workspace/ai-expert/novel-to-script',
+        routeName: 'novel-to-script',
+      },
     ],
   },
   {
@@ -67,7 +72,7 @@ const menuData: MenuItem[] = [
     icon: '\ue656',
   },
   {
-    title: '课程',
+    title: '喵学社',
     route: '/workspace/creation-community/course',
     routeName: 'course',
     icon: '\ue657',

@@ -12,6 +12,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/workspace/trending-list': '创作榜单',
   '/workspace/ai-expert/book-analysis': '拆书仿写',
   '/workspace/ai-expert/writing-styles': '文风提炼',
+  '/workspace/ai-expert/novel-to-script': '小说转剧本',
   '/workspace/creation-community/course': '课程',
   '/workspace/creation-community/course/details': '课程详情',
   '/workspace/creation-community/share': '分享',

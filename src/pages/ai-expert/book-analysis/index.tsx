@@ -193,10 +193,10 @@ const BookAnalysisPage = () => {
     }
   }, [templatePage, templateHasMore, templateLoading])
 
-  const completeNewbieMissionByCode = useLoginStore(s=>s.completeNewbieMissionByCode)
+  const completeNewbieMissionByCode = useLoginStore(s => s.completeNewbieMissionByCode)
   const requireLogin = useLoginStore((s) => s.requireLogin)
 
-  useEffect(()=>{
+  useEffect(() => {
     trackEvent('Dashboard', 'Click', 'Book Analysis')
   }, [])
 
@@ -257,15 +257,16 @@ const BookAnalysisPage = () => {
 
     const fileSize = uploadedFile.size ?? 0
     const creditCost = calcCreditCost(fileSize)
-    if (creditCost > CREDIT_COST_THRESHOLD) {
-      const ok = await confirm({
-        title: '积分消耗提示',
-        message: `本次拆书预计消耗约 ${creditCost} 积分，是否继续？`,
-        confirmText: '确认提交',
-        cancelText: '取消',
-      })
-      if (!ok) return
-    }
+    // 暂时不管多少积分都弹出
+    // if (creditCost > CREDIT_COST_THRESHOLD) {
+    const ok = await confirm({
+      title: '积分消耗提示',
+      message: `本次拆书预计消耗约 ${creditCost} 积分，是否继续？`,
+      confirmText: '确认提交',
+      cancelText: '取消',
+    })
+    if (!ok) return
+    // }
 
     setShowUpload(false)
     try {
@@ -379,7 +380,7 @@ const BookAnalysisPage = () => {
         //   })
         // )
         navigate(`/editor/${req.id}`, {
-          state: { isNew: true, template: JSON.stringify(template)},
+          state: { isNew: true, template: JSON.stringify(template) },
         })
       } catch {
         toast.error('创建作品失败，请重试')
@@ -443,7 +444,7 @@ const BookAnalysisPage = () => {
               disabled={!uploadedFile}
               onClick={handleDoBookAnalysis}
             >
-              <Iconfont unicode="&#xe622;"/>
+              <Iconfont unicode="&#xe622;" />
               <span>开始拆书</span>
             </Button>
             <div className="mt-5 w-full">
@@ -557,15 +558,15 @@ const BookAnalysisPage = () => {
           {!isPostStream && (
             <>
               <Button variant='outline' className="h-8" onClick={handleReupload}>
-                <Iconfont unicode="&#xe613;"/>
+                <Iconfont unicode="&#xe613;" />
                 <span>返回上传</span>
               </Button>
               <Button className="h-8 text-white" onClick={handleAddToNote}>
-                <Iconfont unicode="&#xe643;"/>
+                <Iconfont unicode="&#xe643;" />
                 <span>收录笔记</span>
               </Button>
               <Button className="h-8 text-white" onClick={handleCopyNow}>
-                <Iconfont unicode="&#xe63f;"/>
+                <Iconfont unicode="&#xe63f;" />
                 <span>立刻仿写</span>
               </Button>
             </>

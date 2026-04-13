@@ -76,8 +76,8 @@ export type MatomoEventSpec =
   | { category: 'Community'; action: 'Click'; name: 'Share' | 'Prompt' }
   | { category: 'Community'; action: 'Create'; name: 'Share' | 'Prompt Workflow' }
   | { category: 'Community'; action: 'Use'; name: 'Prompt' }
-  | { category: 'Dashboard'; action: 'Click'; name: 'Book Analysis' | 'Style Analysis' }
-  | { category: 'Dashboard'; action: 'Generate'; name: 'Book Analysis' | 'Style Analysis' }
+  | { category: 'Dashboard'; action: 'Click'; name: 'Book Analysis' | 'Style Analysis' | 'Novel To Script' }
+  | { category: 'Dashboard'; action: 'Generate'; name: 'Book Analysis' | 'Style Analysis' | 'Novel To Script' }
   | { category: 'Dashboard'; action: 'Use'; name: 'Book Analysis' | 'Style Analysis' }
   | { category: 'Template'; action: 'Apply'; name: string }
   | { category: 'Tag'; action: 'Apply'; name: `${string}:${string}` }

@@ -60,6 +60,28 @@ const postWritingAnalysisStream = (
   );
 };
 
+const postNovelToScript = (originText: string) => {
+  return apiClient.post("/api/works/novel-to-script", { originalText: originText });
+};
+
+// 暂时占位，小说转剧本流式接口
+const postNovelToScriptStream = (
+  originText: string,
+  onData: (data: any) => void,
+  onError?: any,
+  onComplete?: any,
+  config?: RequestConfig
+) => {
+  return apiClient.postStream(
+    "/api/works/novel-to-script",
+    { originalText: originText },
+    onData,
+    onError,
+    onComplete,
+    config
+  );
+};
+
 const postWritingStyle = (data: { name: string; content: string }) => {
   return apiClient.post("/api/writing-styles", { name: data.name, content: data.content });
 };
@@ -100,12 +122,32 @@ const getWritingStyleHistoryDetail = (historyId: string) => {
   return apiClient.get(`/api/writing-styles/history/${historyId}`);
 };
 
+const addNovelToScriptHistory = (attachmentName: string) => {
+  return apiClient.post("/api/works/novel-to-script/history", { attachmentName });
+};
+
+const updateNovelToScriptHistory = (novelToScriptResult: string, historyId: string) => {
+  return apiClient.put(`/api/works/novel-to-script/history/${historyId}`, {
+    novelToScriptResult,
+  });
+};
+
+const getNovelToScriptHistoryList = () => {
+  return apiClient.get("/api/works/novel-to-script/history");
+};
+
+const getNovelToScriptHistoryDetail = (historyId: string) => {
+  return apiClient.get(`/api/works/novel-to-script/history/${historyId}`);
+};
+
 export {
   novelDeconstructStream,
   saveAsNewNote,
   getKeywords,
   postWritingAnalysis,
   postWritingAnalysisStream,
+  postNovelToScript,
+  postNovelToScriptStream,
   postWritingStyle,
   addBookAnalysisHistory,
   updateBookAnalysisHistory,
@@ -115,4 +157,8 @@ export {
   updateWritingStyleHistory,
   getWritingStyleHistoryList,
   getWritingStyleHistoryDetail,
+  addNovelToScriptHistory,
+  updateNovelToScriptHistory,
+  getNovelToScriptHistoryList,
+  getNovelToScriptHistoryDetail,
 };

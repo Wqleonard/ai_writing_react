@@ -9,7 +9,9 @@ export type NoteSourceType =
   | "PC_NOVEL_DECONSTRUCT"
   | "PC_CHAT_MODE"
   | "PC_INSPIRATION_DRAW"
-  | "PC_WORD_HIGHLIGHT";
+  | "PC_WORD_HIGHLIGHT"
+  | "PC_NOVEL_TO_SCRIPT"
+  ;
 
 export interface Note {
   id: number;

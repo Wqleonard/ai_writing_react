@@ -532,11 +532,12 @@ const handleConfirm = async () => {
   }
 
   // 积分消耗检查
-  const creditCost = calcCreditCost(uploadedFile.value.size);
-  if (creditCost > CREDIT_COST_THRESHOLD) {
+  // const creditCost = calcCreditCost(uploadedFile.value.size);
+  // 暂时不管多少积分都弹出
+  // if (creditCost > CREDIT_COST_THRESHOLD) {
     const ok = await showCreditConfirm();
     if (!ok) return;
-  }
+  // }
 
   // 如果已有正在进行的请求，先取消
   if (plotStreamAbortController.value) {
