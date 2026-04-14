@@ -60,13 +60,14 @@ const postWritingAnalysisStream = (
   );
 };
 
-const postNovelToScript = (url: string) => {
-  return apiClient.post("/api/works/novel-to-script", { url });
+const postNovelToScript = (url: string, attachmentName: string) => {
+  return apiClient.post("/api/works/novel-to-script", { url, attachmentName });
 };
 
 // 暂时占位，小说转剧本流式接口
 const postNovelToScriptStream = (
   url: string,
+  attachmentName: string,
   onData: (data: any) => void,
   onError?: any,
   onComplete?: any,
@@ -74,7 +75,7 @@ const postNovelToScriptStream = (
 ) => {
   return apiClient.postStream(
     "/api/works/novel-to-script",
-    { url },
+    { url, attachmentName },
     onData,
     onError,
     onComplete,
@@ -122,8 +123,8 @@ const getWritingStyleHistoryDetail = (historyId: string) => {
   return apiClient.get(`/api/writing-styles/history/${historyId}`);
 };
 
-const addNovelToScriptHistory = (url: string) => {
-  return apiClient.post("/api/works/novel-to-script/history", { url });
+const addNovelToScriptHistory = (url: string, attachmentName: string) => {
+  return apiClient.post("/api/works/novel-to-script/history", { url, attachmentName });
 };
 
 const updateNovelToScriptHistory = (scriptResult: string, historyId: string) => {

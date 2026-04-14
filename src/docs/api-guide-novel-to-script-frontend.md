@@ -53,7 +53,8 @@
 
 ```json
 {
-  "url": "https://example.com/novel/chapter-all"
+  "attachmentName": "我的小说.pdf"
+   "url":"https://example.com/novel/chapter-all",
 }
 ```
 
@@ -79,6 +80,7 @@
 
 ```json
 {
+  "attachmentName": "我的小说.pdf",
   "url": "https://example.com/novel/chapter-all"
 }
 ```
@@ -104,9 +106,15 @@
 
 ```json
 {
-  "scriptResult": "第1集\n场景1：...\n（短剧正文）"
+  "scriptResult": "第1集\n场景1：...\n（短剧正文）",
+  "url": "https://example.com/novel/chapter-all"
 }
 ```
+
+说明：
+
+- `scriptResult` 必填
+- `url` 可选；传了会同步更新历史记录里的 `url`
 
 #### 响应示例
 
@@ -132,6 +140,7 @@
   "data": [
     {
       "id": 1024,
+      "attachmentName": "我的小说.pdf",
       "url": "https://example.com/novel/chapter-all",
       "scriptResult": "第1集\n场景1：...",
       "createdTime": "2026-04-14T15:30:00",
@@ -154,6 +163,7 @@
   "message": "Success",
   "data": {
     "id": 1024,
+    "attachmentName": "我的小说.pdf",
     "url": "https://example.com/novel/chapter-all",
     "scriptResult": "第1集\n场景1：...",
     "createdTime": "2026-04-14T15:30:00",
@@ -168,6 +178,7 @@
 
 常见入参校验：
 
+- `attachmentName` 为空：`work.novel_to_script.attachment_name.required`
 - `url` 为空：`work.novel_to_script.url_can_not_be_empty`
 - `scriptResult` 为空：`work.novel_to_script.script_result.required`
 

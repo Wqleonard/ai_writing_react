@@ -32,6 +32,10 @@ const getUploadUrl = (file: UploadFile | null) => {
   return response?.putFilePath ?? ''
 }
 
+const getAttachmentName = (file: UploadFile | null) => {
+  return file?.name?.trim() || '未命名文件'
+}
+
 const getHistoryIdFromResponse = (response: any): string => {
   if (response == null) return ''
   if (typeof response === 'number' || typeof response === 'string') return String(response)
@@ -245,6 +249,7 @@ const NovelToScriptPage = () => {
   const handleDoAnalysis = useCallback(async () => {
     trackEvent('Dashboard', 'Generate', 'Style Analysis')
     const novelUrl = getUploadUrl(uploadedFile)
+    const attachmentName = getAttachmentName(uploadedFile)
     if (!novelUrl) {
       toast.error('请先上传文件')
       return
@@ -255,7 +260,7 @@ const NovelToScriptPage = () => {
     setLoading(true)
 
     try {
-      const hid: any = await addNovelToScriptHistory(novelUrl)
+      const hid: any = await addNovelToScriptHistory(novelUrl, attachmentName)
       const nextHistoryId = getHistoryIdFromResponse(hid)
       if (nextHistoryId) {
         historyIdRef.current = nextHistoryId
@@ -267,7 +272,13 @@ const NovelToScriptPage = () => {
 
     try {
       setIsPostStream(true)
-      await postNovelToScriptStream(novelUrl, onStreamData, onStreamError, onStreamEnd)
+      await postNovelToScriptStream(
+        novelUrl,
+        attachmentName,
+        onStreamData,
+        onStreamError,
+        onStreamEnd
+      )
     } catch (e) {
       setLoading(false)
       setIsPostStream(false)
@@ -370,11 +381,12 @@ const NovelToScriptPage = () => {
         await updateNovelToScriptHistory(content, currentHistoryId)
       } else {
         const novelUrl = getUploadUrl(uploadedFile)
+        const attachmentName = getAttachmentName(uploadedFile)
         if (!novelUrl) {
           toast.warning('缺少小说链接，无法添加剧本')
           return
         }
-        const response: any = await addNovelToScriptHistory(novelUrl)
+        const response: any = await addNovelToScriptHistory(novelUrl, attachmentName)
         const nextHistoryId = getHistoryIdFromResponse(response)
         if (!nextHistoryId) {
           toast.error('添加剧本失败，请重试')
