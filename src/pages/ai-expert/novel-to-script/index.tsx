@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   addNovelToScriptHistory,
+  getNovelToScriptHistoryDetail,
   getNovelToScriptHistoryList,
   postNovelToScriptStream,
   updateNovelToScriptHistory,
 } from '@/api/tools-square'
 import type { PostStreamData } from '@/api'
-import { addNote } from '@/api/notes'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import { stripMarkdownAndTruncate } from '@/utils/stripMarkdown'
 import { Upload } from '@/components/Upload'
@@ -27,20 +27,23 @@ import './novel-to-script.css'
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
 
-const readFileContent = (file: File, fileExtension: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    if (fileExtension !== '.txt') {
-      reject(new Error('不支持的文件格式，仅支持 .txt 文件'))
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      resolve(content)
-    }
-    reader.onerror = () => reject(new Error('文件读取失败'))
-    reader.readAsText(file, 'UTF-8')
-  })
+const getUploadUrl = (file: UploadFile | null) => {
+  const response = file?.response as { putFilePath?: string } | undefined
+  return response?.putFilePath ?? ''
+}
+
+const getHistoryIdFromResponse = (response: any): string => {
+  if (response == null) return ''
+  if (typeof response === 'number' || typeof response === 'string') return String(response)
+  if (typeof response === 'object') {
+    if (response.data != null) return String(response.data)
+    if (response.id != null) return String(response.id)
+  }
+  return ''
+}
+
+const getHistoryDisplayName = (attachmentName?: string) => {
+  return attachmentName?.trim() || '未命名文件'
 }
 
 interface ChatMessage {
@@ -123,15 +126,15 @@ const NovelToScriptPage = () => {
       if (Array.isArray(list)) {
         setHistoryList(
           list.map((item: any, index: number) => {
-            const content = item?.novelToScriptResult || '暂无内容'
+            const content = item?.scriptResult || '暂无内容'
             return {
               ...item,
-              name: item?.attachmentName ?? '',
+              name: getHistoryDisplayName(item?.attachmentName),
               content,
               description: stripMarkdownAndTruncate(content, 100),
               id: item?.id ?? `history-${index}`,
-              updatedAt: item?.createdTime ?? '',
-              isAdd: item?.isAdd ?? false,
+              updatedAt: item?.updatedTime ?? item?.createdTime ?? '',
+              isAdd: false,
             }
           })
         )
@@ -142,7 +145,7 @@ const NovelToScriptPage = () => {
   }, [isLoggedIn])
 
   useEffect(() => {
-    trackEvent('Dashboard', 'Click', 'Novel To Script')
+    trackEvent('Dashboard', 'Click', 'Style Analysis')
   }, [])
 
   useEffect(() => {
@@ -240,22 +243,21 @@ const NovelToScriptPage = () => {
   }, [fetchHistoryList, saveHistorySnapshot])
 
   const handleDoAnalysis = useCallback(async () => {
-    trackEvent('Dashboard', 'Generate', 'Novel To Script')
-    if (!uploadedFile?.raw) {
+    trackEvent('Dashboard', 'Generate', 'Style Analysis')
+    const novelUrl = getUploadUrl(uploadedFile)
+    if (!novelUrl) {
       toast.error('请先上传文件')
       return
     }
-    const file = uploadedFile.raw as File
-    const fileExtension = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '')
     setShowUpload(false)
     setHasError(false)
     setChatArr([])
     setLoading(true)
 
     try {
-      const hid: any = await addNovelToScriptHistory(uploadedFile.name || '')
-      if (hid != null) {
-        const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
+      const hid: any = await addNovelToScriptHistory(novelUrl)
+      const nextHistoryId = getHistoryIdFromResponse(hid)
+      if (nextHistoryId) {
         historyIdRef.current = nextHistoryId
         setHistoryId(nextHistoryId)
       }
@@ -264,20 +266,12 @@ const NovelToScriptPage = () => {
     }
 
     try {
-      const content = await readFileContent(file, fileExtension)
-      if (!content || content.trim().length === 0) {
-        toast.warning('文件内容为空')
-        setShowUpload(true)
-        setUploadedFile(null)
-        setLoading(false)
-        return
-      }
       setIsPostStream(true)
-      await postNovelToScriptStream(content, onStreamData, onStreamError, onStreamEnd)
+      await postNovelToScriptStream(novelUrl, onStreamData, onStreamError, onStreamEnd)
     } catch (e) {
       setLoading(false)
       setIsPostStream(false)
-      const msg = e instanceof Error ? e.message : '文件读取失败，请重试'
+      const msg = e instanceof Error ? e.message : '生成失败，请重试'
       setChatArr((prev) => [
         ...prev,
         {
@@ -306,40 +300,99 @@ const NovelToScriptPage = () => {
     setHasError(false)
   }, [])
 
-  const handleMarkdownEditing = useCallback(() => {
-    setMarkdownEditing((prev) => !prev)
-  }, [])
-
-  const handleHistoryCardClick = useCallback((item: WritingStyleCardData) => {
-    setShowUpload(false)
-    setMarkdownEditing(false)
-    setUploadedFile({ name: item.name } as UploadFile)
-    setChatArr([
-      {
-        id: `history_${Date.now()}`,
-        type: 'ai',
-        content: item.content,
-        timestamp: Date.now(),
-      },
-    ])
-  }, [])
-
-  const handleAddToNote = useCallback(async () => {
-    const content = markdownContent.trim()
-    if (!content) {
-      toast.warning('内容为空，无法收录笔记')
+  const handleMarkdownEditing = useCallback(async () => {
+    if (!markdownEditing) {
+      setMarkdownEditing(true)
       return
     }
-    const fileName = uploadedFile?.name?.replace(/\.[^.]*$/, '') || '未命名文件'
-    const noteTitle = `小说转剧本-${fileName}`
-    try {
-      await addNote(noteTitle, content, 'PC_NOVEL_TO_SCRIPT')
-      toast.success('笔记添加成功')
-    } catch (error) {
-      console.error('添加笔记失败:', error)
-      toast.error('添加笔记失败，请重试')
+    const content = markdownContent.trim()
+    if (!content) {
+      toast.warning('内容为空，无法保存剧本')
+      return
     }
-  }, [markdownContent, uploadedFile?.name])
+    if (!historyIdRef.current) {
+      toast.warning('缺少历史记录，无法保存')
+      return
+    }
+    try {
+      await updateNovelToScriptHistory(content, historyIdRef.current)
+      await fetchHistoryList()
+      toast.success('剧本保存成功')
+      setMarkdownEditing(false)
+    } catch (error) {
+      console.error('更新剧本失败:', error)
+      toast.error('剧本保存失败，请重试')
+    }
+  }, [fetchHistoryList, markdownContent, markdownEditing])
+
+  const handleHistoryCardClick = useCallback(async (item: WritingStyleCardData) => {
+    setShowUpload(false)
+    setMarkdownEditing(false)
+    const historyItemId = String(item.id)
+    setHistoryId(historyItemId)
+    historyIdRef.current = historyItemId
+    try {
+      const detail: any = await getNovelToScriptHistoryDetail(historyItemId)
+      const content = detail?.scriptResult || item.content || '暂无内容'
+      setUploadedFile({
+        name: getHistoryDisplayName(detail?.attachmentName || item.name),
+      } as UploadFile)
+      setChatArr([
+        {
+          id: `history_${Date.now()}`,
+          type: 'ai',
+          content,
+          timestamp: Date.now(),
+        },
+      ])
+    } catch {
+      setUploadedFile({ name: item.name } as UploadFile)
+      setChatArr([
+        {
+          id: `history_${Date.now()}`,
+          type: 'ai',
+          content: item.content,
+          timestamp: Date.now(),
+        },
+      ])
+    }
+  }, [])
+
+  const handleAddScript = useCallback(async () => {
+    const content = markdownContent.trim()
+    if (!content) {
+      toast.warning('内容为空，无法保存剧本')
+      return
+    }
+    try {
+      const currentHistoryId = historyIdRef.current
+      if (currentHistoryId) {
+        await updateNovelToScriptHistory(content, currentHistoryId)
+      } else {
+        const novelUrl = getUploadUrl(uploadedFile)
+        if (!novelUrl) {
+          toast.warning('缺少小说链接，无法添加剧本')
+          return
+        }
+        const response: any = await addNovelToScriptHistory(novelUrl)
+        const nextHistoryId = getHistoryIdFromResponse(response)
+        if (!nextHistoryId) {
+          toast.error('添加剧本失败，请重试')
+          return
+        }
+        setHistoryId(nextHistoryId)
+        historyIdRef.current = nextHistoryId
+        await updateNovelToScriptHistory(content, nextHistoryId)
+      }
+      await fetchHistoryList()
+      toast.success('剧本保存成功')
+      // 收录笔记逻辑先保留注释，待产品确认后开启
+      // await addNote(noteTitle, content, 'PC_NOVEL_TO_SCRIPT')
+    } catch (error) {
+      console.error('保存剧本失败:', error)
+      toast.error('保存剧本失败，请重试')
+    }
+  }, [fetchHistoryList, markdownContent, uploadedFile])
 
   if (showUpload) {
     return (
@@ -435,9 +488,9 @@ const NovelToScriptPage = () => {
                 <span>返回上传</span>
               </Button>
               {!hasError && (
-                <Button variant="outline" className="h-8" onClick={handleAddToNote}>
+                <Button variant="outline" className="h-8" onClick={handleAddScript}>
                   <Iconfont unicode="&#xe643;" />
-                  <span>收录笔记</span>
+                  <span>添加剧本</span>
                 </Button>
               )}
               {!hasError && (

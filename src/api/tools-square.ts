@@ -60,13 +60,13 @@ const postWritingAnalysisStream = (
   );
 };
 
-const postNovelToScript = (originText: string) => {
-  return apiClient.post("/api/works/novel-to-script", { originalText: originText });
+const postNovelToScript = (url: string) => {
+  return apiClient.post("/api/works/novel-to-script", { url });
 };
 
 // 暂时占位，小说转剧本流式接口
 const postNovelToScriptStream = (
-  originText: string,
+  url: string,
   onData: (data: any) => void,
   onError?: any,
   onComplete?: any,
@@ -74,7 +74,7 @@ const postNovelToScriptStream = (
 ) => {
   return apiClient.postStream(
     "/api/works/novel-to-script",
-    { originalText: originText },
+    { url },
     onData,
     onError,
     onComplete,
@@ -122,13 +122,13 @@ const getWritingStyleHistoryDetail = (historyId: string) => {
   return apiClient.get(`/api/writing-styles/history/${historyId}`);
 };
 
-const addNovelToScriptHistory = (attachmentName: string) => {
-  return apiClient.post("/api/works/novel-to-script/history", { attachmentName });
+const addNovelToScriptHistory = (url: string) => {
+  return apiClient.post("/api/works/novel-to-script/history", { url });
 };
 
-const updateNovelToScriptHistory = (novelToScriptResult: string, historyId: string) => {
+const updateNovelToScriptHistory = (scriptResult: string, historyId: string) => {
   return apiClient.put(`/api/works/novel-to-script/history/${historyId}`, {
-    novelToScriptResult,
+    scriptResult,
   });
 };
 
