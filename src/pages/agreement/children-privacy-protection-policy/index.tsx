@@ -5,7 +5,7 @@ export default function ChildrenPrivacyProtectionPolicyPage() {
     <div className="page-agreement">
       <p><strong>爆文猫写作儿童隐私保护政策</strong></p>
       <p><strong><strong>生效日期：2025年12月</strong></strong></p>
-      <p>欢迎您使用由数龙信息技术（浙江）有限公司（以下简称“我们”或“平台”）开发、运营、提供的“爆文猫写作”软件及相关服务（“爆文猫写作”）。我们非常重视儿童的保护，本政策中的“儿童”，是指<strong><strong>未满14周岁的未成年人。</strong><a
+      <p>欢迎您使用由浙江盛趣科技有限公司（以下简称“我们”或“平台”）开发、运营、提供的“爆文猫写作”软件及相关服务（“爆文猫写作”）。我们非常重视儿童的保护，本政策中的“儿童”，是指<strong><strong>未满14周岁的未成年人。</strong><a
         href="/children-privacy-protection-policy"
         target="_blank">《爆文猫写作儿童隐私保护政策》</a>和<a href="/privacy-policy" target="_blank">《爆文猫写作隐私政策》</a>旨在向监护人和儿童说明我们如何收集、使用、存储和处理儿童的个人信息，以及我们为监护人与儿童提供的访问、更正、删除和保护这些信息的方式。除另有约定外，本政策所用术语和缩略词与《爆文猫写作服务协议》、《爆文猫写作隐私政策》中的术语和缩略词具有相同的涵义。</strong>
       </p>
