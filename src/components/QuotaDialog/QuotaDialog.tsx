@@ -185,6 +185,12 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
     return `${symbol}${Number.isFinite(val) ? val.toFixed(2) : '0.00'}`
   }, [])
 
+  const formatQuotaPointValue = useCallback((val?: number) => {
+    const raw = Number(val ?? 0)
+    if (!Number.isFinite(raw)) return 0
+    return parseFloat((raw / 1000).toFixed(0))
+  }, [])
+
   const getStatusText = useCallback(
     (status?: string) => {
       if (!status) return '-'
@@ -1047,10 +1053,11 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
                           {t('天', 'd')}
                         </span>
                         <span>
-                          {t('每日赠送积分', 'Daily bonus')}: {sku.dailyBonusCredits}
+                          {t('每日赠送积分', 'Daily bonus')}:{' '}
+                          {formatQuotaPointValue(sku.dailyBonusCredits)}
                         </span>
                         <span>
-                          {t('积分上限', 'Max points')}: {sku.maxCredits}
+                          {t('积分上限', 'Max points')}: {formatQuotaPointValue(sku.maxCredits)}
                         </span>
                       </div>
                     </div>
@@ -1134,15 +1141,15 @@ export const QuotaDialog = ({ open, onOpenChange }: QuotaDialogProps) => {
                 </div>
                 <div className="flex justify-between gap-4">
                   <span>{t('固定积分', 'SKU credits')}</span>
-                  <span>{billingOrderDetail.skuCredits ?? 0}</span>
+                  <span>{formatQuotaPointValue(billingOrderDetail.skuCredits)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
                   <span>{t('每日赠送积分', 'Daily bonus')}</span>
-                  <span>{billingOrderDetail.skuDailyBonusCredits ?? 0}</span>
+                  <span>{formatQuotaPointValue(billingOrderDetail.skuDailyBonusCredits)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
                   <span>{t('积分上限', 'Max credits')}</span>
-                  <span>{billingOrderDetail.skuMaxCredits ?? 0}</span>
+                  <span>{formatQuotaPointValue(billingOrderDetail.skuMaxCredits)}</span>
                 </div>
 
                 {billingOrderDetail.payUrl && (
