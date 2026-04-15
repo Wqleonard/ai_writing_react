@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   addNovelToScriptHistory,
+  getNovelToScriptHistoryDetail,
   getNovelToScriptHistoryList,
   postNovelToScriptStream,
   updateNovelToScriptHistory,
@@ -24,23 +25,36 @@ import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import clsx from 'clsx'
 import Empty from '@/components/ui/Empty'
 import './novel-to-script.css'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
+
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
+const CREDIT_COST_THRESHOLD = 1000
+const calcCreditCost = (sizeBytes: number) => {
+  const sizeMB = sizeBytes / (1024 * 1024)
+  return Math.ceil(sizeMB * 300)
+}
+const getUploadUrl = (file: UploadFile | null) => {
+  const response = file?.response as { putFilePath?: string } | undefined
+  return response?.putFilePath ?? ''
+}
 
-const readFileContent = (file: File, fileExtension: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    if (fileExtension !== '.txt') {
-      reject(new Error('不支持的文件格式，仅支持 .txt 文件'))
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      resolve(content)
-    }
-    reader.onerror = () => reject(new Error('文件读取失败'))
-    reader.readAsText(file, 'UTF-8')
-  })
+const getAttachmentName = (file: UploadFile | null) => {
+  return file?.name?.trim() || '未命名文件'
+}
+
+const getHistoryIdFromResponse = (response: any): string => {
+  if (response == null) return ''
+  if (typeof response === 'number' || typeof response === 'string') return String(response)
+  if (typeof response === 'object') {
+    if (response.data != null) return String(response.data)
+    if (response.id != null) return String(response.id)
+  }
+  return ''
+}
+
+const getHistoryDisplayName = (attachmentName?: string) => {
+  return attachmentName?.trim() || '未命名文件'
 }
 
 interface ChatMessage {
@@ -56,7 +70,6 @@ const NovelToScriptPage = () => {
   const [showUpload, setShowUpload] = useState(true)
   const [chatArr, setChatArr] = useState<ChatMessage[]>([])
   const [markdownContent, setMarkdownContent] = useState('')
-  const [markdownEditing, setMarkdownEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isPostStream, setIsPostStream] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -67,6 +80,7 @@ const NovelToScriptPage = () => {
   const isPostStreamRef = useRef(false)
 
   const isLoggedIn = useLoginStore((s) => s.isLoggedIn)
+  const { confirm, confirmDialog } = useConfirmDialog()
 
   useEffect(() => {
     const next = chatArr.map((item) => item.content).join('\n\n')
@@ -123,15 +137,15 @@ const NovelToScriptPage = () => {
       if (Array.isArray(list)) {
         setHistoryList(
           list.map((item: any, index: number) => {
-            const content = item?.novelToScriptResult || '暂无内容'
+            const content = item?.scriptResult || '暂无内容'
             return {
               ...item,
-              name: item?.attachmentName ?? '',
+              name: getHistoryDisplayName(item?.attachmentName),
               content,
               description: stripMarkdownAndTruncate(content, 100),
               id: item?.id ?? `history-${index}`,
-              updatedAt: item?.createdTime ?? '',
-              isAdd: item?.isAdd ?? false,
+              updatedAt: item?.updatedTime ?? item?.createdTime ?? '',
+              isAdd: false,
             }
           })
         )
@@ -142,7 +156,7 @@ const NovelToScriptPage = () => {
   }, [isLoggedIn])
 
   useEffect(() => {
-    trackEvent('Dashboard', 'Click', 'Novel To Script')
+    trackEvent('Dashboard', 'Click', 'Style Analysis')
   }, [])
 
   useEffect(() => {
@@ -241,21 +255,34 @@ const NovelToScriptPage = () => {
 
   const handleDoAnalysis = useCallback(async () => {
     trackEvent('Dashboard', 'Generate', 'Novel To Script')
-    if (!uploadedFile?.raw) {
+    if (!uploadedFile) return
+    const fileSize = uploadedFile.size ?? 0
+    const creditCost = calcCreditCost(fileSize)
+    // 暂时不管多少积分都弹出
+    // if (creditCost > CREDIT_COST_THRESHOLD) {
+    const ok = await confirm({
+      title: '积分消耗提示',
+      message: `本次小说转剧本预计消耗约 ${creditCost} 积分，是否继续？`,
+      confirmText: '确认提交',
+      cancelText: '取消',
+    })
+    if (!ok) return
+    // }
+    const novelUrl = getUploadUrl(uploadedFile)
+    const attachmentName = getAttachmentName(uploadedFile)
+    if (!novelUrl) {
       toast.error('请先上传文件')
       return
     }
-    const file = uploadedFile.raw as File
-    const fileExtension = '.' + (file.name.split('.').pop()?.toLowerCase() ?? '')
     setShowUpload(false)
     setHasError(false)
     setChatArr([])
     setLoading(true)
 
     try {
-      const hid: any = await addNovelToScriptHistory(uploadedFile.name || '')
-      if (hid != null) {
-        const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
+      const hid: any = await addNovelToScriptHistory(novelUrl, attachmentName)
+      const nextHistoryId = getHistoryIdFromResponse(hid)
+      if (nextHistoryId) {
         historyIdRef.current = nextHistoryId
         setHistoryId(nextHistoryId)
       }
@@ -264,20 +291,18 @@ const NovelToScriptPage = () => {
     }
 
     try {
-      const content = await readFileContent(file, fileExtension)
-      if (!content || content.trim().length === 0) {
-        toast.warning('文件内容为空')
-        setShowUpload(true)
-        setUploadedFile(null)
-        setLoading(false)
-        return
-      }
       setIsPostStream(true)
-      await postNovelToScriptStream(content, onStreamData, onStreamError, onStreamEnd)
+      await postNovelToScriptStream(
+        novelUrl,
+        attachmentName,
+        onStreamData,
+        onStreamError,
+        onStreamEnd
+      )
     } catch (e) {
       setLoading(false)
       setIsPostStream(false)
-      const msg = e instanceof Error ? e.message : '文件读取失败，请重试'
+      const msg = e instanceof Error ? e.message : '生成失败，请重试'
       setChatArr((prev) => [
         ...prev,
         {
@@ -290,7 +315,7 @@ const NovelToScriptPage = () => {
       setHasError(true)
       toast.error(msg)
     }
-  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd])
+  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd, confirm])
 
   const handleReupload = useCallback(() => {
     setShowUpload(true)
@@ -300,28 +325,45 @@ const NovelToScriptPage = () => {
     setMarkdownContent('')
     historyIdRef.current = ''
     markdownContentRef.current = ''
-    setMarkdownEditing(false)
     setLoading(false)
     setIsPostStream(false)
     setHasError(false)
   }, [])
 
-  const handleMarkdownEditing = useCallback(() => {
-    setMarkdownEditing((prev) => !prev)
+  const handleScriptPolish = useCallback(() => {
+    toast.warning('即将上线，敬请期待')
   }, [])
 
-  const handleHistoryCardClick = useCallback((item: WritingStyleCardData) => {
+  const handleHistoryCardClick = useCallback(async (item: WritingStyleCardData) => {
     setShowUpload(false)
-    setMarkdownEditing(false)
-    setUploadedFile({ name: item.name } as UploadFile)
-    setChatArr([
-      {
-        id: `history_${Date.now()}`,
-        type: 'ai',
-        content: item.content,
-        timestamp: Date.now(),
-      },
-    ])
+    const historyItemId = String(item.id)
+    setHistoryId(historyItemId)
+    historyIdRef.current = historyItemId
+    try {
+      const detail: any = await getNovelToScriptHistoryDetail(historyItemId)
+      const content = detail?.scriptResult || item.content || '暂无内容'
+      setUploadedFile({
+        name: getHistoryDisplayName(detail?.attachmentName || item.name),
+      } as UploadFile)
+      setChatArr([
+        {
+          id: `history_${Date.now()}`,
+          type: 'ai',
+          content,
+          timestamp: Date.now(),
+        },
+      ])
+    } catch {
+      setUploadedFile({ name: item.name } as UploadFile)
+      setChatArr([
+        {
+          id: `history_${Date.now()}`,
+          type: 'ai',
+          content: item.content,
+          timestamp: Date.now(),
+        },
+      ])
+    }
   }, [])
 
   const handleAddToNote = useCallback(async () => {
@@ -333,7 +375,7 @@ const NovelToScriptPage = () => {
     const fileName = uploadedFile?.name?.replace(/\.[^.]*$/, '') || '未命名文件'
     const noteTitle = `小说转剧本-${fileName}`
     try {
-      await addNote(noteTitle, content, 'PC_NOVEL_TO_SCRIPT')
+      await addNote(noteTitle, content, 'PC_NOVEL_DECONSTRUCT')
       toast.success('笔记添加成功')
     } catch (error) {
       console.error('添加笔记失败:', error)
@@ -360,7 +402,7 @@ const NovelToScriptPage = () => {
               onChange={setUploadedFile}
               onChangeFile={handleFileChange}
               accept={['.txt']}
-              sizeLimit={SIZE_LIMIT}
+            // sizeLimit={SIZE_LIMIT}
             />
             <Button
               className="start-btn mt-7 h-10 w-30 text-white"
@@ -392,6 +434,7 @@ const NovelToScriptPage = () => {
             </div>
           </div>
         </ScrollArea>
+        {confirmDialog}
       </div>
     )
   }
@@ -409,10 +452,7 @@ const NovelToScriptPage = () => {
       </div>
       <div className="mt-5 flex min-h-0 flex-1 flex-col px-5">
         <AutoScrollArea
-          className={clsx(
-            'novel-to-script-auto-scroll relative flex-1 min-h-0',
-            markdownEditing && 'show-border'
-          )}
+          className={clsx('novel-to-script-auto-scroll relative flex-1 min-h-0')}
           maxHeight="100%"
           autoScroll
           bottomThreshold={50}
@@ -422,7 +462,7 @@ const NovelToScriptPage = () => {
               className="message-content-md"
               value={markdownContent}
               onChange={setMarkdownContent}
-              readonly={!markdownEditing}
+              readonly
               loading={loading}
             />
           </div>
@@ -441,15 +481,16 @@ const NovelToScriptPage = () => {
                 </Button>
               )}
               {!hasError && (
-                <Button className="h-8 text-white" onClick={handleMarkdownEditing}>
+                <Button className="h-8 text-white" onClick={handleScriptPolish}>
                   <Iconfont unicode="&#xea48;" />
-                  <span>{markdownEditing ? '精修完成' : '剧本精修'}</span>
+                  <span>剧本精修</span>
                 </Button>
               )}
             </>
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

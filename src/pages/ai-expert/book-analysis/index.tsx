@@ -38,7 +38,7 @@ import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
 const CREDIT_COST_THRESHOLD = 1000
 const calcCreditCost = (sizeBytes: number) => {
   const sizeMB = sizeBytes / (1024 * 1024)
-  return Math.ceil(sizeMB * 80 + 6)
+  return Math.ceil(sizeMB * 533 + 2)
 }
 const TEMPLATE_PAGE_SIZE = 20
 
