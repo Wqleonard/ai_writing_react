@@ -42,6 +42,18 @@ export interface AgentCustomMessage {
     content?: string;
     status?: "pending" | "in_progress" | "completed";
   }>;
+  /** 人在回路表单（type=form 中断） */
+  hiltForm?: {
+    id?: string;
+    title?: string;
+    intro?: string;
+    questions: Array<{
+      id: number;
+      type: "single" | "mutiple";
+      question: string;
+      options: string[];
+    }>;
+  };
   name: string | null;
   id: string;
   example: boolean;

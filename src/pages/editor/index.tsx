@@ -941,6 +941,7 @@ const MarkdownEditorPage = () => {
       options?: {
         reload?: boolean;
         command?: string;
+        commandPayload?: Record<string, unknown>;
         addUserMessage?: boolean;
         submitMode?: SubmitMode;
         chatType?: ChatType;
@@ -1016,7 +1017,8 @@ const MarkdownEditorPage = () => {
           options?.command,
           modelLLM,
           selectedWritingStyle,
-          options?.commandOnly
+          options?.commandOnly,
+          options?.commandPayload
         );
         if (shouldRenderStreamingAssistant) {
           // 请求发出后清空当前已选引用内容，避免继续展示在输入区
@@ -3032,6 +3034,31 @@ const MarkdownEditorPage = () => {
     },
     [isHiltApproveStreaming, langGraphStream.isStreaming, updateLastChatMessage, sendChatText]
   );
+  const handleHiltFormConfirm = useCallback(
+    (confirmedMsg: AgentCustomMessageItem, decisions: Array<{ id: number; question: string; answer: string[] }>) => {
+      if (hiltApproveInFlightRef.current || isHiltApproveStreaming || langGraphStream.isStreaming) {
+        return;
+      }
+      hiltApproveInFlightRef.current = true;
+      updateLastChatMessage((prev) => {
+        const custom = prev.customMessage ?? [];
+        return {
+          ...prev,
+          customMessage: custom.map((item) =>
+            item.id === confirmedMsg.id ? { ...item, hiltStatus: "approved" as const } : item
+          ),
+        };
+      });
+      setIsHiltApproveStreaming(true);
+      sendChatText("", {
+        command: "form",
+        commandPayload: { type: "form", decisions },
+        addUserMessage: false,
+        commandOnly: false,
+      });
+    },
+    [isHiltApproveStreaming, langGraphStream.isStreaming, updateLastChatMessage, sendChatText]
+  );
   const handleRendererSendMessage = useCallback(
     (text: string, reload = false) =>
       sendChatText(text, { reload, addUserMessage: !reload }),
@@ -3077,6 +3104,7 @@ const MarkdownEditorPage = () => {
                 onFileNameClick={handleFileNameClick}
                 onHiltReject={handleHiltReject}
                 onHiltApprove={handleHiltApprove}
+                onHiltFormConfirm={handleHiltFormConfirm}
                 onSendMessage={handleRendererSendMessage}
               />
             ) : (
@@ -3146,6 +3174,7 @@ const MarkdownEditorPage = () => {
       handleFileNameClick,
       handleHiltReject,
       handleHiltApprove,
+      handleHiltFormConfirm,
       handleRendererSendMessage,
       handleMessageFileClick,
       handleRegenerateLastUserQuery,

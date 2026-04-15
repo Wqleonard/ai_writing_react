@@ -56,6 +56,22 @@ export interface HiltTodoItem {
   status?: "pending" | "in_progress" | "completed";
 }
 
+/** 人在回路表单问题 */
+export interface HiltFormQuestion {
+  id: number;
+  type: "single" | "mutiple";
+  question: string;
+  options: string[];
+}
+
+/** 人在回路表单数据 */
+export interface HiltFormData {
+  id?: string;
+  title?: string;
+  intro?: string;
+  questions: HiltFormQuestion[];
+}
+
 /** Agent 自定义消息项（与 Vue AgentCustomMessage 简化兼容） */
 export interface AgentCustomMessageItem {
   id: string;
@@ -75,6 +91,8 @@ export interface AgentCustomMessageItem {
   hiltTodosTitle?: string;
   /** 人在回路状态 */
   hiltStatus?: "in_progress" | "approved" | "rejected";
+  /** 人在回路表单（type=form 中断） */
+  hiltForm?: HiltFormData;
 }
 
 /** 单条 tool call（与 Vue ToolCallItem 兼容） */

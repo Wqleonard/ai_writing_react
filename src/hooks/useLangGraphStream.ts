@@ -73,7 +73,8 @@ export function useLangGraphStream(
     command?: string,
     model?: string,
     writingStyleId?: string | number,
-    commandOnly?: boolean
+    commandOnly?: boolean,
+    commandPayload?: Record<string, unknown>
   ) => Promise<void>;
   stop: () => void;
   fetchSuggestions: (
@@ -490,7 +491,8 @@ export function useLangGraphStream(
       command?: string,
       model?: string,
       writingStyleId?: string | number,
-      commandOnly?: boolean
+      commandOnly?: boolean,
+      commandPayload?: Record<string, unknown>
     ) => {
       if (isStreamingRef.current) return;
       const shouldTrackStreaming = !commandOnly;
@@ -567,6 +569,7 @@ export function useLangGraphStream(
         reload: reload ?? false,
         auto: false,
         command: command ?? "",
+        ...(commandPayload ? { commandPayload } : {}),
       };
 
       const url = optionsRef.current.apiUrl ?? STREAM_CHAT_URL;
@@ -632,17 +635,35 @@ export function useLangGraphStream(
                   if (key === "__interrupt__" && Array.isArray(val) && val.length > 0) {
                     const first = val[0] as {
                       id?: string;
-                      value?: { action_requests?: Array<{ name?: string; args?: { todos?: unknown } }> };
+                      value?: {
+                        type?: string;
+                        value?: {
+                          action_requests?: Array<{ name?: string; args?: { todos?: unknown } }>;
+                          id?: string;
+                          title?: string;
+                          intro?: string;
+                          questions?: Array<{ id: number; type: string; question: string; options: string[] }>;
+                        };
+                        action_requests?: Array<{ name?: string; args?: { todos?: unknown } }>;
+                      };
                     };
                     const interruptId = String(first?.id ?? "").trim() || `hilt_${Date.now()}`;
-                    const actionReq = first?.value?.action_requests?.[0];
-                    const todos = normalizeTodos(actionReq?.args?.todos);
-                    if (todos && todos.length > 0) {
-                      pendingInterruptRef.current = {
-                        todos,
-                        status: "in_progress",
+                    const interruptType = first?.value?.type;
+
+                    if (interruptType === "form") {
+                      // form 类型中断：渲染澄清表单
+                      const formValue = first?.value?.value;
+                      const hiltForm = {
+                        id: formValue?.id,
+                        title: formValue?.title,
+                        intro: formValue?.intro,
+                        questions: (formValue?.questions ?? []).map((q) => ({
+                          id: q.id,
+                          type: (q.type === "single" || q.type === "mutiple") ? q.type : "single" as "single" | "mutiple",
+                          question: q.question,
+                          options: q.options ?? [],
+                        })),
                       };
-                      emitTodos(todos);
                       const prev = messagesRef.current;
                       const nextMessages: AgentCustomMessage[] =
                         prev.length > 0
@@ -650,7 +671,7 @@ export function useLangGraphStream(
                               ...prev.slice(0, -1),
                               {
                                 ...prev[prev.length - 1],
-                                hiltTodos: todos,
+                                hiltForm,
                                 hiltStatus: "in_progress",
                               },
                             ]
@@ -659,7 +680,7 @@ export function useLangGraphStream(
                                 id: interruptId,
                                 type: "tool",
                                 content: "",
-                                name: actionReq?.name ?? "tool_call",
+                                name: "form",
                                 example: false,
                                 tool_calls: [],
                                 invalid_tool_calls: [],
@@ -671,12 +692,57 @@ export function useLangGraphStream(
                                 },
                                 usage_metadata: null,
                                 resultType: "output",
-                                hiltTodos: todos,
+                                hiltForm,
                                 hiltStatus: "in_progress",
                               },
                             ];
                       interruptHandled = true;
                       emitMessages(nextMessages, true);
+                    } else {
+                      // todo 类型中断（默认）
+                      const actionReq = (first?.value?.value?.action_requests ?? first?.value?.action_requests)?.[0];
+                      const todos = normalizeTodos(actionReq?.args?.todos);
+                      if (todos && todos.length > 0) {
+                        pendingInterruptRef.current = {
+                          todos,
+                          status: "in_progress",
+                        };
+                        emitTodos(todos);
+                        const prev = messagesRef.current;
+                        const nextMessages: AgentCustomMessage[] =
+                          prev.length > 0
+                            ? [
+                                ...prev.slice(0, -1),
+                                {
+                                  ...prev[prev.length - 1],
+                                  hiltTodos: todos,
+                                  hiltStatus: "in_progress",
+                                },
+                              ]
+                            : [
+                                {
+                                  id: interruptId,
+                                  type: "tool",
+                                  content: "",
+                                  name: actionReq?.name ?? "tool_call",
+                                  example: false,
+                                  tool_calls: [],
+                                  invalid_tool_calls: [],
+                                  additional_kwargs: {},
+                                  response_metadata: {
+                                    finish_reason: "",
+                                    model_name: "",
+                                    service_tier: "",
+                                  },
+                                  usage_metadata: null,
+                                  resultType: "output",
+                                  hiltTodos: todos,
+                                  hiltStatus: "in_progress",
+                                },
+                              ];
+                        interruptHandled = true;
+                        emitMessages(nextMessages, true);
+                      }
                     }
                     continue;
                   }

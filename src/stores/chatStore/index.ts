@@ -13,6 +13,8 @@ export type {
   AgentCustomMessageItem,
   ToolCallItemForRender,
   HiltTodoItem,
+  HiltFormData,
+  HiltFormQuestion,
 } from "./types";
 export {
   generateSessionId,

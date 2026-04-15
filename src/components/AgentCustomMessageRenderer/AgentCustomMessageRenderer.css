@@ -625,3 +625,109 @@
 .hilt-approve-btn:hover {
   opacity: 0.9;
 }
+
+/* 人在回路：form 类型中断 */
+.hilt-form-container {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 4px 0;
+  animation: agentMessageFadeInUp 0.3s ease-out;
+}
+
+.hilt-form-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.hilt-form-intro {
+  font-size: 12px;
+  color: #6c757d;
+  margin-bottom: 10px;
+}
+
+.hilt-form-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hilt-form-question-text {
+  font-size: 13px;
+  color: #343a40;
+  margin-bottom: 8px;
+}
+
+/* 2列（默认：2个或>3个选项） */
+.hilt-form-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* 3列（恰好3个选项） */
+.hilt-form-options-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.hilt-form-options-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.hilt-form-option {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hilt-form-option:hover {
+  border-color: var(--bg-editor-save);
+  color: var(--bg-editor-save);
+}
+
+.hilt-form-option.selected {
+  border-color: var(--bg-editor-save);
+  background: color-mix(in srgb, var(--bg-editor-save) 10%, transparent);
+  color: var(--bg-editor-save);
+  font-weight: 500;
+}
+
+.hilt-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid #e9ecef;
+  margin-top: 10px;
+}
+
+.hilt-form-confirm-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  color: var(--bg-editor-save);
+}
+
+.hilt-form-confirm-btn:hover {
+  opacity: 0.9;
+}

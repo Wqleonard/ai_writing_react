@@ -4,7 +4,7 @@
  * 与 Vue AgentCustomMessageRenderer.vue 的 toolCallsActiveObject 及各 ToolCallsKey 展示逻辑一致：
  * getToolCallDisplayText、formatToolCallArgs、visibleToolCallsMap、shouldShowExpand、getToolCallIconStatus 等。
  */
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import clsx from "clsx";
 import {
   ChevronRight,
@@ -12,7 +12,6 @@ import {
   ChevronUp,
   FileText,
   Send,
-  CheckCircle2,
   Loader,
   PauseCircle,
   ThumbsUp,
@@ -74,6 +73,7 @@ export interface AgentCustomMessageRendererProps {
   onSendToKnowledgeBase?: (knowledge: Record<string, string>) => void;
   onHiltReject?: (message: AgentCustomMessageItem) => void;
   onHiltApprove?: (message: AgentCustomMessageItem) => void;
+  onHiltFormConfirm?: (message: AgentCustomMessageItem, decisions: Array<{ id: number; question: string; answer: string[] }>) => void;
   onRatingLike?: (message: AgentCustomMessageItem) => void;
   onRatingDislike?: (message: AgentCustomMessageItem) => void;
   onRatingReload?: (message: AgentCustomMessageItem) => void;
@@ -183,6 +183,7 @@ const AgentCustomMessageRenderer = ({
   onSendToKnowledgeBase,
   onHiltReject,
   onHiltApprove,
+  onHiltFormConfirm,
   onRatingLike,
   onRatingDislike,
   onRatingReload,
@@ -210,6 +211,10 @@ const AgentCustomMessageRenderer = ({
   >(() => safeReadRecordFromLocalStorage(DISMISSED_HILT_CARD_KEY_STORAGE_KEY));
   const [hiltActionLoadingByMessageId, setHiltActionLoadingByMessageId] = useState<
     Record<string, boolean>
+  >({});
+  /** 表单选中项：messageId -> questionId -> Set<option> */
+  const [formSelectionByMessageId, setFormSelectionByMessageId] = useState<
+    Record<string, Record<number, Set<string>>>
   >({});
   const shouldCollapseMessageContent = useCallback((msg: AgentCustomMessageItem): boolean => {
     if ((msg as { resultType?: string }).resultType !== "output") return false;
@@ -419,6 +424,45 @@ const AgentCustomMessageRenderer = ({
       });
     },
     [getEffectiveHiltTodos, getHiltTodosProgressKey, hiltActionLoadingByMessageId, onHiltApprove]
+  );
+
+  const handleFormOptionToggle = useCallback(
+    (msgId: string, questionId: number, option: string, isSingle: boolean) => {
+      setFormSelectionByMessageId((prev) => {
+        const msgMap = { ...(prev[msgId] ?? {}) };
+        const current = new Set(msgMap[questionId] ?? []);
+        if (isSingle) {
+          // 单选：点同一个则取消，否则替换
+          if (current.has(option)) {
+            current.clear();
+          } else {
+            current.clear();
+            current.add(option);
+          }
+        } else {
+          // 多选：切换
+          if (current.has(option)) current.delete(option);
+          else current.add(option);
+        }
+        msgMap[questionId] = current;
+        return { ...prev, [msgId]: msgMap };
+      });
+    },
+    []
+  );
+
+  const handleFormConfirm = useCallback(
+    (msg: AgentCustomMessageItem) => {
+      if (!msg.hiltForm) return;
+      const msgSelections = formSelectionByMessageId[msg.id] ?? {};
+      const decisions = msg.hiltForm.questions.map((q) => ({
+        id: q.id,
+        question: q.question,
+        answer: Array.from(msgSelections[q.id] ?? []),
+      }));
+      onHiltFormConfirm?.({ ...msg, hiltStatus: "approved" }, decisions);
+    },
+    [formSelectionByMessageId, onHiltFormConfirm]
   );
 
   const visibleToolCallsMap = useMemo(() => {
@@ -882,6 +926,60 @@ const AgentCustomMessageRenderer = ({
                               <span>接受</span>
                             </button>
                           </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {/* 人在回路：form 类型中断 - 澄清表单 */}
+                  {(() => {
+                    const showForm =
+                      !!msg.hiltForm &&
+                      msg.hiltForm.questions.length > 0 &&
+                      isLastMessage &&
+                      msg.hiltStatus === "in_progress";
+                    if (!showForm) return null;
+                    const form = msg.hiltForm!;
+                    const msgSelections = formSelectionByMessageId[msg.id] ?? {};
+                    return (
+                      <div className="hilt-form-container">
+                        {form.title && <div className="hilt-form-title">{form.title}</div>}
+                        {form.intro && <div className="hilt-form-intro">{form.intro}</div>}
+                        <div className="hilt-form-questions">
+                          {form.questions.map((q) => {
+                            const isSingle = q.type === "single";
+                            const selected = msgSelections[q.id] ?? new Set<string>();
+                            const count = q.options.length;
+                            const gridClass = count === 3 ? "hilt-form-options-3" : "hilt-form-options-2";
+                            return (
+                              <div key={q.id} className="hilt-form-question">
+                                <div className="hilt-form-question-text">{q.question}</div>
+                                <div className={clsx("hilt-form-options", gridClass)}>
+                                  {q.options.map((opt) => (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      className={clsx("hilt-form-option", selected.has(opt) && "selected")}
+                                      onClick={() => handleFormOptionToggle(msg.id, q.id, opt, isSingle)}
+                                    >
+                                      {opt}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="hilt-form-actions">
+                          <button
+                            type="button"
+                            className="hilt-form-confirm-btn"
+                            onClick={() => handleFormConfirm(msg)}
+                          >
+                            <span className="hilt-btn-icon" aria-hidden>
+                              <Check className="h-3.5 w-3.5" />
+                            </span>
+                            <span>确认并继续</span>
+                          </button>
                         </div>
                       </div>
                     );
