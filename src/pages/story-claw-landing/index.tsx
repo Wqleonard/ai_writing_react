@@ -1103,7 +1103,7 @@ export default function Home() {
         <div className="flex shrink-0 w-full max-w-screen flex-col items-center pb-10">
           <div className="flex flex-col items-center justify-center mt-5">
             <p className="font-YaHei m-0 text-sm leading-[1.32] text-[#999]">
-              © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
+              © 2025 浙江盛趣科技有限公司 保留所有权利。
             </p>
             <a
               href="https://beian.miit.gov.cn/"
