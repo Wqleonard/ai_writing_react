@@ -8,6 +8,7 @@ import {
   updateNovelToScriptHistory,
 } from '@/api/tools-square'
 import type { PostStreamData } from '@/api'
+import { addNote } from '@/api/notes'
 import { getContentFromPartial } from '@/utils/getWorkFlowPartialData'
 import { stripMarkdownAndTruncate } from '@/utils/stripMarkdown'
 import { Upload } from '@/components/Upload'
@@ -24,9 +25,15 @@ import { trackEvent } from '@/matomo/trackingMatomoEvent'
 import clsx from 'clsx'
 import Empty from '@/components/ui/Empty'
 import './novel-to-script.css'
+import { useConfirmDialog } from '@/components/ui/ConfirmDialog'
+
 
 const SIZE_LIMIT = 10 * 1024 * 1024 // 10MB
-
+const CREDIT_COST_THRESHOLD = 1000
+const calcCreditCost = (sizeBytes: number) => {
+  const sizeMB = sizeBytes / (1024 * 1024)
+  return Math.ceil(sizeMB * 300)
+}
 const getUploadUrl = (file: UploadFile | null) => {
   const response = file?.response as { putFilePath?: string } | undefined
   return response?.putFilePath ?? ''
@@ -63,7 +70,6 @@ const NovelToScriptPage = () => {
   const [showUpload, setShowUpload] = useState(true)
   const [chatArr, setChatArr] = useState<ChatMessage[]>([])
   const [markdownContent, setMarkdownContent] = useState('')
-  const [markdownEditing, setMarkdownEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isPostStream, setIsPostStream] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -74,6 +80,7 @@ const NovelToScriptPage = () => {
   const isPostStreamRef = useRef(false)
 
   const isLoggedIn = useLoginStore((s) => s.isLoggedIn)
+  const { confirm, confirmDialog } = useConfirmDialog()
 
   useEffect(() => {
     const next = chatArr.map((item) => item.content).join('\n\n')
@@ -247,7 +254,20 @@ const NovelToScriptPage = () => {
   }, [fetchHistoryList, saveHistorySnapshot])
 
   const handleDoAnalysis = useCallback(async () => {
-    trackEvent('Dashboard', 'Generate', 'Style Analysis')
+    trackEvent('Dashboard', 'Generate', 'Novel To Script')
+    if (!uploadedFile) return
+    const fileSize = uploadedFile.size ?? 0
+    const creditCost = calcCreditCost(fileSize)
+    // 暂时不管多少积分都弹出
+    // if (creditCost > CREDIT_COST_THRESHOLD) {
+    const ok = await confirm({
+      title: '积分消耗提示',
+      message: `本次小说转剧本预计消耗约 ${creditCost} 积分，是否继续？`,
+      confirmText: '确认提交',
+      cancelText: '取消',
+    })
+    if (!ok) return
+    // }
     const novelUrl = getUploadUrl(uploadedFile)
     const attachmentName = getAttachmentName(uploadedFile)
     if (!novelUrl) {
@@ -295,7 +315,7 @@ const NovelToScriptPage = () => {
       setHasError(true)
       toast.error(msg)
     }
-  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd])
+  }, [uploadedFile, onStreamData, onStreamError, onStreamEnd, confirm])
 
   const handleReupload = useCallback(() => {
     setShowUpload(true)
@@ -305,40 +325,17 @@ const NovelToScriptPage = () => {
     setMarkdownContent('')
     historyIdRef.current = ''
     markdownContentRef.current = ''
-    setMarkdownEditing(false)
     setLoading(false)
     setIsPostStream(false)
     setHasError(false)
   }, [])
 
-  const handleMarkdownEditing = useCallback(async () => {
-    if (!markdownEditing) {
-      setMarkdownEditing(true)
-      return
-    }
-    const content = markdownContent.trim()
-    if (!content) {
-      toast.warning('内容为空，无法保存剧本')
-      return
-    }
-    if (!historyIdRef.current) {
-      toast.warning('缺少历史记录，无法保存')
-      return
-    }
-    try {
-      await updateNovelToScriptHistory(content, historyIdRef.current)
-      await fetchHistoryList()
-      toast.success('剧本保存成功')
-      setMarkdownEditing(false)
-    } catch (error) {
-      console.error('更新剧本失败:', error)
-      toast.error('剧本保存失败，请重试')
-    }
-  }, [fetchHistoryList, markdownContent, markdownEditing])
+  const handleScriptPolish = useCallback(() => {
+    toast.warning('即将上线，敬请期待')
+  }, [])
 
   const handleHistoryCardClick = useCallback(async (item: WritingStyleCardData) => {
     setShowUpload(false)
-    setMarkdownEditing(false)
     const historyItemId = String(item.id)
     setHistoryId(historyItemId)
     historyIdRef.current = historyItemId
@@ -369,42 +366,22 @@ const NovelToScriptPage = () => {
     }
   }, [])
 
-  const handleAddScript = useCallback(async () => {
+  const handleAddToNote = useCallback(async () => {
     const content = markdownContent.trim()
     if (!content) {
-      toast.warning('内容为空，无法保存剧本')
+      toast.warning('内容为空，无法收录笔记')
       return
     }
+    const fileName = uploadedFile?.name?.replace(/\.[^.]*$/, '') || '未命名文件'
+    const noteTitle = `小说转剧本-${fileName}`
     try {
-      const currentHistoryId = historyIdRef.current
-      if (currentHistoryId) {
-        await updateNovelToScriptHistory(content, currentHistoryId)
-      } else {
-        const novelUrl = getUploadUrl(uploadedFile)
-        const attachmentName = getAttachmentName(uploadedFile)
-        if (!novelUrl) {
-          toast.warning('缺少小说链接，无法添加剧本')
-          return
-        }
-        const response: any = await addNovelToScriptHistory(novelUrl, attachmentName)
-        const nextHistoryId = getHistoryIdFromResponse(response)
-        if (!nextHistoryId) {
-          toast.error('添加剧本失败，请重试')
-          return
-        }
-        setHistoryId(nextHistoryId)
-        historyIdRef.current = nextHistoryId
-        await updateNovelToScriptHistory(content, nextHistoryId)
-      }
-      await fetchHistoryList()
-      toast.success('剧本保存成功')
-      // 收录笔记逻辑先保留注释，待产品确认后开启
-      // await addNote(noteTitle, content, 'PC_NOVEL_TO_SCRIPT')
+      await addNote(noteTitle, content, 'PC_NOVEL_DECONSTRUCT')
+      toast.success('笔记添加成功')
     } catch (error) {
-      console.error('保存剧本失败:', error)
-      toast.error('保存剧本失败，请重试')
+      console.error('添加笔记失败:', error)
+      toast.error('添加笔记失败，请重试')
     }
-  }, [fetchHistoryList, markdownContent, uploadedFile])
+  }, [markdownContent, uploadedFile?.name])
 
   if (showUpload) {
     return (
@@ -425,7 +402,7 @@ const NovelToScriptPage = () => {
               onChange={setUploadedFile}
               onChangeFile={handleFileChange}
               accept={['.txt']}
-              sizeLimit={SIZE_LIMIT}
+            // sizeLimit={SIZE_LIMIT}
             />
             <Button
               className="start-btn mt-7 h-10 w-30 text-white"
@@ -457,6 +434,7 @@ const NovelToScriptPage = () => {
             </div>
           </div>
         </ScrollArea>
+        {confirmDialog}
       </div>
     )
   }
@@ -474,10 +452,7 @@ const NovelToScriptPage = () => {
       </div>
       <div className="mt-5 flex min-h-0 flex-1 flex-col px-5">
         <AutoScrollArea
-          className={clsx(
-            'novel-to-script-auto-scroll relative flex-1 min-h-0',
-            markdownEditing && 'show-border'
-          )}
+          className={clsx('novel-to-script-auto-scroll relative flex-1 min-h-0')}
           maxHeight="100%"
           autoScroll
           bottomThreshold={50}
@@ -487,7 +462,7 @@ const NovelToScriptPage = () => {
               className="message-content-md"
               value={markdownContent}
               onChange={setMarkdownContent}
-              readonly={!markdownEditing}
+              readonly
               loading={loading}
             />
           </div>
@@ -500,21 +475,22 @@ const NovelToScriptPage = () => {
                 <span>返回上传</span>
               </Button>
               {!hasError && (
-                <Button variant="outline" className="h-8" onClick={handleAddScript}>
+                <Button variant="outline" className="h-8" onClick={handleAddToNote}>
                   <Iconfont unicode="&#xe643;" />
-                  <span>添加剧本</span>
+                  <span>收录笔记</span>
                 </Button>
               )}
               {!hasError && (
-                <Button className="h-8 text-white" onClick={handleMarkdownEditing}>
+                <Button className="h-8 text-white" onClick={handleScriptPolish}>
                   <Iconfont unicode="&#xea48;" />
-                  <span>{markdownEditing ? '精修完成' : '剧本精修'}</span>
+                  <span>剧本精修</span>
                 </Button>
               )}
             </>
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }
