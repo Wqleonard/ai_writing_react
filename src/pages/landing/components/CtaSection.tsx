@@ -135,7 +135,7 @@ export function CtaSection() {
         <div className="h-0.5 w-[1170px] max-w-[calc(100vw-2rem)] bg-[#ccc]" />
         <div className="flex flex-col items-center justify-center mt-[47px]">
           <p className="font-YaHei m-0 text-sm leading-[1.32] text-[#999]">
-            © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
+            © 2025 浙江盛趣科技有限公司 保留所有权利。
           </p>
           <div className="flex flex-row items-center gap-0">
             {[
