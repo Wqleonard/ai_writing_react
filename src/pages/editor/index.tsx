@@ -119,6 +119,13 @@ const LEFT_DEFAULT_REM = pxToRem(280);
 
 const RIGHT_DEFAULT_REM = 32.5;
 const RIGHT_MIN_REM = pxToRem(280);
+const formatBeijingTime = (value?: string | number | Date | null) => {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const plus8hDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return plus8hDate.toLocaleString("zh-CN", { hour12: false });
+};
 /** 中间主编辑区最小宽度（按需求允许被挤压到 0） */
 const CENTER_EDITOR_MIN_REM = 0;
 /** 中间区域内「修改详情」面板固定宽度（rem） */
@@ -3805,7 +3812,7 @@ const MarkdownEditorPage = () => {
                       {idx === 0 ? <span className="ml-2 text-xs text-green-600">最新</span> : null}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {version.updatedTime ? new Date(version.updatedTime).toLocaleString("zh-CN") : "-"}
+                      {formatBeijingTime(version.updatedTime)}
                     </div>
                   </div>
                   <Button

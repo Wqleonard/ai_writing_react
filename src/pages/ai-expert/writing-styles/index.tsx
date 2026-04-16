@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog'
 import { Input } from '@/components/ui/Input'
+import { Spinner } from '@/components/ui/Spinner'
 import { WritingStyleCard } from './components/WritingStyleCard'
 import type { WritingStyleCardData } from './types'
 import { useLLM } from '@/hooks/useLLM'
@@ -76,6 +77,7 @@ const WritingStylesPage = () => {
   const [markdownContent, setMarkdownContent] = useState('')
   const [markdownEditing, setMarkdownEditing] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showContentLoading, setShowContentLoading] = useState(false)
   const [isPostStream, setIsPostStream] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [historyId, setHistoryId] = useState('')
@@ -191,6 +193,7 @@ const WritingStylesPage = () => {
         const content = getContentFromPartial(data.data)
         if (!content) return
         setLoading(false)
+        setShowContentLoading(false)
         setChatArr((prev) => {
           const existingIndex = prev.findIndex((msg) => msg.id === dataId)
           if (existingIndex === -1) {
@@ -235,6 +238,7 @@ const WritingStylesPage = () => {
           ])
           setHasError(true)
           setIsPostStream(false)
+          setShowContentLoading(false)
           return
         }
         setLoading(false)
@@ -261,11 +265,13 @@ const WritingStylesPage = () => {
 
   const onStreamError = useCallback((error: Error) => {
     console.error(error)
+    setShowContentLoading(false)
   }, [])
 
   const onStreamEnd = useCallback(async () => {
     setIsPostStream(false)
     setLoading(false)
+    setShowContentLoading(false)
     setChatArr((prev) => {
       if (prev.length === 0) return prev
       const next = [...prev]
@@ -288,6 +294,7 @@ const WritingStylesPage = () => {
     setHasError(false)
     setChatArr([])
     setLoading(true)
+    setShowContentLoading(true)
 
     try {
       const hid: any = await addWritingStyleHistory(uploadedFile.name || '')
@@ -307,6 +314,7 @@ const WritingStylesPage = () => {
         setShowUpload(true)
         setUploadedFile(null)
         setLoading(false)
+        setShowContentLoading(false)
         return
       }
       setIsPostStream(true)
@@ -314,6 +322,7 @@ const WritingStylesPage = () => {
     } catch (e) {
       setLoading(false)
       setIsPostStream(false)
+      setShowContentLoading(false)
       const msg = e instanceof Error ? e.message : '文件读取失败，请重试'
       setChatArr((prev) => [
         ...prev,
@@ -341,6 +350,7 @@ const WritingStylesPage = () => {
     setLoading(false)
     setIsPostStream(false)
     setHasError(false)
+    setShowContentLoading(false)
   }, [])
 
   const handleMarkdownEditing = useCallback(() => {
@@ -350,6 +360,7 @@ const WritingStylesPage = () => {
   const handleHistoryCardClick = useCallback((item: WritingStyleCardData) => {
     setShowUpload(false)
     setMarkdownEditing(false)
+    setShowContentLoading(false)
     setChatArr([
       {
         id: `history_${Date.now()}`,
@@ -480,6 +491,12 @@ const WritingStylesPage = () => {
           bottomThreshold={50}
         >
           <div className="mx-auto w-200">
+            {showContentLoading ? (
+              <div className="mb-2 inline-flex items-center gap-2 text-sm text-secondary">
+                <Spinner className="size-4 animate-spin" />
+                <span>生成中...</span>
+              </div>
+            ) : null}
             <MarkdownEditor
               className="message-content-md"
               value={markdownContent}
