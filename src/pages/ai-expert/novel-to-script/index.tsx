@@ -17,6 +17,7 @@ import { MarkdownEditor } from '@/components/MarkdownEditor'
 import { AutoScrollArea } from '@/components/AutoScrollArea'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Button } from '@/components/ui/Button'
+import { Spinner } from '@/components/ui/Spinner'
 import { WritingStyleCard } from '@/pages/ai-expert/writing-styles/components/WritingStyleCard'
 import type { WritingStyleCardData } from '@/pages/ai-expert/writing-styles/types'
 import { Iconfont } from '@/components/Iconfont'
@@ -71,6 +72,7 @@ const NovelToScriptPage = () => {
   const [chatArr, setChatArr] = useState<ChatMessage[]>([])
   const [markdownContent, setMarkdownContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showContentLoading, setShowContentLoading] = useState(false)
   const [isPostStream, setIsPostStream] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [historyId, setHistoryId] = useState('')
@@ -171,6 +173,7 @@ const NovelToScriptPage = () => {
         const content = getContentFromPartial(data.data)
         if (!content) return
         setLoading(false)
+        setShowContentLoading(false)
         setChatArr((prev) => {
           const existingIndex = prev.findIndex((msg) => msg.id === dataId)
           if (existingIndex === -1) {
@@ -213,6 +216,7 @@ const NovelToScriptPage = () => {
           ])
           setHasError(true)
           setIsPostStream(false)
+          setShowContentLoading(false)
           return
         }
         setLoading(false)
@@ -238,11 +242,13 @@ const NovelToScriptPage = () => {
 
   const onStreamError = useCallback((error: Error) => {
     console.error(error)
+    setShowContentLoading(false)
   }, [])
 
   const onStreamEnd = useCallback(async () => {
     setIsPostStream(false)
     setLoading(false)
+    setShowContentLoading(false)
     setChatArr((prev) => {
       if (prev.length === 0) return prev
       const next = [...prev]
@@ -278,6 +284,7 @@ const NovelToScriptPage = () => {
     setHasError(false)
     setChatArr([])
     setLoading(true)
+    setShowContentLoading(true)
 
     try {
       const hid: any = await addNovelToScriptHistory(novelUrl, attachmentName)
@@ -302,6 +309,7 @@ const NovelToScriptPage = () => {
     } catch (e) {
       setLoading(false)
       setIsPostStream(false)
+      setShowContentLoading(false)
       const msg = e instanceof Error ? e.message : '生成失败，请重试'
       setChatArr((prev) => [
         ...prev,
@@ -328,6 +336,7 @@ const NovelToScriptPage = () => {
     setLoading(false)
     setIsPostStream(false)
     setHasError(false)
+    setShowContentLoading(false)
   }, [])
 
   const handleScriptPolish = useCallback(() => {
@@ -336,6 +345,7 @@ const NovelToScriptPage = () => {
 
   const handleHistoryCardClick = useCallback(async (item: WritingStyleCardData) => {
     setShowUpload(false)
+    setShowContentLoading(false)
     const historyItemId = String(item.id)
     setHistoryId(historyItemId)
     historyIdRef.current = historyItemId
@@ -458,6 +468,12 @@ const NovelToScriptPage = () => {
           bottomThreshold={50}
         >
           <div className="mx-auto w-200">
+            {showContentLoading ? (
+              <div className="mb-2 inline-flex items-center gap-2 text-sm text-secondary">
+                <Spinner className="size-4 animate-spin" />
+                <span>生成中...</span>
+              </div>
+            ) : null}
             <MarkdownEditor
               className="message-content-md"
               value={markdownContent}

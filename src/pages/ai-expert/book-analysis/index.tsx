@@ -26,6 +26,7 @@ import { MarkdownEditor } from '@/components/MarkdownEditor'
 import { AutoScrollArea } from '@/components/AutoScrollArea'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Button } from '@/components/ui/Button'
+import { Spinner } from '@/components/ui/Spinner'
 import { HistoryCard } from './components/HistoryCard'
 import { TemplateCard } from './components/TemplateCard'
 import type { TemplateCardData, HistoryItem } from './types'
@@ -49,6 +50,7 @@ const BookAnalysisPage = () => {
   const [cardsType, setCardsType] = useState<'hot' | 'history'>('hot')
   const [markdownContent, setMarkdownContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showContentLoading, setShowContentLoading] = useState(false)
   const [isPostStream, setIsPostStream] = useState(false)
   const [historyId, setHistoryId] = useState('')
   const [templates, setTemplates] = useState<TemplateCardData[]>([])
@@ -114,6 +116,7 @@ const BookAnalysisPage = () => {
           const content = getContentFromPartial(d)
           if (!content) return
           setLoading(false)
+          setShowContentLoading(false)
           markdownContentRef.current = content
           setMarkdownContent(content)
           break
@@ -133,10 +136,12 @@ const BookAnalysisPage = () => {
 
   const onStreamError = useCallback((error: Error) => {
     console.error(error)
+    setShowContentLoading(false)
   }, [])
 
   const onStreamEnd = useCallback(async () => {
     setIsPostStream(false)
+    setShowContentLoading(false)
     await saveHistorySnapshot()
     const list = await getBookAnalysisHistoryList()
     if (Array.isArray(list)) {
@@ -269,6 +274,7 @@ const BookAnalysisPage = () => {
     // }
 
     setShowUpload(false)
+    setShowContentLoading(true)
     try {
       const hid: any = await addBookAnalysisHistory(uploadedFile.name || '')
       const nextHistoryId = typeof hid === 'object' ? String(hid.id ?? hid) : String(hid)
@@ -292,6 +298,7 @@ const BookAnalysisPage = () => {
       console.error(e)
       setLoading(false)
       setIsPostStream(false)
+      setShowContentLoading(false)
     }
   }, [uploadedFile, onStreamData, onStreamError, onStreamEnd, confirm])
 
@@ -303,6 +310,7 @@ const BookAnalysisPage = () => {
     markdownContentRef.current = ''
     historyIdRef.current = ''
     setLoading(false)
+    setShowContentLoading(false)
   }, [])
 
   const handleAddToNote = useCallback(async () => {
@@ -346,6 +354,7 @@ const BookAnalysisPage = () => {
   const handleHistoryCardClick = useCallback(
     async (item: HistoryItem) => {
       setShowUpload(false)
+      setShowContentLoading(false)
       setUploadedFile({ name: item.name } as UploadFile)
       historyIdRef.current = item.id
       setHistoryId(item.id)
@@ -539,12 +548,18 @@ const BookAnalysisPage = () => {
       </div>
       <div className="mt-5 flex min-h-0 flex-1 flex-col px-5">
         <AutoScrollArea
-          className="flex-1 min-h-0"
+          className="relative flex-1 min-h-0"
           maxHeight="100%"
           autoScroll
           bottomThreshold={50}
         >
           <div className="w-200 mx-auto">
+            {showContentLoading ? (
+              <div className="mb-2 inline-flex items-center gap-2 text-sm text-secondary">
+                <Spinner className="size-4 animate-spin" />
+                <span>生成中...</span>
+              </div>
+            ) : null}
             <MarkdownEditor
               className="message-content-md"
               value={markdownContent}

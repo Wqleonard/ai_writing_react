@@ -112,7 +112,7 @@ export const EditorTopToolbar = ({
             />
           ))}
 
-          <div
+          {/* <div
             className="text-sm inline-flex translate-y-0.5 cursor-pointer items-center border-b border-transparent pb-0.5 text-[#606266] hover:border-black hover:text-black"
             onClick={handleBookAnalysisClick}
           >
@@ -126,7 +126,7 @@ export const EditorTopToolbar = ({
           >
             <IconFont unicode="\ue630" className="mr-1" />
             <span className="reference-btn-label">文风提炼</span>
-          </div>
+          </div> */}
 
           <div
             className="text-sm flex cursor-pointer items-center rounded-lg bg-(--theme-color) px-3 h-6 leading-6 custom-btn text-white"
