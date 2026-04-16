@@ -905,7 +905,8 @@ export function useLangGraphStream(
                 ? messagesRef.current[messagesRef.current.length - 1]
                 : null;
             const hasPendingHilt =
-              !!lastMessage?.hiltTodos && lastMessage.hiltTodos.length > 0;
+              (!!lastMessage?.hiltTodos && lastMessage.hiltTodos.length > 0) ||
+              (!!lastMessage?.hiltForm && lastMessage.hiltStatus === "in_progress");
             if (
               currentSessionId &&
               currentWorkId != null &&
