@@ -347,7 +347,7 @@ export default function MLandingPage() {
         >
           <div className="w-150 h-px bg-[#999999]"/>
           <div className="mt-18">
-            © 2025 数龙信息技术（浙江）有限公司 保留所有权利。
+            © 2025 浙江盛趣科技有限公司 保留所有权利。
           </div>
           <div className="flex items-center justify-center gap-4 mt-4">
             <a href={privacyPolicyUrl} className="text-[#999999]">隐私政策</a>
